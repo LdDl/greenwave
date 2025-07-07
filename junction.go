@@ -14,6 +14,8 @@ type Junction struct {
 	totalDuration int
 	// offset of the cycle
 	offset int
+	// Location of the junction
+	point Point
 }
 
 // NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases)
@@ -56,6 +58,13 @@ func WithID(id int) func(*Junction) {
 func WithLabel(label string) func(*Junction) {
 	return func(j *Junction) {
 		j.Label = label
+	}
+}
+
+// WithPoint is an option function that sets the point (location) for the junction.
+func WithPoint(point Point) func(*Junction) {
+	return func(j *Junction) {
+		j.point = point
 	}
 }
 
