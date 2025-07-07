@@ -76,9 +76,9 @@ func (jun *Junction) GetGreenIntervals() []*GreenInterval {
 				start := signalStart
 				end := signalStart + signal.Duration
 				if end == cycleDuration {
-					intervals = append(intervals, NewGreenInterval(phaseIdx, start%cycleDuration, end))
+					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end)))
 				} else {
-					intervals = append(intervals, NewGreenInterval(phaseIdx, start%cycleDuration, end%cycleDuration))
+					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end%cycleDuration)))
 				}
 			}
 			signalStart += signal.Duration
