@@ -1,6 +1,10 @@
 package greenwave
 
-import "github.com/LdDl/greenwave/color"
+import (
+	"testing"
+
+	"github.com/LdDl/greenwave/color"
+)
 
 func basicTestJuntions() []*Junction {
 	junctions := []*Junction{
@@ -50,4 +54,14 @@ func basicTestJuntions() []*Junction {
 	}
 
 	return junctions
+}
+
+func TestCycleDurationCorrectness(t *testing.T) {
+	junctions := basicTestJuntions()
+	correctDuration := 85
+	for i, junction := range junctions {
+		if junction.totalDuration != correctDuration {
+			t.Errorf("Junction at position %d has incorrect total duration: got %d, want %d", i, junction.totalDuration, correctDuration)
+		}
+	}
 }
