@@ -27,6 +27,18 @@ func NewGreenWave(intervalJunOne, intervalJunTwo *GreenInterval, distanceMeters,
 	}
 }
 
+// Clone creates a deep copy of the GreenWave instance.
+func (gw *GreenWave) Clone() *GreenWave {
+	return &GreenWave{
+		intervalJunOne: NewGreenInterval(gw.intervalJunOne.PhaseIdx, gw.intervalJunOne.Start, gw.intervalJunOne.End),
+		intervalJunTwo: NewGreenInterval(gw.intervalJunTwo.PhaseIdx, gw.intervalJunTwo.Start, gw.intervalJunTwo.End),
+		distance:       gw.distance,
+		travelTime:     gw.travelTime,
+		bandWidth:      gw.bandWidth,
+	}
+}
+
+// FindGreenWavesBetweenIntervals finds green waves between two sets of green intervals.
 func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*GreenInterval, distanceMeters, travelTimeSeconds float64) []*GreenWave {
 	var greenWaves []*GreenWave
 	for _, greenIntervalOne := range greenIntervalsOne {
@@ -60,6 +72,8 @@ func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*Gree
 	return greenWaves
 }
 
+// FindGreenWaves finds green waves between a sequence of junctions based on their green intervals and desired speed.
+// It returns a slice of slices, where each inner slice contains green waves for the segment between two junctions.
 func FindGreenWaves(junctions []*Junction, desiredSpeedKmh float64) [][]*GreenWave {
 	speedMs := desiredSpeedKmh / 3.6
 	waves := make([][]*GreenWave, 0, len(junctions)-1)
