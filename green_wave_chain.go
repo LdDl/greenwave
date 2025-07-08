@@ -129,8 +129,8 @@ func ExtractChains(segmentsWaves [][]*GreenWave) []GreenWaveChain {
 	return resultChains
 }
 
+// MergeGreenWaves merges chains of connected green waves into through green waves.
 func MergeGreenWaves(segmentsWaves [][]*GreenWave) []*ThroughGreenWave {
-	// Merges chains of connected green waves into through green waves.
 	possibleChains := ExtractChains(segmentsWaves)
 	throughWaves := make([]*ThroughGreenWave, 0, len(possibleChains))
 	for _, chain := range possibleChains {
