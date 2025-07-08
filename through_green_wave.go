@@ -7,7 +7,7 @@ type ThroughGreenWave struct {
 	// Intervals of green lights that form the green wave
 	intervals []*GreenInterval
 	// Number of junctions which could be passed through
-	depths int
+	depth int
 	// Bandwidth of the green wave, which is the minimum duration of the green intervals
 	bandWidth float64
 }
@@ -27,7 +27,17 @@ func NewThroughGreenWave(intervals []*GreenInterval) *ThroughGreenWave {
 	}
 	return &ThroughGreenWave{
 		intervals: intervals,
-		depths:    len(intervals),
+		depth:     len(intervals),
 		bandWidth: minBandWidth,
 	}
+}
+
+// Depth returns the number of junctions that can be passed through in this green wave.
+func (tgw *ThroughGreenWave) Depth() int {
+	return tgw.depth
+}
+
+// Bandwitdh returns the bandwidth of the green wave, which is the minimum duration of the green intervals.
+func (tgw *ThroughGreenWave) Bandwidth() float64 {
+	return tgw.bandWidth
 }
