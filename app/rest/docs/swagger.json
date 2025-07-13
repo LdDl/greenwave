@@ -313,11 +313,11 @@
             "type": "object",
             "properties": {
                 "desired_speed_kmh": {
-                    "description": "DesiredSpeedKmh is the desired speed in km/h for calculating green waves",
+                    "description": "Desired speed in km/h for calculating green waves",
                     "type": "number"
                 },
                 "junctions": {
-                    "description": "Junctions is a list of junctions with their phases and signals",
+                    "description": "List of junctions with their phases and signals",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.JunctionDTO"
@@ -329,7 +329,7 @@
             "type": "object",
             "properties": {
                 "green_waves": {
-                    "description": "GreenWaves is a list of segments of green waves between junctions",
+                    "description": "List of segments of green waves between junctions",
                     "type": "array",
                     "items": {
                         "type": "array",
@@ -339,7 +339,7 @@
                     }
                 },
                 "through_green_waves": {
-                    "description": "ThroughGreenWaves is a list of through green waves (so they can be passed through multiple junctions)",
+                    "description": "List of through green waves (so they can be passed through multiple junctions)",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
@@ -360,23 +360,23 @@
             "type": "object",
             "properties": {
                 "desired_speed_kmh": {
-                    "description": "DesiredSpeedKmh is the desired speed in km/h for calculating green waves",
+                    "description": "Desired speed in km/h for calculating green waves",
                     "type": "number"
                 },
                 "junctions": {
-                    "description": "Junctions is a list of junctions with their phases and signals",
+                    "description": "List of junctions with their phases and signals",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.JunctionDTO"
                     }
                 },
                 "optimizer_params": {
-                    "description": "OptimizerParams contains parameters for the optimizer",
+                    "description": "Contains parameters for the optimizer",
                     "type": "object",
                     "additionalProperties": true
                 },
                 "optimizer_type": {
-                    "description": "OptimizerType specifies which optimizer to use",
+                    "description": "Specifies which optimizer to use",
                     "type": "string"
                 }
             }
@@ -385,14 +385,14 @@
             "type": "object",
             "properties": {
                 "best_offsets": {
-                    "description": "BestOffsets contains the optimal offsets for each junction",
+                    "description": "Contains the optimal offsets for each junction",
                     "type": "array",
                     "items": {
                         "type": "number"
                     }
                 },
                 "green_waves": {
-                    "description": "GreenWaves is the green waves calculated with optimal offsets",
+                    "description": "List of segments of green waves between junctions considering the optimal offsets",
                     "type": "array",
                     "items": {
                         "type": "array",
@@ -410,7 +410,7 @@
                     ]
                 },
                 "through_green_waves": {
-                    "description": "ThroughGreenWaves is the through green waves with optimal offsets",
+                    "description": "List of through green waves (so they can be passed through multiple junctions) considering the optimal offsets",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
@@ -422,7 +422,7 @@
             "type": "object",
             "properties": {
                 "fitness_history": {
-                    "description": "FitnessHistory contains the fitness evolution over generations\nWill be represented in case of genetic algorithm\nEach value is the best fitness of the population in that generation",
+                    "description": "Contains the fitness evolution over generations\nWill be represented in case of genetic algorithm\nEach value is the best fitness of the population in that generation",
                     "type": "array",
                     "items": {
                         "type": "number"

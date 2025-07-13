@@ -13,18 +13,18 @@ import (
 // GreenWavesRequest represents the request structure for green waves requests.
 // swagger:model
 type GreenWavesRequest struct {
-	// Junctions is a list of junctions with their phases and signals
+	// List of junctions with their phases and signals
 	Junctions []dto.JunctionDTO `json:"junctions"`
-	// DesiredSpeedKmh is the desired speed in km/h for calculating green waves
+	// Desired speed in km/h for calculating green waves
 	DesiredSpeedKmh float64 `json:"desired_speed_kmh"`
 }
 
 // GreenWavesResponse represents the response structure for green waves requests.
 // swagger:model
 type GreenWavesResponse struct {
-	// GreenWaves is a list of segments of green waves between junctions
+	// List of segments of green waves between junctions
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// ThroughGreenWaves is a list of through green waves (so they can be passed through multiple junctions)
+	// List of through green waves (so they can be passed through multiple junctions)
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
 }
 

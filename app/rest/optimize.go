@@ -15,33 +15,33 @@ import (
 // OptimizeRequest represents the request structure for optimization requests.
 // swagger:model
 type OptimizeRequest struct {
-	// Junctions is a list of junctions with their phases and signals
+	// List of junctions with their phases and signals
 	Junctions []dto.JunctionDTO `json:"junctions"`
-	// DesiredSpeedKmh is the desired speed in km/h for calculating green waves
+	// Desired speed in km/h for calculating green waves
 	DesiredSpeedKmh float64 `json:"desired_speed_kmh"`
-	// OptimizerType specifies which optimizer to use
+	// Specifies which optimizer to use
 	OptimizerType string `json:"optimizer_type"`
-	// OptimizerParams contains parameters for the optimizer
+	// Contains parameters for the optimizer
 	OptimizerParams map[string]interface{} `json:"optimizer_params"`
 }
 
 // OptimizeResponse represents the response structure for optimization requests.
 // swagger:model
 type OptimizeResponse struct {
-	// BestOffsets contains the optimal offsets for each junction
+	// Contains the optimal offsets for each junction
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`
-	// GreenWaves is the green waves calculated with optimal offsets
+	// List of segments of green waves between junctions considering the optimal offsets
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// ThroughGreenWaves is the through green waves with optimal offsets
+	// List of through green waves (so they can be passed through multiple junctions) considering the optimal offsets
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
 }
 
 // OptimizerExtra contains additional information about the optimization process.
 // swagger:model
 type OptimizerExtra struct {
-	// FitnessHistory contains the fitness evolution over generations
+	// Contains the fitness evolution over generations
 	// Will be represented in case of genetic algorithm
 	// Each value is the best fitness of the population in that generation
 	FitnessHistory []float64 `json:"fitness_history"`
