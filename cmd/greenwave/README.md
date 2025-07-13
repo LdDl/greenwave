@@ -12,6 +12,7 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
 * JSON request example for route `/api/greenwave/extract`:
 ```json
 {
+  "desired_speed_kmh": 40.0,
   "junctions": [
     {
       "id": 0,
@@ -51,7 +52,7 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
       }
     },
     {
-      "id": 0,
+      "id": 1,
       "label": "",
       "cycle": [
         {
@@ -96,7 +97,7 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
       }
     },
     {
-      "id": 0,
+      "id": 2,
       "label": "",
       "cycle": [
         {
@@ -137,7 +138,7 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
       }
     },
     {
-      "id": 0,
+      "id": 3,
       "label": "",
       "cycle": [
         {
@@ -173,8 +174,7 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
         "y": 600
       }
     }
-  ],
-  "desired_speed_kmh": 40.0
+  ]
 }
 ```
 
@@ -334,4 +334,185 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
     }
   ]
 }
+```
+
+* JSON request example for route `/api/greenwave/optimize`:
+```json
+{
+  "optimizer_type": "genetic",
+  "optimizer_params": {
+    "population_size": 50,
+    "generations": 100,
+    "mutation_rate": 0.1,
+    "tournament_size": 3,
+    "crossover_type": "blend"
+  },
+  "desired_speed_kmh": 40.0,
+  "junctions": [
+    {
+      "id": 0,
+      "label": "",
+      "cycle": [
+        {
+          "id": 0,
+          "signals": [
+            {
+              "duration": 30,
+              "color": "GREEN"
+            },
+            {
+              "duration": 20,
+              "color": "RED"
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "signals": [
+            {
+              "duration": 20,
+              "color": "GREEN"
+            },
+            {
+              "duration": 15,
+              "color": "RED"
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "point": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 1,
+      "label": "",
+      "cycle": [
+        {
+          "id": 10,
+          "signals": [
+            {
+              "duration": 20,
+              "color": "RED"
+            },
+            {
+              "duration": 35,
+              "color": "GREEN"
+            },
+            {
+              "duration": 5,
+              "color": "YELLOW"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "signals": [
+            {
+              "duration": 10,
+              "color": "RED"
+            },
+            {
+              "duration": 10,
+              "color": "GREEN"
+            },
+            {
+              "duration": 5,
+              "color": "YELLOW"
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "point": {
+        "x": 0,
+        "y": 200
+      }
+    },
+    {
+      "id": 2,
+      "label": "",
+      "cycle": [
+        {
+          "id": 20,
+          "signals": [
+            {
+              "duration": 45,
+              "color": "RED"
+            },
+            {
+              "duration": 10,
+              "color": "GREEN"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "signals": [
+            {
+              "duration": 7,
+              "color": "RED"
+            },
+            {
+              "duration": 18,
+              "color": "GREEN"
+            },
+            {
+              "duration": 5,
+              "color": "YELLOW"
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "point": {
+        "x": 0,
+        "y": 450
+      }
+    },
+    {
+      "id": 3,
+      "label": "",
+      "cycle": [
+        {
+          "id": 20,
+          "signals": [
+            {
+              "duration": 40,
+              "color": "RED"
+            },
+            {
+              "duration": 15,
+              "color": "GREEN"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "signals": [
+            {
+              "duration": 10,
+              "color": "RED"
+            },
+            {
+              "duration": 20,
+              "color": "GREEN"
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "point": {
+        "x": 0,
+        "y": 600
+      }
+    }
+  ]
+}
+```
+
+* JSON response example for route `/api/greenwave/optimize`:
+```json
 ```

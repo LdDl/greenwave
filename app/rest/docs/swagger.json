@@ -357,10 +357,78 @@
             }
         },
         "rest.OptimizeRequest": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "desired_speed_kmh": {
+                    "description": "DesiredSpeedKmh is the desired speed in km/h for calculating green waves",
+                    "type": "number"
+                },
+                "junctions": {
+                    "description": "Junctions is a list of junctions with their phases and signals",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.JunctionDTO"
+                    }
+                },
+                "optimizer_params": {
+                    "description": "OptimizerParams contains parameters for the optimizer",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "optimizer_type": {
+                    "description": "OptimizerType specifies which optimizer to use",
+                    "type": "string"
+                }
+            }
         },
         "rest.OptimizeResponse": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "best_offsets": {
+                    "description": "BestOffsets contains the optimal offsets for each junction",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "green_waves": {
+                    "description": "GreenWaves is the green waves calculated with optimal offsets",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/dto.GreenWaveDTO"
+                        }
+                    }
+                },
+                "optimizer_extra": {
+                    "description": "Additional information about the optimization process",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/rest.OptimizerExtra"
+                        }
+                    ]
+                },
+                "through_green_waves": {
+                    "description": "ThroughGreenWaves is the through green waves with optimal offsets",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
+                    }
+                }
+            }
+        },
+        "rest.OptimizerExtra": {
+            "type": "object",
+            "properties": {
+                "fitness_history": {
+                    "description": "FitnessHistory contains the fitness evolution over generations\nWill be represented in case of genetic algorithm\nEach value is the best fitness of the population in that generation",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                }
+            }
         }
     }
 }
