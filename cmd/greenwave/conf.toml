@@ -1,5 +1,5 @@
 use_cors = true
-docs_folder = "./docs"
+docs_folder = "./app/rest/docs"
 
 [server_cfg]
 host = "0.0.0.0"

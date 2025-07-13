@@ -45,10 +45,14 @@ func Setup(appCfg *configuration.Configuration) *echo.Echo {
 	return microservice
 }
 
-// MainAPI Главное API микросервиса
+// MainAPI sets up the main API routes for the Echo microservice.
 func MainAPI(app *echo.Echo, appCfg *configuration.Configuration) {
 	mainGroup := app.Group(fmt.Sprintf("/%s", appCfg.ServerCfg.MainPath))
 	routerGroup := mainGroup.Group("/greenwave")
-	routerGroup.Static("/docs", appCfg.DocsFolder)
-	routerGroup.GET("/health", GetHealth())
+	{
+		routerGroup.Static("/docs", appCfg.DocsFolder)
+		routerGroup.GET("/health", GetHealth())
+		routerGroup.POST("/calculate_waves", RequestGreenWaves())
+		routerGroup.POST("/optimize", RequestOptimize())
+	}
 }

@@ -1,0 +1,176 @@
+{
+    "schemes": [
+        "https",
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "title": "Microservice for green waves management for traffic lights",
+        "contact": {},
+        "version": "1.0.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/api/greenwave/calculate_waves": {
+            "post": {
+                "description": "Requests the calculation of green waves for traffic lights configuration",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "Extract green waves",
+                "parameters": [
+                    {
+                        "description": "Traffic lights configuration",
+                        "name": "POST-body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/rest.GreenWavesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.GreenWavesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error400"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error500"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/greenwave/health": {
+            "get": {
+                "description": "Returns a simple message indicating the microservice is running",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Get health status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.HealthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error400"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error500"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/greenwave/optimize": {
+            "post": {
+                "description": "Requests the optimization of green waves for traffic lights configuration",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Optimize"
+                ],
+                "summary": "Request optimization",
+                "parameters": [
+                    {
+                        "description": "Traffic lights configuration",
+                        "name": "POST-body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/rest.OptimizeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.OptimizeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error400"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error500"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "codes.Error400": {
+            "type": "object",
+            "properties": {
+                "Error": {
+                    "description": "Error indicates the error message for bad requests.",
+                    "type": "string",
+                    "example": "Internal Server Error"
+                }
+            }
+        },
+        "codes.Error500": {
+            "type": "object",
+            "properties": {
+                "Error": {
+                    "description": "Error indicates the error message for internal server errors.",
+                    "type": "string",
+                    "example": "Internal Server Error"
+                }
+            }
+        },
+        "rest.GreenWavesRequest": {
+            "type": "object"
+        },
+        "rest.GreenWavesResponse": {
+            "type": "object"
+        },
+        "rest.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "Message contains the health status message.",
+                    "type": "string"
+                }
+            }
+        },
+        "rest.OptimizeRequest": {
+            "type": "object"
+        },
+        "rest.OptimizeResponse": {
+            "type": "object"
+        }
+    }
+}
