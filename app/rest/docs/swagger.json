@@ -11,7 +11,7 @@
     },
     "basePath": "/",
     "paths": {
-        "/api/greenwave/calculate_waves": {
+        "/api/greenwave/extract": {
             "post": {
                 "description": "Requests the calculation of green waves for traffic lights configuration",
                 "produces": [
@@ -151,11 +151,201 @@
                 }
             }
         },
+        "dto.GreenIntervalDTO": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "description": "End time of the green interval in seconds",
+                    "type": "number"
+                },
+                "phase_idx": {
+                    "description": "Phase index in which the green interval occurs",
+                    "type": "integer"
+                },
+                "start": {
+                    "description": "Start time of the green interval in seconds",
+                    "type": "number"
+                }
+            }
+        },
+        "dto.GreenWaveDTO": {
+            "type": "object",
+            "properties": {
+                "band_width": {
+                    "description": "Bandwidth of the green wave in seconds.",
+                    "type": "number"
+                },
+                "distance": {
+                    "description": "Distance in meters between the two junctions.",
+                    "type": "number"
+                },
+                "interval_jun_one": {
+                    "description": "Green interval on the first junction.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.GreenIntervalDTO"
+                        }
+                    ]
+                },
+                "interval_jun_two": {
+                    "description": "Green interval on the second junction.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.GreenIntervalDTO"
+                        }
+                    ]
+                },
+                "travel_time": {
+                    "description": "Travel time in seconds between the two junctions.",
+                    "type": "number"
+                }
+            }
+        },
+        "dto.JunctionDTO": {
+            "type": "object",
+            "properties": {
+                "cycle": {
+                    "description": "Cycle is a list of phases that define the traffic light cycle for this junction",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.PhaseDTO"
+                    }
+                },
+                "id": {
+                    "description": "Traffic light identifier",
+                    "type": "integer"
+                },
+                "label": {
+                    "description": "User defined alias",
+                    "type": "string"
+                },
+                "offset": {
+                    "description": "Offset of the cycle",
+                    "type": "integer"
+                },
+                "point": {
+                    "description": "Location of the junction",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.PointDTO"
+                        }
+                    ]
+                },
+                "total_duration": {
+                    "description": "Total duration of the cycle in seconds",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.PhaseDTO": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "Indentifier for the phase",
+                    "type": "integer"
+                },
+                "signals": {
+                    "description": "List of signals that define the phase",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.SignalDTO"
+                    }
+                },
+                "total_seconds": {
+                    "description": "Total duration of the phase in seconds, calculated from the signals",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.PointDTO": {
+            "type": "object",
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
+        "dto.SignalDTO": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Color is the color of the signal",
+                    "type": "string"
+                },
+                "duration": {
+                    "description": "Duration is the duration of the signal in seconds.",
+                    "type": "integer"
+                },
+                "max_duration": {
+                    "description": "MaxDuration is the maximum duration for the signal in seconds. Could be used during optimizations in further researchs.",
+                    "type": "integer"
+                },
+                "min_duration": {
+                    "description": "MinDuration is the minimum duration for the signal in seconds. Could be used during optimizations in further researchs.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.ThroughGreenWaveDTO": {
+            "type": "object",
+            "properties": {
+                "bandwidth": {
+                    "description": "Bandwidth of the green wave, which is the minimum duration of the green intervals",
+                    "type": "number"
+                },
+                "depth": {
+                    "description": "Number of junctions which could be passed through",
+                    "type": "integer"
+                },
+                "intervals": {
+                    "description": "Intervals of green lights that form the green wave",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.GreenIntervalDTO"
+                    }
+                }
+            }
+        },
         "rest.GreenWavesRequest": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "desired_speed_kmh": {
+                    "description": "DesiredSpeedKmh is the desired speed in km/h for calculating green waves",
+                    "type": "number"
+                },
+                "junctions": {
+                    "description": "Junctions is a list of junctions with their phases and signals",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.JunctionDTO"
+                    }
+                }
+            }
         },
         "rest.GreenWavesResponse": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+                "green_waves": {
+                    "description": "GreenWaves is a list of segments of green waves between junctions",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/dto.GreenWaveDTO"
+                        }
+                    }
+                },
+                "through_green_waves": {
+                    "description": "ThroughGreenWaves is a list of through green waves (so they can be passed through multiple junctions)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
+                    }
+                }
+            }
         },
         "rest.HealthResponse": {
             "type": "object",

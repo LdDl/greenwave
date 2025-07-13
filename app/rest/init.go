@@ -52,7 +52,7 @@ func MainAPI(app *echo.Echo, appCfg *configuration.Configuration) {
 	{
 		routerGroup.Static("/docs", appCfg.DocsFolder)
 		routerGroup.GET("/health", GetHealth())
-		routerGroup.POST("/calculate_waves", RequestGreenWaves())
+		routerGroup.POST("/extract", ExtractGreenWaves())
 		routerGroup.POST("/optimize", RequestOptimize())
 	}
 }

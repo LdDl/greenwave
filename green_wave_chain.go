@@ -65,7 +65,7 @@ func AdjustWaveByConnection(waveFrom *GreenWave, waveTo *GreenWave, overlap *Gre
 	adjustedWave.intervalJunOne = overlap
 	adjustedWave.intervalJunTwo.Start += deltaStart
 	adjustedWave.intervalJunTwo.End += deltaEnd
-	adjustedWave.bandWidth = adjustedWave.intervalJunTwo.End - adjustedWave.intervalJunTwo.Start
+	adjustedWave.bandwidth = adjustedWave.intervalJunTwo.End - adjustedWave.intervalJunTwo.Start
 	return adjustedWave
 }
 
@@ -154,7 +154,7 @@ func MergeGreenWaves(segmentsWaves [][]*GreenWave) []*ThroughGreenWave {
 				previous.intervalJunTwo.End = intersection.End
 				previous.intervalJunOne.Start += deltaStart
 				previous.intervalJunOne.End += deltaEnd
-				previous.bandWidth = previous.intervalJunTwo.End - previous.intervalJunTwo.Start
+				previous.bandwidth = previous.intervalJunTwo.End - previous.intervalJunTwo.Start
 			}
 		}
 		var intervals []*GreenInterval

@@ -10,9 +10,9 @@ type Junction struct {
 	Label string
 	// Cycle is a list of phases that define the traffic light cycle for this junction
 	Cycle []*Phase
-	// totalDuration is the total duration of the cycle in seconds
+	// Total duration of the cycle in seconds
 	totalDuration int
-	// offset of the cycle
+	// Offset of the cycle
 	offset int
 	// Location of the junction
 	point Point
@@ -66,6 +66,16 @@ func WithPoint(point Point) func(*Junction) {
 	return func(j *Junction) {
 		j.point = point
 	}
+}
+
+// GetTotalDuration returns the total duration of the junction's cycle in seconds.
+func (jun *Junction) GetTotalDuration() int {
+	return jun.totalDuration
+}
+
+// GetPoint returns the point (location) of the junction.
+func (jun *Junction) GetPoint() Point {
+	return jun.point
 }
 
 func (jun *Junction) GetGreenIntervals() []*GreenInterval {

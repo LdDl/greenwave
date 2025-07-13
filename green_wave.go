@@ -13,7 +13,7 @@ type GreenWave struct {
 	// Travel time in seconds between the two junctions.
 	travelTime float64
 	// Bandwidth of the green wave in seconds.
-	bandWidth float64
+	bandwidth float64
 }
 
 // NewGreenWave creates a new GreenWave instance with the specified parameters.
@@ -23,7 +23,7 @@ func NewGreenWave(intervalJunOne, intervalJunTwo *GreenInterval, distanceMeters,
 		intervalJunTwo: NewGreenInterval(intervalJunTwo.PhaseIdx, intervalJunTwo.Start, intervalJunTwo.End),
 		distance:       distanceMeters,
 		travelTime:     travelTimeSeconds,
-		bandWidth:      float64(intervalJunOne.End - intervalJunOne.Start),
+		bandwidth:      float64(intervalJunOne.End - intervalJunOne.Start),
 	}
 }
 
@@ -34,8 +34,33 @@ func (gw *GreenWave) Clone() *GreenWave {
 		intervalJunTwo: NewGreenInterval(gw.intervalJunTwo.PhaseIdx, gw.intervalJunTwo.Start, gw.intervalJunTwo.End),
 		distance:       gw.distance,
 		travelTime:     gw.travelTime,
-		bandWidth:      gw.bandWidth,
+		bandwidth:      gw.bandwidth,
 	}
+}
+
+// IntervalJunOne returns the green interval on the first junction.
+func (gw *GreenWave) IntervalJunOne() *GreenInterval {
+	return gw.intervalJunOne
+}
+
+// IntervalJunTwo returns the green interval on the second junction.
+func (gw *GreenWave) IntervalJunTwo() *GreenInterval {
+	return gw.intervalJunTwo
+}
+
+// Distance returns the distance between the two junctions in meters.
+func (gw *GreenWave) Distance() float64 {
+	return gw.distance
+}
+
+// TravelTime returns the travel time between the two junctions in seconds.
+func (gw *GreenWave) TravelTime() float64 {
+	return gw.travelTime
+}
+
+// Bandwidth returns the bandwidth of the green wave in seconds.
+func (gw *GreenWave) Bandwidth() float64 {
+	return gw.bandwidth
 }
 
 // FindGreenWavesBetweenIntervals finds green waves between two sets of green intervals.

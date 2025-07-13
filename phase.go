@@ -22,3 +22,8 @@ func NewPhase(id int, signals []*Signal) *Phase {
 		totalSeconds: totalSeconds,
 	}
 }
+
+// GetTotalSeconds returns the total duration of the phase in seconds.
+func (p *Phase) GetTotalSeconds() int {
+	return p.totalSeconds
+}
