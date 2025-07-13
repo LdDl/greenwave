@@ -22,6 +22,13 @@ Do not consider it to be any usable for production. It it just toy for understan
 
     <img src="./images/screen0.png" width="720" title="Swagger documentation">
 
+## Docker pull
+* Pull docker image
+@tbd
+
+* Run docker image
+@tbd
+
 ## Swagger and REST API
 
 * UI for [OpenAPI Spec Documentations](https://swagger.io/specification/) has been done via [rapidoc](https://rapidocweb.com/)
