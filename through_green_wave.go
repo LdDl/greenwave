@@ -41,3 +41,8 @@ func (tgw *ThroughGreenWave) Depth() int {
 func (tgw *ThroughGreenWave) Bandwidth() float64 {
 	return tgw.bandWidth
 }
+
+// GetIntervals returns the intervals of the green wave.
+func (tgw *ThroughGreenWave) GetIntervals() []*GreenInterval {
+	return tgw.intervals
+}

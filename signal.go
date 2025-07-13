@@ -9,9 +9,9 @@ import (
 type Signal struct {
 	// Duration is the duration of the signal in seconds.
 	Duration int
-	// MinDuration is the minimum duration for the signal in seconds. Could be used during optimizations.
+	// MinDuration is the minimum duration for the signal in seconds. Could be used during optimizations in further researchs.
 	MinDuration int
-	// MaxDuration is the maximum duration for the signal in seconds. Could be used during optimizations.
+	// MaxDuration is the maximum duration for the signal in seconds. Could be used during optimizations in further researchs.
 	MaxDuration int
 	// Color is the color of the signal
 	Color color.Color

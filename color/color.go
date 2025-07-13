@@ -25,7 +25,17 @@ const (
 	NO
 )
 
-var colorToStr = [...]string{"red", "green", "yellow"}
+var colorToStr = [...]string{
+	"UNDEFINED",
+	"RED",
+	"YELLOW",
+	"GREEN",
+	"GREENPRIORITY",
+	"GREENRIGHT",
+	"REDYELLOW",
+	"BLINKING",
+	"NO",
+}
 
 func (ioutIndex Color) String() string {
 	return colorToStr[ioutIndex]

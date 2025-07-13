@@ -1,0 +1,10 @@
+{
+    "use_cors": true,
+    "docs_folder": "./app/rest/docs",
+    "server_cfg": {
+        "host": "0.0.0.0",
+        "port": 36000,
+        "main_path": "api",
+        "startup_message": true
+    }
+}
