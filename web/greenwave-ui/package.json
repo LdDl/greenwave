@@ -38,5 +38,8 @@
 		"onlyBuiltDependencies": [
 			"esbuild"
 		]
+	},
+	"dependencies": {
+		"d3": "^7.9.0"
 	}
 }
