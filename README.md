@@ -22,6 +22,8 @@ Do not consider it to be any usable for production. It it just toy for understan
 
     <img src="./images/screen0.png" width="720" title="Swagger documentation">
 
+* Examples of JSON data for requests for can be found in [the following README.md](./cmd/greenwave/README.md)
+
 ## Docker pull
 * Pull docker image
 @tbd
