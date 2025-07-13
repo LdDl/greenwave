@@ -231,13 +231,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		return nil, fmt.Errorf("tournament_size must be greater than 0")
 	}
 
-	fmt.Println("Creating Genetic Optimizer with parameters:")
-	fmt.Printf("  Population Size: %d\n", populationSize)
-	fmt.Printf("  Generations: %d\n", generations)
-	fmt.Printf("  Mutation Rate: %.2f\n", mutationRate)
-	fmt.Printf("  Tournament Size: %d\n", tournamentSize)
-	fmt.Printf("  Crossover Type: %s\n", crossoverTypeStr)
-
 	return greenwave.NewOptimizerGenetic(
 		junctions,
 		speedKmh,

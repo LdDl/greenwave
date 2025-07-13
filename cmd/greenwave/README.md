@@ -515,4 +515,268 @@ swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
 
 * JSON response example for route `/api/greenwave/optimize`:
 ```json
+{
+  "best_offsets": [
+    0,
+    78.54198539844722,
+    78.49268011970068,
+    5.0721489912619
+  ],
+  "optimizer_extra": {
+    "fitness_history": [
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      17.34375,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ]
+  },
+  "green_waves": [
+    [
+      {
+        "interval_jun_one": {
+          "phase_idx": 0,
+          "start": 0,
+          "end": 30
+        },
+        "interval_jun_two": {
+          "phase_idx": 0,
+          "start": 18,
+          "end": 48
+        },
+        "distance": 200,
+        "travel_time": 18,
+        "band_width": 30
+      },
+      {
+        "interval_jun_one": {
+          "phase_idx": 1,
+          "start": 50,
+          "end": 55
+        },
+        "interval_jun_two": {
+          "phase_idx": 1,
+          "start": 68,
+          "end": 73
+        },
+        "distance": 200,
+        "travel_time": 18,
+        "band_width": 5
+      }
+    ],
+    [
+      {
+        "interval_jun_one": {
+          "phase_idx": 0,
+          "start": 15.5,
+          "end": 25.5
+        },
+        "interval_jun_two": {
+          "phase_idx": 0,
+          "start": 38,
+          "end": 48
+        },
+        "distance": 250,
+        "travel_time": 22.5,
+        "band_width": 10
+      },
+      {
+        "interval_jun_one": {
+          "phase_idx": 0,
+          "start": 32.5,
+          "end": 48
+        },
+        "interval_jun_two": {
+          "phase_idx": 1,
+          "start": 55,
+          "end": 70.5
+        },
+        "distance": 250,
+        "travel_time": 22.5,
+        "band_width": 15.5
+      }
+    ],
+    [
+      {
+        "interval_jun_one": {
+          "phase_idx": 0,
+          "start": 38,
+          "end": 46.5
+        },
+        "interval_jun_two": {
+          "phase_idx": 0,
+          "start": 51.5,
+          "end": 60
+        },
+        "distance": 150,
+        "travel_time": 13.5,
+        "band_width": 8.5
+      },
+      {
+        "interval_jun_one": {
+          "phase_idx": 1,
+          "start": 56.5,
+          "end": 71.5
+        },
+        "interval_jun_two": {
+          "phase_idx": 1,
+          "start": 70,
+          "end": 85
+        },
+        "distance": 150,
+        "travel_time": 13.5,
+        "band_width": 15
+      }
+    ]
+  ],
+  "through_green_waves": [
+    {
+      "intervals": [
+        {
+          "phase_idx": 0,
+          "start": 0,
+          "end": 6
+        },
+        {
+          "phase_idx": 0,
+          "start": 18,
+          "end": 24
+        },
+        {
+          "phase_idx": 0,
+          "start": 40.5,
+          "end": 46.5
+        },
+        {
+          "phase_idx": 0,
+          "start": 54,
+          "end": 60
+        }
+      ],
+      "depth": 4,
+      "bandwidth": 6
+    },
+    {
+      "intervals": [
+        {
+          "phase_idx": 0,
+          "start": 16,
+          "end": 30
+        },
+        {
+          "phase_idx": 0,
+          "start": 34,
+          "end": 48
+        },
+        {
+          "phase_idx": 1,
+          "start": 56.5,
+          "end": 70.5
+        },
+        {
+          "phase_idx": 1,
+          "start": 70,
+          "end": 84
+        }
+      ],
+      "depth": 4,
+      "bandwidth": 14
+    }
+  ]
+}
 ```
