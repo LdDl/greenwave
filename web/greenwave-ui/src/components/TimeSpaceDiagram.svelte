@@ -3,6 +3,7 @@
   import * as d3 from 'd3';
   import { junctions } from '$lib/stores';
   
+  export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
   export let showWaves = false;
@@ -11,7 +12,7 @@
   let container;
   let width = 700;
   let height = 400;
-  
+
   const margin = { top: 30, right: 30, bottom: 40, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -74,18 +75,18 @@
       .style("text-anchor", "middle")
       .text("Distance (meters)");
     
-    // Draw waves if enabled (order matters for layering)
+    // Draw waves if enabled
     if (showWaves) {
-      // Draw through waves FIRST (deepest layer)
       if (throughWaves.length > 0) {
         drawThroughWaves(chart, junctionsWithDuration, xScale, yScale);
       }
-      
-      // Draw green waves SECOND (on top of through waves)
       if (greenWaves.length > 0) {
         drawGreenWaves(chart, junctionsWithDuration, xScale, yScale);
       }
     }
+    
+    // Draw signal timelines BEFORE junctions so they appear behind
+    drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale);
     
     // Draw junctions
     const junctionGroups = chart.selectAll(".junction")
@@ -93,9 +94,54 @@
       .enter()
       .append("g")
       .attr("class", "junction")
-      .attr("transform", d => `translate(0, ${yScale(d.point.y)})`);
+      .attr("transform", d => `translate(0, ${yScale(d.point.y)})`)
+      .style("cursor", interactive ? "move" : "default");
     
-    // Draw junction labels with duration (combined in one text element)
+    // Make junctions draggable if interactive
+    if (interactive) {
+      junctionGroups.call(d3.drag()
+        .on("start", function(event, d) {
+          console.log("🎯 Drag start:", d.label, "at distance:", d.point.y);
+          d3.select(this).style("opacity", 0.8);
+        })
+        .on("drag", function(event, d) {
+          // Constrain dragging to chart bounds
+          const newY = Math.max(0, Math.min(chartHeight, event.y));
+          const newDistance = yScale.invert(newY);
+          
+          console.log("🔄 Dragging:", d.label, "new distance:", Math.round(newDistance));
+          
+          // Update position immediately for visual feedback
+          d3.select(this).attr("transform", `translate(0, ${newY})`);
+          
+          // Update signal lines for this junction in real-time
+          updateSignalLinesForJunction(d.id, newY, junctionsWithDuration, xScale, yScale, chart);
+          
+          // Update the store with new distance
+          junctions.update(junctionList => {
+            return junctionList.map(junction => {
+              if (junction.id === d.id) {
+                return {
+                  ...junction,
+                  point: { ...junction.point, y: Math.round(newDistance) }
+                };
+              }
+              return junction;
+            });
+          });
+        })
+        .on("end", function(event, d) {
+          console.log("✅ Drag end:", d.label, "final distance:", d.point.y);
+          console.log("📊 All junctions now:", $junctions.map(j => `${j.label}: ${j.point.y}m`));
+          d3.select(this).style("opacity", 1);
+          
+          // Force complete redraw after drag ends to ensure everything is clean
+          setTimeout(() => updateChart(), 10);
+        })
+      );
+    }
+    
+    // Draw junction labels with duration
     junctionGroups.append("text")
       .attr("x", 0)
       .attr("y", -15)
@@ -105,7 +151,74 @@
       .attr("fill", "#333")
       .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s`);
     
-    // Draw signal timelines
+    // Draw junction circles
+    junctionGroups.append("circle")
+      .attr("cx", 0)
+      .attr("cy", 0)
+      .attr("r", 6)
+      .attr("fill", "#D8BFD8")
+      .attr("stroke", "#4B0082")
+      .attr("stroke-width", 2);
+  }
+  
+  // Function to update signal lines for a specific junction during drag
+  function updateSignalLinesForJunction(junctionId, newY, junctionsWithDuration, xScale, yScale, chart) {
+    // Find the junction being dragged
+    const junction = junctionsWithDuration.find(j => j.id === junctionId);
+    if (!junction) return;
+    
+    // Remove existing signal lines for this junction
+    chart.selectAll(`.signal-line-${junctionId}`).remove();
+    
+    // Draw new signal lines at the new position
+    let currentTime = junction.offset;
+    
+    junction.cycle.forEach(phase => {
+      phase.signals.forEach(signal => {
+        if (signal.duration > 0) {
+          const startTime = currentTime % junction.total_duration;
+          const endTime = (currentTime + signal.duration) % junction.total_duration;
+          
+          // Handle wrap-around case
+          if (endTime < startTime) {
+            // First part (to end of cycle)
+            chart.append("line")
+              .attr("class", `signal-line-${junctionId}`)
+              .attr("x1", xScale(startTime))
+              .attr("x2", xScale(junction.total_duration))
+              .attr("y1", newY)
+              .attr("y2", newY)
+              .attr("stroke", getSignalColor(signal.color))
+              .attr("stroke-width", 4);
+            
+            // Second part (from start of cycle)
+            chart.append("line")
+              .attr("class", `signal-line-${junctionId}`)
+              .attr("x1", xScale(0))
+              .attr("x2", xScale(endTime))
+              .attr("y1", newY)
+              .attr("y2", newY)
+              .attr("stroke", getSignalColor(signal.color))
+              .attr("stroke-width", 4);
+          } else {
+            // Normal case
+            chart.append("line")
+              .attr("class", `signal-line-${junctionId}`)
+              .attr("x1", xScale(startTime))
+              .attr("x2", xScale(endTime))
+              .attr("y1", newY)
+              .attr("y2", newY)
+              .attr("stroke", getSignalColor(signal.color))
+              .attr("stroke-width", 4);
+          }
+        }
+        currentTime += signal.duration;
+      });
+    });
+  }
+  
+  // Draw signal timelines function - now with CSS classes for easy removal
+  function drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale) {
     junctionsWithDuration.forEach((junction, jIdx) => {
       let currentTime = junction.offset;
       const y = yScale(junction.point.y);
@@ -120,6 +233,7 @@
             if (endTime < startTime) {
               // First part (to end of cycle)
               chart.append("line")
+                .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
                 .attr("x2", xScale(junction.total_duration))
                 .attr("y1", y)
@@ -129,6 +243,7 @@
               
               // Second part (from start of cycle)
               chart.append("line")
+                .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(0))
                 .attr("x2", xScale(endTime))
                 .attr("y1", y)
@@ -138,6 +253,7 @@
             } else {
               // Normal case
               chart.append("line")
+                .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
                 .attr("x2", xScale(endTime))
                 .attr("y1", y)
@@ -150,26 +266,15 @@
         });
       });
     });
-    
-    // Draw junction circles
-    junctionGroups.append("circle")
-      .attr("cx", 0)
-      .attr("cy", 0)
-      .attr("r", 6)
-      .attr("fill", "#D8BFD8")
-      .attr("stroke", "#4B0082")
-      .attr("stroke-width", 2);
   }
-  
-  // Draw green waves function (matches your Python implementation)
+
+  // Draw green waves function
   function drawGreenWaves(chart, junctionsWithDuration, xScale, yScale) {
     const waveColor = "#57B844";
     const alpha = 0.3;
     
-    // For each segment between junctions
     greenWaves.forEach((segmentWaves, segmentIdx) => {
       if (segmentIdx >= junctionsWithDuration.length - 1) {
-        // Protection against segment/junction mismatch
         return;
       }
       
@@ -178,14 +283,12 @@
       const y1 = yScale(j1.point.y);
       const y2 = yScale(j2.point.y);
       
-      // For each green wave in the segment
       segmentWaves.forEach(wave => {
         const startJ1 = wave.interval_jun_one.start;
         const endJ1 = wave.interval_jun_one.end;
         const startJ2 = wave.interval_jun_two.start;
         const endJ2 = wave.interval_jun_two.end;
         
-        // Create polygon points (matching your Python logic)
         const polygonPoints = [
           [xScale(startJ1), y1],
           [xScale(startJ2), y2],
@@ -193,7 +296,6 @@
           [xScale(endJ1), y1]
         ];
         
-        // Draw the polygon
         chart.append("polygon")
           .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
           .attr("fill", waveColor)
@@ -205,18 +307,15 @@
     });
   }
   
-  // Draw through waves function (matches your Python implementation)
+  // Draw through waves function
   function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale) {
     const waveColor = "#541FE4";
     const alpha = 0.2;
     
-    // For each through wave
     throughWaves.forEach(wave => {
-      // Create start points (for each junction in the wave)
       const starts = [];
       const ends = [];
       
-      // Process each interval in the through wave
       wave.intervals.forEach((interval, junctionIdx) => {
         if (junctionIdx < junctionsWithDuration.length) {
           const junction = junctionsWithDuration[junctionIdx];
@@ -227,13 +326,9 @@
         }
       });
       
-      // Reverse ends array (matching Python logic)
       ends.reverse();
-      
-      // Combine start and end points to create polygon
       const polygonPoints = [...starts, ...ends];
       
-      // Draw the polygon
       chart.append("polygon")
         .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
         .attr("fill", waveColor)
@@ -271,14 +366,27 @@
   }
   
   onMount(() => {
-    updateChart();
+    updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   });
 </script>
 
-<div bind:this={container} class="diagram-container w-full h-full">
+<div bind:this={container} class="diagram-container w-full h-full relative">
   <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
+  {#if interactive && $junctions.length > 0}
+    <div class="absolute bottom-3 right-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>💡 <strong>Drag junctions</strong> to change distance</span>
+        {#if showWaves}
+          <span class="text-orange-600">⚠️ Waves may be outdated</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -286,5 +394,6 @@
     width: 100%;
     height: 100%;
     min-height: 300px;
+    position: relative;
   }
 </style>
