@@ -1,110 +1,21 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
-  import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error } from '$lib/stores';
+  import ConfirmModal from '../components/ConfirmModal.svelte';
+  import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { prepareJunctionsForAPI } from '$lib/utils/junction-helpers.js';
+  import { onMount } from 'svelte';
   
-  // Sample data for testing
-  const sampleJunctions = [
-    {
-      id: 0,
-      label: "Junction 1",
-      cycle: [
-        {
-          id: 0,
-          signals: [
-            { duration: 30, color: "GREEN" },
-            { duration: 20, color: "RED" }
-          ]
-        },
-        {
-          id: 1,
-          signals: [
-            { duration: 20, color: "GREEN" },
-            { duration: 15, color: "RED" }
-          ]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 0 }
-    },
-    {
-      id: 1,
-      label: "Junction 2",
-      cycle: [
-        {
-          id: 10,
-          signals: [
-            { duration: 20, color: "RED" },
-            { duration: 35, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]
-        },
-        {
-          id: 11,
-          signals: [
-            { duration: 10, color: "RED" },
-            { duration: 10, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 200 }
-    },
-    {
-      id: 2,
-      label: "Junction 3",
-      cycle: [
-        {
-          id: 20,
-          signals: [
-            { duration: 45, color: "RED" },
-            { duration: 10, color: "GREEN" }
-          ]
-        },
-        {
-          id: 21,
-          signals: [
-            { duration: 7, color: "RED" },
-            { duration: 18, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 450 }
-    },
-    {
-      id: 3,
-      label: "Junction 4",
-      cycle: [
-        {
-          id: 20,
-          signals: [
-            { duration: 40, color: "RED" },
-            { duration: 15, color: "GREEN" }
-          ]
-        },
-        {
-          id: 21,
-          signals: [
-            { duration: 10, color: "RED" },
-            { duration: 20, color: "GREEN" }
-          ]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 600 }
-    }
-  ];
-  
-  // Set sample data
-  junctions.set(sampleJunctions);
+  // Modal state
+  let showResetModal = false;
+  let showDemoModal = false;
   
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
   $: isExtractDisabled = $isLoading || $junctions.length < 2;
+  
+  // Helper: Check if we're in "clean" state (no data loss risk)
+  $: isCleanState = $junctions.length === 0 && !hasGreenWaveData;
   
   // Extract green waves from API
   async function handleExtractWaves() {
@@ -114,17 +25,11 @@
       isLoading.set(true);
       error.set(null);
       
-      // Prepare junctions for API
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      
-      // Call API
       const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed);
       
-      // Update stores with response data
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
-      
-      // Enable and turn ON the show waves toggle
       showGreenWaves.set(true);
       
     } catch (apiError) {
@@ -135,13 +40,57 @@
     }
   }
   
-  // Toggle show/hide waves
-  function handleToggleWaves() {
-    if (hasGreenWaveData) {
-      showGreenWaves.update(current => !current);
+  // Smart modal handlers
+  function handleResetClick() {
+    if (isCleanState) {
+      // Already clean - no need to confirm
+      resetToEmpty();
+    } else {
+      // Has data - show confirmation
+      showResetModal = true;
     }
   }
+  
+  function handleDemoDataClick() {
+    if (isCleanState) {
+      // No data to lose - load directly
+      resetToDemo();
+    } else {
+      // Has data - show confirmation
+      showDemoModal = true;
+    }
+  }
+  
+  function confirmReset() {
+    resetToEmpty();
+  }
+  
+  function confirmDemoData() {
+    resetToDemo();
+  }
 </script>
+
+<!-- Reset Confirmation Modal -->
+<ConfirmModal 
+  bind:show={showResetModal}
+  title="Reset All Data"
+  message="This will clear all junctions, reset the desired speed, and remove all calculated results. This action cannot be undone."
+  confirmText="Reset"
+  cancelText="Cancel"
+  onConfirm={confirmReset}
+  danger={true}
+/>
+
+<!-- Demo Data Confirmation Modal -->
+<ConfirmModal 
+  bind:show={showDemoModal}
+  title="Load Demo Data"
+  message="This will replace your current configuration with sample data and clear all calculated results."
+  confirmText="Load Demo Data"
+  cancelText="Cancel"
+  onConfirm={confirmDemoData}
+  danger={false}
+/>
 
 <div class="min-h-screen bg-gray-50 flex flex-col">
   <div class="container mx-auto p-4 flex-1 flex flex-col">
@@ -168,7 +117,7 @@
           </button>
         </div>
         
-        <!-- Results Container - Fixed height and overflow -->
+        <!-- Results Container -->
         <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center min-h-0">
           <p class="text-gray-500">Run optimization to see results</p>
         </div>
@@ -177,55 +126,95 @@
       <!-- Right side - Input Data -->
       <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-semibold">Input Configuration</h2>
-          <div class="flex gap-2 items-center">
-            <!-- Show Waves Toggle -->
-            <label class="flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                bind:checked={$showGreenWaves}
-                disabled={!hasGreenWaveData}
-                class="mr-2"
-                class:opacity-50={!hasGreenWaveData}
-                class:cursor-not-allowed={!hasGreenWaveData}
-              />
-              <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>
-                Show Waves
-              </span>
-            </label>
-            
-            <!-- Extract Waves Button -->
-            <button 
-              on:click={handleExtractWaves}
-              disabled={isExtractDisabled}
-              class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {#if $isLoading}
-                <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Loading...
-              {:else}
-                Extract Waves
-              {/if}
-            </button>
-            
-            <!-- Optimize Button -->
-            <button class="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm">
-              Optimize
-            </button>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Input Configuration</h2>
+            <div class="flex gap-4 items-center">
+              <div class="flex gap-2">
+                <button 
+                  on:click={handleResetClick}
+                  class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
+                  title="Clear all data and start fresh"
+                >
+                  Reset
+                </button>
+          
+                <button 
+                  on:click={handleDemoDataClick}
+                  class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm w-24 text-center"
+                  title="Load sample configuration"
+                >
+                  Demo data
+                </button>
+                
+                <button 
+                  on:click={handleExtractWaves}
+                  disabled={isExtractDisabled}
+                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-32"
+                >
+                  {#if $isLoading}
+                    <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Loading...
+                  {:else}
+                    Extract waves
+                  {/if}
+                </button>
+                
+                <button 
+                  class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
+                >
+                  Optimize
+                </button>
+              </div>
+              
+              <!-- Toggle Group - Separate -->
+              <label class="flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  bind:checked={$showGreenWaves}
+                  disabled={!hasGreenWaveData}
+                  class="mr-2"
+                  class:opacity-50={!hasGreenWaveData}
+                  class:cursor-not-allowed={!hasGreenWaveData}
+                />
+                <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>
+                  Show waves
+                </span>
+              </label>
+            </div>
           </div>
         </div>
         
-        <!-- Chart Container - Fixed height and overflow -->
+        <!-- Chart Container -->
         <div class="flex-1 border border-gray-300 rounded mb-4 min-h-0 overflow-hidden">
-          <TimeSpaceDiagram 
-            interactive={true}
-            greenWaves={$originalGreenWaves}
-            throughWaves={$originalThroughWaves}
-            showWaves={$showGreenWaves}
-          />
+          {#if $junctions.length === 0}
+            <!-- Empty State -->
+            <div class="flex items-center justify-center h-full text-gray-500">
+              <div class="text-center">
+                <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                <h3 class="text-lg font-medium mb-2">No junctions configured</h3>
+                <p class="text-sm mb-4">Add junctions to start visualizing traffic light coordination</p>
+                <button 
+                  on:click={handleDemoDataClick}
+                  class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                >
+                  Load demo data
+                </button>
+              </div>
+            </div>
+          {:else}
+            <!-- Regular Chart -->
+            <TimeSpaceDiagram 
+              interactive={true}
+              greenWaves={$originalGreenWaves}
+              throughWaves={$originalThroughWaves}
+              showWaves={$showGreenWaves}
+            />
+          {/if}
         </div>
         
-        <!-- Controls - Fixed at bottom -->
+        <!-- Controls -->
         <div class="border-t pt-4 mt-auto">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -241,8 +230,15 @@
             <div>
               <label class="block text-sm font-medium mb-2">Junctions</label>
               <p class="text-sm text-gray-600">{$junctions.length} junctions configured</p>
-              {#if hasGreenWaveData}
+              
+              {#if $junctions.length === 0}
+                <p class="text-sm text-blue-600 mt-1">📍 Click "Demo data" or add junctions manually</p>
+              {:else if $junctions.length === 1}
+                <p class="text-sm text-orange-600 mt-1">⚠️ Add at least 1 more junction to extract waves</p>
+              {:else if hasGreenWaveData}
                 <p class="text-sm text-green-600 mt-1">✓ Green waves calculated</p>
+              {:else}
+                <p class="text-sm text-orange-600 mt-1">Click "Extract waves" to calculate</p>
               {/if}
             </div>
           </div>
