@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
-  import { junctions } from '$lib/stores';
+  import { junctions, wavesAreOutdated } from '$lib/stores';
   
   export let interactive = false;
   export let greenWaves = [];
@@ -12,6 +12,7 @@
   let container;
   let width = 700;
   let height = 400;
+  let isDragging = false; 
 
   const margin = { top: 30, right: 30, bottom: 40, left: 60 };
   const chartWidth = width - margin.left - margin.right;
@@ -27,6 +28,9 @@
   }
   
   function updateChart() {
+    // Don't update chart while dragging (keep yScale stable)
+    if (isDragging) return;
+
     if (!svg || !$junctions.length) return;
     
     const g = d3.select(svg);
@@ -75,17 +79,17 @@
       .style("text-anchor", "middle")
       .text("Distance (meters)");
     
-    // Draw waves if enabled
+    // Draw waves if enabled (use store's $wavesAreOutdated)
     if (showWaves) {
       if (throughWaves.length > 0) {
-        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale);
+        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated);
       }
       if (greenWaves.length > 0) {
-        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale);
+        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated);
       }
     }
     
-    // Draw signal timelines BEFORE junctions so they appear behind
+    // Draw signal timelines
     drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale);
     
     // Draw junctions
@@ -103,9 +107,10 @@
         .on("start", function(event, d) {
           console.log("🎯 Drag start:", d.label, "at distance:", d.point.y);
           d3.select(this).style("opacity", 0.8);
+          isDragging = true; // Set flag
         })
         .on("drag", function(event, d) {
-          // Constrain dragging to chart bounds
+          // Use the simple working approach with event.y
           const newY = Math.max(0, Math.min(chartHeight, event.y));
           const newDistance = yScale.invert(newY);
           
@@ -133,9 +138,14 @@
         .on("end", function(event, d) {
           console.log("✅ Drag end:", d.label, "final distance:", d.point.y);
           console.log("📊 All junctions now:", $junctions.map(j => `${j.label}: ${j.point.y}m`));
-          d3.select(this).style("opacity", 1);
           
-          // Force complete redraw after drag ends to ensure everything is clean
+          if ($wavesAreOutdated) {
+            console.log("⚠️ Green waves are now outdated - click 'Extract Waves' to recalculate");
+          }
+          
+          d3.select(this).style("opacity", 1);
+          isDragging = false; // Clear flag
+          // Force complete redraw after drag ends
           setTimeout(() => updateChart(), 10);
         })
       );
@@ -163,14 +173,11 @@
   
   // Function to update signal lines for a specific junction during drag
   function updateSignalLinesForJunction(junctionId, newY, junctionsWithDuration, xScale, yScale, chart) {
-    // Find the junction being dragged
     const junction = junctionsWithDuration.find(j => j.id === junctionId);
     if (!junction) return;
     
-    // Remove existing signal lines for this junction
     chart.selectAll(`.signal-line-${junctionId}`).remove();
     
-    // Draw new signal lines at the new position
     let currentTime = junction.offset;
     
     junction.cycle.forEach(phase => {
@@ -179,9 +186,7 @@
           const startTime = currentTime % junction.total_duration;
           const endTime = (currentTime + signal.duration) % junction.total_duration;
           
-          // Handle wrap-around case
           if (endTime < startTime) {
-            // First part (to end of cycle)
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
               .attr("x1", xScale(startTime))
@@ -191,7 +196,6 @@
               .attr("stroke", getSignalColor(signal.color))
               .attr("stroke-width", 4);
             
-            // Second part (from start of cycle)
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
               .attr("x1", xScale(0))
@@ -201,7 +205,6 @@
               .attr("stroke", getSignalColor(signal.color))
               .attr("stroke-width", 4);
           } else {
-            // Normal case
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
               .attr("x1", xScale(startTime))
@@ -217,7 +220,7 @@
     });
   }
   
-  // Draw signal timelines function - now with CSS classes for easy removal
+  // Draw signal timelines function
   function drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale) {
     junctionsWithDuration.forEach((junction, jIdx) => {
       let currentTime = junction.offset;
@@ -229,9 +232,7 @@
             const startTime = currentTime % junction.total_duration;
             const endTime = (currentTime + signal.duration) % junction.total_duration;
             
-            // Handle wrap-around case
             if (endTime < startTime) {
-              // First part (to end of cycle)
               chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
@@ -241,7 +242,6 @@
                 .attr("stroke", getSignalColor(signal.color))
                 .attr("stroke-width", 4);
               
-              // Second part (from start of cycle)
               chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(0))
@@ -251,7 +251,6 @@
                 .attr("stroke", getSignalColor(signal.color))
                 .attr("stroke-width", 4);
             } else {
-              // Normal case
               chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
@@ -268,15 +267,13 @@
     });
   }
 
-  // Draw green waves function
-  function drawGreenWaves(chart, junctionsWithDuration, xScale, yScale) {
+  // Draw green waves with visual indication if outdated
+  function drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
     const waveColor = "#57B844";
-    const alpha = 0.3;
+    const alpha = isOutdated ? 0.15 : 0.3; // Fade if outdated
     
     greenWaves.forEach((segmentWaves, segmentIdx) => {
-      if (segmentIdx >= junctionsWithDuration.length - 1) {
-        return;
-      }
+      if (segmentIdx >= junctionsWithDuration.length - 1) return;
       
       const j1 = junctionsWithDuration[segmentIdx];
       const j2 = junctionsWithDuration[segmentIdx + 1];
@@ -300,17 +297,18 @@
           .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
           .attr("fill", waveColor)
           .attr("fill-opacity", alpha)
-          .attr("stroke", waveColor)
-          .attr("stroke-width", 0.5)
-          .attr("stroke-opacity", 0.8);
+          .attr("stroke", isOutdated ? "#ff6b35" : waveColor) // Orange border if outdated
+          .attr("stroke-width", isOutdated ? 1 : 0.5)
+          .attr("stroke-opacity", isOutdated ? 0.6 : 0.8)
+          .attr("stroke-dasharray", isOutdated ? "3,3" : "none"); // Dashed if outdated
       });
     });
   }
   
-  // Draw through waves function
-  function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale) {
+  // Draw through waves with visual indication if outdated
+  function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
     const waveColor = "#541FE4";
-    const alpha = 0.2;
+    const alpha = isOutdated ? 0.1 : 0.2; // Fade if outdated
     
     throughWaves.forEach(wave => {
       const starts = [];
@@ -333,9 +331,10 @@
         .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
         .attr("fill", waveColor)
         .attr("fill-opacity", alpha)
-        .attr("stroke", waveColor)
-        .attr("stroke-width", 0.5)
-        .attr("stroke-opacity", 0.8);
+        .attr("stroke", isOutdated ? "#ff6b35" : waveColor) // Orange border if outdated
+        .attr("stroke-width", isOutdated ? 1 : 0.5)
+        .attr("stroke-opacity", isOutdated ? 0.6 : 0.8)
+        .attr("stroke-dasharray", isOutdated ? "3,3" : "none"); // Dashed if outdated
     });
   }
   
@@ -355,7 +354,7 @@
   }
   
   // Also reactive to all prop changes  
-  $: greenWaves, throughWaves, showWaves, updateChart();
+  $: greenWaves, throughWaves, showWaves, $wavesAreOutdated, updateChart();
   
   function updateSize() {
     if (container) {
@@ -381,8 +380,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
         <span>💡 <strong>Drag junctions</strong> to change distance</span>
-        {#if showWaves}
-          <span class="text-orange-600">⚠️ Waves may be outdated</span>
+        {#if $wavesAreOutdated}
+          <span class="text-orange-600 ml-2">⚠️ Waves outdated</span>
         {/if}
       </div>
     </div>

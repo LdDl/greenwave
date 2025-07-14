@@ -5,7 +5,8 @@
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { prepareJunctionsForAPI } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
-  
+  import { storeWaveCalculationPositions } from '$lib/stores';
+
   // Modal state
   let showResetModal = false;
   let showDemoModal = false;
@@ -31,7 +32,7 @@
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
       showGreenWaves.set(true);
-      
+      storeWaveCalculationPositions($junctions);
     } catch (apiError) {
       error.set(apiError.message || 'Failed to extract green waves');
       console.error('API Error:', apiError);

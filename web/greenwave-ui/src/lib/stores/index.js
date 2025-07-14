@@ -1,5 +1,5 @@
 // lib/stores/index.js
-import { writable } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 
 // Core data stores
 export const junctions = writable([]);
@@ -10,9 +10,46 @@ export const originalGreenWaves = writable([]);
 export const originalThroughWaves = writable([]);
 export const showGreenWaves = writable(false);
 
+// Track junction positions when waves were calculated
+export const waveCalculationPositions = writable([]);
+
+// Derived store to check if waves are outdated
+export const wavesAreOutdated = derived(
+  [junctions, originalGreenWaves, originalThroughWaves, waveCalculationPositions],
+  ([$junctions, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions]) => {
+    // No waves = not outdated
+    if ($originalGreenWaves.length === 0 && $originalThroughWaves.length === 0) {
+      return false;
+    }
+    
+    // No stored positions = not outdated (first time)
+    if ($waveCalculationPositions.length === 0) {
+      return false;
+    }
+    
+    // Different number of junctions = outdated
+    if ($junctions.length !== $waveCalculationPositions.length) {
+      return true;
+    }
+    
+    // Compare positions
+    return $junctions.some(junction => {
+      const storedPosition = $waveCalculationPositions.find(pos => pos.id === junction.id);
+      return !storedPosition || storedPosition.y !== junction.point.y;
+    });
+  }
+);
+
 // UI state stores
 export const isLoading = writable(false);
 export const error = writable(null);
+
+// Function to store current junction positions when waves are calculated
+export function storeWaveCalculationPositions(junctionsList) {
+  waveCalculationPositions.set(
+    junctionsList.map(j => ({ id: j.id, y: j.point.y }))
+  );
+}
 
 export const DEMO_DATA = {
   junctions: [
@@ -121,6 +158,9 @@ export function resetToDemo() {
   originalThroughWaves.set([]);
   showGreenWaves.set(false);
   
+  // Clear wave calculation positions
+  waveCalculationPositions.set([]);
+  
   // Clear UI state
   isLoading.set(false);
   error.set(null);
@@ -134,6 +174,9 @@ export function resetToEmpty() {
   originalGreenWaves.set([]);
   originalThroughWaves.set([]);
   showGreenWaves.set(false);
+  
+  // Clear wave calculation positions
+  waveCalculationPositions.set([]);
   
   // Clear UI state
   isLoading.set(false);
