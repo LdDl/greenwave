@@ -1,8 +1,11 @@
-<!-- components/TimeSpaceDiagram.svelte -->
 <script>
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
   import { junctions } from '$lib/stores';
+  
+  export let greenWaves = [];
+  export let throughWaves = [];
+  export let showWaves = false;
   
   let svg;
   let width = 700;
@@ -69,6 +72,19 @@
       .attr("fill", "black")
       .style("text-anchor", "middle")
       .text("Distance (meters)");
+    
+    // Draw waves if enabled (order matters for layering)
+    if (showWaves) {
+      // Draw through waves FIRST (deepest layer)
+      if (throughWaves.length > 0) {
+        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale);
+      }
+      
+      // Draw green waves SECOND (on top of through waves)
+      if (greenWaves.length > 0) {
+        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale);
+      }
+    }
     
     // Draw junctions
     const junctionGroups = chart.selectAll(".junction")
@@ -144,6 +160,89 @@
       .attr("stroke-width", 2);
   }
   
+  // Draw green waves function (matches your Python implementation)
+  function drawGreenWaves(chart, junctionsWithDuration, xScale, yScale) {
+    const waveColor = "#57B844";
+    const alpha = 0.3;
+    
+    // For each segment between junctions
+    greenWaves.forEach((segmentWaves, segmentIdx) => {
+      if (segmentIdx >= junctionsWithDuration.length - 1) {
+        // Protection against segment/junction mismatch
+        return;
+      }
+      
+      const j1 = junctionsWithDuration[segmentIdx];
+      const j2 = junctionsWithDuration[segmentIdx + 1];
+      const y1 = yScale(j1.point.y);
+      const y2 = yScale(j2.point.y);
+      
+      // For each green wave in the segment
+      segmentWaves.forEach(wave => {
+        const startJ1 = wave.interval_jun_one.start;
+        const endJ1 = wave.interval_jun_one.end;
+        const startJ2 = wave.interval_jun_two.start;
+        const endJ2 = wave.interval_jun_two.end;
+        
+        // Create polygon points (matching your Python logic)
+        const polygonPoints = [
+          [xScale(startJ1), y1],
+          [xScale(startJ2), y2],
+          [xScale(endJ2), y2],
+          [xScale(endJ1), y1]
+        ];
+        
+        // Draw the polygon
+        chart.append("polygon")
+          .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
+          .attr("fill", waveColor)
+          .attr("fill-opacity", alpha)
+          .attr("stroke", waveColor)
+          .attr("stroke-width", 0.5)
+          .attr("stroke-opacity", 0.8);
+      });
+    });
+  }
+  
+  // Draw through waves function (matches your Python implementation)
+  function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale) {
+    const waveColor = "#541FE4";
+    const alpha = 0.2;
+    
+    // For each through wave
+    throughWaves.forEach(wave => {
+      // Create start points (for each junction in the wave)
+      const starts = [];
+      const ends = [];
+      
+      // Process each interval in the through wave
+      wave.intervals.forEach((interval, junctionIdx) => {
+        if (junctionIdx < junctionsWithDuration.length) {
+          const junction = junctionsWithDuration[junctionIdx];
+          const y = yScale(junction.point.y);
+          
+          starts.push([xScale(interval.start), y]);
+          ends.push([xScale(interval.end), y]);
+        }
+      });
+      
+      // Reverse ends array (matching Python logic)
+      ends.reverse();
+      
+      // Combine start and end points to create polygon
+      const polygonPoints = [...starts, ...ends];
+      
+      // Draw the polygon
+      chart.append("polygon")
+        .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
+        .attr("fill", waveColor)
+        .attr("fill-opacity", alpha)
+        .attr("stroke", waveColor)
+        .attr("stroke-width", 0.5)
+        .attr("stroke-opacity", 0.8);
+    });
+  }
+  
   function getSignalColor(color) {
     const colorMap = {
       'RED': '#dc2626',
@@ -154,10 +253,13 @@
     return colorMap[color] || '#000000';
   }
   
-  // Update chart when junctions change
+  // Update chart when ANY relevant state changes
   $: if (svg) {
     updateChart();
   }
+  
+  // Also reactive to all prop changes  
+  $: greenWaves, throughWaves, showWaves, updateChart();
   
   onMount(() => {
     updateChart();
