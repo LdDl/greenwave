@@ -8,6 +8,7 @@
   export let showWaves = false;
   
   let svg;
+  let container;
   let width = 700;
   let height = 400;
   
@@ -261,19 +262,29 @@
   // Also reactive to all prop changes  
   $: greenWaves, throughWaves, showWaves, updateChart();
   
+  function updateSize() {
+    if (container) {
+      width = container.clientWidth;
+      height = container.clientHeight;
+      updateChart();
+    }
+  }
+  
   onMount(() => {
     updateChart();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
   });
 </script>
 
-<div class="diagram-container">
-  <svg bind:this={svg} {width} {height} class="border border-gray-300 rounded"></svg>
+<div bind:this={container} class="diagram-container w-full h-full">
+  <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
 </div>
 
 <style>
   .diagram-container {
     width: 100%;
     height: 100%;
-    overflow: hidden;
+    min-height: 300px;
   }
 </style>
