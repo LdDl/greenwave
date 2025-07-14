@@ -9,11 +9,10 @@ export function calculateTotalDuration(junction) {
   }, 0);
 }
 
-// Prepare junctions for API call (add total_duration)
+// Prepare junctions for API call
 export function prepareJunctionsForAPI(junctions) {
   return junctions.map(junction => ({
     ...junction,
-    total_duration: calculateTotalDuration(junction)
   }));
 }
 
