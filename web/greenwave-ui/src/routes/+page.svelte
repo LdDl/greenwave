@@ -2,7 +2,7 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty, wavesAreOutdated } from '$lib/stores';
-  import { optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves } from '$lib/stores/optimization';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
@@ -91,13 +91,10 @@
 
   // Handle optimization
   async function handleOptimize() {
-    console.log('Under construction: Optimization logic not implemented yet');
     try {
       isLoading.set(true);
       error.set(null);
 
-      // Proceed to optimize offsets
-      console.log("Optimizing offsets...");
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
       const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed);
 
@@ -112,6 +109,10 @@
       const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
+
+      // Store the current state for validation
+      optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
+      optimizedLastCalculatedSpeed.set($desiredSpeed);
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
       console.error('Optimize Error:', optimizeError);
@@ -187,6 +188,8 @@
               throughWaves={$optimizedThroughWaves}
               showWaves={true}
               interactive={false}
+              resultsAreOutdated={$optimizedResultsAreOutdated}
+              isResults={true}
             />
           {:else}
             <div class="flex items-center border-2 border-dashed border-gray-300 rounded-lg justify-center h-full text-gray-500">
@@ -286,6 +289,7 @@
               throughWaves={$originalThroughWaves}
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
+              isResults={false}
             />
           {/if}
         </div>
@@ -314,7 +318,7 @@
               {:else if hasGreenWaveData}
                 <p class="text-sm text-green-600 mt-1">✓ Green waves calculated</p>
               {:else}
-                <p class="text-sm text-orange-600 mt-1">Click "Extract waves" to calculate</p>
+                <p class="text-sm text-orange-600 mt-1">Press "Extract waves" to calculate green waves</p>
               {/if}
             </div>
           </div>

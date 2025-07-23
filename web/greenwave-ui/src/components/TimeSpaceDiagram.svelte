@@ -4,8 +4,10 @@
 
   import * as d3 from 'd3';
 
+  export let isResults = false;
   export let junctions = [];
   export let wavesAreOutdated = { isOutdated: false, reason: null };
+  export let resultsAreOutdated = { isOutdated: false, reason: null };
   export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
@@ -368,14 +370,20 @@
 
 <div bind:this={container} class="diagram-container w-full h-full relative">
   <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
-  {#if interactive && junctions.length > 0}
+  {#if junctions.length > 0}
     <div class="absolute bottom-3 right-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
-        <span>💡 <strong>Drag junctions</strong> to change distance</span>
-        {#if wavesAreOutdated.isOutdated}
+        {#if !isResults}
+          <span>💡 <strong>Drag junctions</strong> to change distance</span>
+        {:else}
+          <span>💡 <strong>Press 'Optimize' to refresh</strong></span>
+        {/if}
+        {#if resultsAreOutdated.isOutdated}
+          <span class="text-orange-600 ml-2">⚠️ Results outdated: {resultsAreOutdated.reason}</span>
+        {:else if wavesAreOutdated.isOutdated}
           <span class="text-orange-600 ml-2">⚠️ Waves outdated: {wavesAreOutdated.reason}</span>
         {/if}
       </div>
