@@ -1,7 +1,7 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
-  import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
+  import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty, wavesAreOutdated } from '$lib/stores';
   import { optimizedOffsets } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
@@ -70,6 +70,23 @@
   
   function confirmDemoData() {
     resetToDemo();
+  }
+
+  // Update the store with new distance
+  let debounceTimeout;
+  function updateJunction(event) {
+    const { id, newDistance } = event.detail;
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(() => {
+    junctions.update(junctionList => {
+        return junctionList.map(junction => {
+          if (junction.id === id) {
+            return { ...junction, point: { ...junction.point, y: newDistance } };
+          }
+          return junction;
+        });
+      });
+    }, 100);
   }
 
   // Handle optimization
@@ -243,11 +260,14 @@
             </div>
           {:else}
             <!-- Regular Chart -->
-            <TimeSpaceDiagram 
+            <TimeSpaceDiagram
+              junctions={$junctions}
+              wavesAreOutdated={$wavesAreOutdated}
               interactive={true}
               greenWaves={$originalGreenWaves}
               throughWaves={$originalThroughWaves}
               showWaves={$showGreenWaves}
+              on:updateJunction={updateJunction}
             />
           {/if}
         </div>

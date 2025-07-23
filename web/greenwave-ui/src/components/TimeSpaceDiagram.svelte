@@ -1,12 +1,18 @@
 <script>
   import { onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
+
   import * as d3 from 'd3';
-  import { junctions, wavesAreOutdated } from '$lib/stores';
+
+  export let junctions = [];
+  export let wavesAreOutdated = { isOutdated: false, reason: null };
   export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
   export let showWaves = false;
   
+  const dispatch = createEventDispatcher();
+
   let svg;
   let container;
   let width = 700;
@@ -30,7 +36,7 @@
     // Don't update chart while dragging (keep yScale stable)
     if (isDragging) return;
 
-    if (!svg || !$junctions.length) return;
+    if (!svg || !junctions.length) return;
     
     const g = d3.select(svg);
     g.selectAll("*").remove();
@@ -40,7 +46,7 @@
       .attr("transform", `translate(${margin.left},${margin.top})`);
     
     // Calculate total durations for all junctions
-    const junctionsWithDuration = $junctions.map(junction => ({
+    const junctionsWithDuration = junctions.map(junction => ({
       ...junction,
       total_duration: calculateTotalDuration(junction)
     }));
@@ -78,13 +84,13 @@
       .style("text-anchor", "middle")
       .text("Distance (meters)");
     
-    // Draw waves if enabled (use store's $wavesAreOutdated)
+    // Draw waves if enabled
     if (showWaves) {
       if (throughWaves.length > 0) {
-        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated.isOutdated);
+        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
       }
       if (greenWaves.length > 0) {
-        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated.isOutdated);
+        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
       }
     }
     
@@ -121,24 +127,14 @@
           // Update signal lines for this junction in real-time
           updateSignalLinesForJunction(d.id, newY, junctionsWithDuration, xScale, yScale, chart);
           
-          // Update the store with new distance
-          junctions.update(junctionList => {
-            return junctionList.map(junction => {
-              if (junction.id === d.id) {
-                return {
-                  ...junction,
-                  point: { ...junction.point, y: Math.round(newDistance) }
-                };
-              }
-              return junction;
-            });
-          });
+          // Emit an event to notify the parent about the updated position
+          dispatch("updateJunction", { id: d.id, newDistance: Math.round(newDistance) });
         })
         .on("end", function(event, d) {
           console.log("✅ Drag end:", d.label, "final distance:", d.point.y);
-          console.log("📊 All junctions now:", $junctions.map(j => `${j.label}: ${j.point.y}m`));
+          console.log("📊 All junctions now:", junctions.map(j => `${j.label}: ${j.point.y}m`));
           
-          if ($wavesAreOutdated.isOutdated) {
+          if (wavesAreOutdated.isOutdated) {
             console.log("⚠️ Green waves are now outdated - click 'Extract Waves' to recalculate");
           }
           
@@ -353,7 +349,7 @@
   }
   
   // Also reactive to all prop changes  
-  $: greenWaves, throughWaves, showWaves, $wavesAreOutdated, updateChart();
+  $: greenWaves, throughWaves, showWaves, wavesAreOutdated, updateChart();
   
   function updateSize() {
     if (container) {
@@ -372,15 +368,15 @@
 
 <div bind:this={container} class="diagram-container w-full h-full relative">
   <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
-  {#if interactive && $junctions.length > 0}
+  {#if interactive && junctions.length > 0}
     <div class="absolute bottom-3 right-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
         <span>💡 <strong>Drag junctions</strong> to change distance</span>
-        {#if $wavesAreOutdated.isOutdated}
-          <span class="text-orange-600 ml-2">⚠️ Waves outdated: {$wavesAreOutdated.reason}</span>
+        {#if wavesAreOutdated.isOutdated}
+          <span class="text-orange-600 ml-2">⚠️ Waves outdated: {wavesAreOutdated.reason}</span>
         {/if}
       </div>
     </div>
