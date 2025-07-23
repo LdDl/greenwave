@@ -27,3 +27,15 @@ export function validateJunctionCycles(junctions) {
     commonDuration: firstDuration
   };
 }
+
+// Apply offsets to junctions
+// Returns a new array of deep copied junctions with offsets applied
+export function applyOffsetsToJunctions(junctions, offsets) {
+  return junctions.map((junction, index) => {
+    const updatedJunction = JSON.parse(JSON.stringify(junction)); // Deep copy
+    // Round offsets to nearest integer
+    const roundedOffset = Math.round(offsets[index] || 0);
+    updatedJunction.offset = roundedOffset;
+    return updatedJunction;
+  });
+}

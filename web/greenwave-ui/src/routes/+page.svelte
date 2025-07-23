@@ -2,10 +2,10 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty, wavesAreOutdated } from '$lib/stores';
-  import { optimizedOffsets } from '$lib/stores/optimization';
+  import { optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
-  import { prepareJunctionsForAPI } from '$lib/utils/junction-helpers.js';
+  import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
   import { storeWaveCalculationPositions } from '$lib/stores';
 
@@ -72,8 +72,8 @@
     resetToDemo();
   }
 
-  // Update the store with new distance
   let debounceTimeout;
+  // Update the store with new distance
   function updateJunction(event) {
     const { id, newDistance } = event.detail;
     clearTimeout(debounceTimeout);
@@ -104,9 +104,14 @@
       // Update the store with optimized offsets
       optimizedOffsets.set(optimizeResponse.best_offsets || []);
 
-      // Handle the optimization response (e.g., update offsets in the store)
-      console.log("Optimization complete:", optimizeResponse);
-      console.log("Optimized Offsets:", optimizeResponse.best_offsets );
+      // Handle the optimization response
+      optimizedJunctions.set(applyOffsetsToJunctions($junctions, optimizeResponse.best_offsets));
+
+      // Extract the optimized green waves
+      const optimizedJunctionsForAPI = prepareJunctionsForAPI($optimizedJunctions);
+      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed);
+      optimizedGreenWaves.set(response.green_waves || []);
+      optimizedThroughWaves.set(response.through_green_waves || []);
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
       console.error('Optimize Error:', optimizeError);
@@ -116,7 +121,10 @@
   }
 
   function clearResults() {
+    optimizedJunctions.set([]);
     optimizedOffsets.set([]);
+    optimizedGreenWaves.set([]);
+    optimizedThroughWaves.set([]);
   }
 </script>
 
@@ -159,83 +167,93 @@
     <!-- Main Content Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
       <!-- Left side - Optimized Results -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col flex-1 min-h-0">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-semibold">Optimized Results</h2>
+          <h2 class="text-xl font-semibold">Optimized results</h2>
           <button
             on:click={clearResults}
-            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Clear Results
+            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
+            >
+            Clear results
           </button>
         </div>
         
         <!-- Results Container -->
-        <div class="flex-1 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center min-h-0">
-          <p class="text-gray-500">Run optimization to see results</p>
+        <div class="flex-1 border border-gray-300 rounded-lg mb-4 min-h-0 overflow-hidden">
+          {#if $optimizedJunctions.length > 0}
+            <TimeSpaceDiagram
+              junctions={$optimizedJunctions}
+              greenWaves={$optimizedGreenWaves}
+              throughWaves={$optimizedThroughWaves}
+              showWaves={true}
+              interactive={false}
+            />
+          {:else}
+            <div class="flex items-center border-2 border-dashed border-gray-300 rounded-lg justify-center h-full text-gray-500">
+              <p>No optimized results to display. Run optimization to see results.</p>
+            </div>
+          {/if}
         </div>
       </div>
       
       <!-- Right side - Input Data -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col flex-1 min-h-0">
         <div class="flex justify-between items-center mb-4">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">Input Configuration</h2>
-            <div class="flex gap-4 items-center">
-              <div class="flex gap-2">
-                <button 
-                  on:click={handleResetClick}
-                  class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
-                  title="Clear all data and start fresh"
-                >
-                  Reset
-                </button>
-          
-                <button 
-                  on:click={handleDemoDataClick}
-                  class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm w-24 text-center"
-                  title="Load sample configuration"
-                >
-                  Demo data
-                </button>
-                
-                <button 
-                  on:click={handleExtractWaves}
-                  disabled={isExtractDisabled}
-                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-32"
-                >
-                  {#if $isLoading}
-                    <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Loading...
-                  {:else}
-                    Extract waves
-                  {/if}
-                </button>
-                
-                <button 
-                  on:click={handleOptimize}
-                  class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
-                  title="Recalculate waves and optimize offsets"
-                >
-                  Optimize
-                </button>
-              </div>
+          <h2 class="text-xl font-semibold">Input configuration</h2>
+          <div class="flex gap-4 items-center">
+            <div class="flex gap-2">
+              <button 
+                on:click={handleResetClick}
+                class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
+                title="Clear all data and start fresh"
+              >
+                Reset
+              </button>
+        
+              <button 
+                on:click={handleDemoDataClick}
+                class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm w-24 text-center"
+                title="Load sample configuration"
+              >
+                Demo data
+              </button>
               
-              <!-- Toggle Group - Separate -->
-              <label class="flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  bind:checked={$showGreenWaves}
-                  disabled={!hasGreenWaveData}
-                  class="mr-2"
-                  class:opacity-50={!hasGreenWaveData}
-                  class:cursor-not-allowed={!hasGreenWaveData}
-                />
-                <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>
-                  Show waves
-                </span>
-              </label>
+              <button 
+                on:click={handleExtractWaves}
+                disabled={isExtractDisabled}
+                class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-32"
+              >
+                {#if $isLoading}
+                  <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Loading...
+                {:else}
+                  Extract waves
+                {/if}
+              </button>
+              
+              <button 
+                on:click={handleOptimize}
+                class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
+                title="Recalculate waves and optimize offsets"
+              >
+                Optimize
+              </button>
             </div>
+            
+            <!-- Toggle Group - Separate -->
+            <label class="flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                bind:checked={$showGreenWaves}
+                disabled={!hasGreenWaveData}
+                class="mr-2"
+                class:opacity-50={!hasGreenWaveData}
+                class:cursor-not-allowed={!hasGreenWaveData}
+              />
+              <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>
+                Show waves
+              </span>
+            </label>
           </div>
         </div>
         
