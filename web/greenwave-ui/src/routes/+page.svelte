@@ -2,7 +2,9 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
+  import { optimizedOffsets } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
+  import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
   import { storeWaveCalculationPositions } from '$lib/stores';
@@ -69,6 +71,36 @@
   function confirmDemoData() {
     resetToDemo();
   }
+
+  // Handle optimization
+  async function handleOptimize() {
+    console.log('Under construction: Optimization logic not implemented yet');
+    try {
+      isLoading.set(true);
+      error.set(null);
+
+      // Proceed to optimize offsets
+      console.log("Optimizing offsets...");
+      const junctionsForAPI = prepareJunctionsForAPI($junctions);
+      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed);
+
+      // Update the store with optimized offsets
+      optimizedOffsets.set(optimizeResponse.best_offsets || []);
+
+      // Handle the optimization response (e.g., update offsets in the store)
+      console.log("Optimization complete:", optimizeResponse);
+      console.log("Optimized Offsets:", optimizeResponse.best_offsets );
+    } catch (optimizeError) {
+      error.set(optimizeError.message || 'Failed to optimize');
+      console.error('Optimize Error:', optimizeError);
+    } finally {
+      isLoading.set(false);
+    }
+  }
+
+  function clearResults() {
+    optimizedOffsets.set([]);
+  }
 </script>
 
 <!-- Reset Confirmation Modal -->
@@ -113,7 +145,10 @@
       <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-semibold">Optimized Results</h2>
-          <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+          <button
+            on:click={clearResults}
+            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
             Clear Results
           </button>
         </div>
@@ -161,7 +196,9 @@
                 </button>
                 
                 <button 
+                  on:click={handleOptimize}
                   class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
+                  title="Recalculate waves and optimize offsets"
                 >
                   Optimize
                 </button>
