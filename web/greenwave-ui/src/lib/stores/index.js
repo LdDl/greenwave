@@ -13,10 +13,13 @@ export const showGreenWaves = writable(false);
 // Track junction positions when waves were calculated
 export const waveCalculationPositions = writable([]);
 
+// Track speed value
+export const lastCalculatedSpeed = writable(null);
+
 // Derived store to check if waves are outdated
 export const wavesAreOutdated = derived(
-  [junctions, originalGreenWaves, originalThroughWaves, waveCalculationPositions],
-  ([$junctions, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions]) => {
+  [junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, waveCalculationPositions, lastCalculatedSpeed],
+  ([$junctions, $desiredSpeed, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions, $lastCalculatedSpeed]) => {
     // No waves = not outdated
     if ($originalGreenWaves.length === 0 && $originalThroughWaves.length === 0) {
       return false;
@@ -32,11 +35,25 @@ export const wavesAreOutdated = derived(
       return true;
     }
     
-    // Compare positions
-    return $junctions.some(junction => {
+    // Compare speed
+    const speedChanged = $desiredSpeed !== $lastCalculatedSpeed;
+
+    // Compare junction positions
+    const positionsChanged = $junctions.some(junction => {
       const storedPosition = $waveCalculationPositions.find(pos => pos.id === junction.id);
       return !storedPosition || storedPosition.y !== junction.point.y;
     });
+
+    // Determine reason
+    if (positionsChanged && speedChanged) {
+      return { isOutdated: true, reason: "Both junction positions and desired speed changed" };
+    } else if (positionsChanged) {
+      return { isOutdated: true, reason: "Junction positions changed" };
+    } else if (speedChanged) {
+      return { isOutdated: true, reason: "Desired speed changed" };
+    }
+    
+    return { isOutdated: false, reason: null };
   }
 );
 
@@ -45,10 +62,11 @@ export const isLoading = writable(false);
 export const error = writable(null);
 
 // Function to store current junction positions when waves are calculated
-export function storeWaveCalculationPositions(junctionsList) {
+export function storeWaveCalculationPositions(junctionsList, currentSpeed) {
   waveCalculationPositions.set(
     junctionsList.map(j => ({ id: j.id, y: j.point.y }))
   );
+  lastCalculatedSpeed.set(currentSpeed);
 }
 
 export const DEMO_DATA = {
@@ -160,7 +178,9 @@ export function resetToDemo() {
   
   // Clear wave calculation positions
   waveCalculationPositions.set([]);
-  
+  // Clear last calculated speed
+  lastCalculatedSpeed.set(null);
+
   // Clear UI state
   isLoading.set(false);
   error.set(null);
@@ -177,6 +197,8 @@ export function resetToEmpty() {
   
   // Clear wave calculation positions
   waveCalculationPositions.set([]);
+  // Clear last calculated speed
+  lastCalculatedSpeed.set(null);
   
   // Clear UI state
   isLoading.set(false);

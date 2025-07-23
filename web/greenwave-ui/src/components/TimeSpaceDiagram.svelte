@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
   import { junctions, wavesAreOutdated } from '$lib/stores';
-  
   export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
@@ -380,8 +379,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
         <span>💡 <strong>Drag junctions</strong> to change distance</span>
-        {#if $wavesAreOutdated}
-          <span class="text-orange-600 ml-2">⚠️ Waves outdated</span>
+        {#if $wavesAreOutdated.isOutdated}
+          <span class="text-orange-600 ml-2">⚠️ Waves outdated: {$wavesAreOutdated.reason}</span>
         {/if}
       </div>
     </div>

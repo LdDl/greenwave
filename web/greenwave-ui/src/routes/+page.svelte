@@ -32,7 +32,7 @@
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
       showGreenWaves.set(true);
-      storeWaveCalculationPositions($junctions);
+      storeWaveCalculationPositions($junctions, $desiredSpeed);
     } catch (apiError) {
       error.set(apiError.message || 'Failed to extract green waves');
       console.error('API Error:', apiError);
@@ -219,7 +219,7 @@
         <div class="border-t pt-4 mt-auto">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-2">Desired Speed (km/h)</label>
+              <label class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
               <input 
                 type="number" 
                 bind:value={$desiredSpeed} 
