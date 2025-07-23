@@ -81,10 +81,10 @@
     // Draw waves if enabled (use store's $wavesAreOutdated)
     if (showWaves) {
       if (throughWaves.length > 0) {
-        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated);
+        drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated.isOutdated);
       }
       if (greenWaves.length > 0) {
-        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated);
+        drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, $wavesAreOutdated.isOutdated);
       }
     }
     
@@ -138,7 +138,7 @@
           console.log("✅ Drag end:", d.label, "final distance:", d.point.y);
           console.log("📊 All junctions now:", $junctions.map(j => `${j.label}: ${j.point.y}m`));
           
-          if ($wavesAreOutdated) {
+          if ($wavesAreOutdated.isOutdated) {
             console.log("⚠️ Green waves are now outdated - click 'Extract Waves' to recalculate");
           }
           
