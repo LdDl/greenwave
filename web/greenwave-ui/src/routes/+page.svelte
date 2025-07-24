@@ -2,9 +2,9 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
-  import { junctions, desiredSpeed } from '$lib/stores/core';
+  import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves } from '$lib/stores/optimization';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlow } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
@@ -166,9 +166,9 @@
       {/if}
     </div>
     
-    <!-- Main Content Grid -->
+    <!-- Main content grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-      <!-- Left side - Optimized Results -->
+      <!-- Left side - optimized results -->
       <div class="bg-white rounded-lg shadow-md p-6 flex flex-col flex-1 min-h-0">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-semibold">Optimized results</h2>
@@ -180,7 +180,7 @@
           </button>
         </div>
         
-        <!-- Results Container -->
+        <!-- Results chart container -->
         <div class="flex-1 border border-gray-300 rounded-lg mb-4 min-h-0 overflow-hidden">
           {#if $optimizedJunctions.length > 0}
             <TimeSpaceDiagram
@@ -197,6 +197,61 @@
               <p>No optimized results to display. Run optimization to see results.</p>
             </div>
           {/if}
+        </div>
+
+        <!-- Controls for results -->
+        <div class="border-t pt-4 mt-auto">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Desired Intensity -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
+              <input 
+                type="number" 
+                bind:value={$desiredIntensity} 
+                class="w-full px-3 py-2 border rounded-md"
+                min="0"
+                class:border-orange-500={$optimizedResultsAreOutdated.isOutdated}
+                class:border-black-300={!$optimizedResultsAreOutdated.isOutdated}
+                disabled={$optimizedResultsAreOutdated.isOutdated}
+              />
+            </div>
+
+            <!-- Desired Flow -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
+              <input 
+                type="number" 
+                value={$desiredFlow} 
+                class="w-full px-3 py-2 border rounded-md"
+                min="0"
+                step="0.5"
+                class:border-orange-500={$optimizedResultsAreOutdated.isOutdated}
+                class:border-black-300={!$optimizedResultsAreOutdated.isOutdated}
+                on:input={(e) => desiredIntensity.set(e.target.value * 3600)}
+                disabled={$optimizedResultsAreOutdated.isOutdated}
+              />
+            </div>
+
+            <!-- Actual Intensity -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</label>
+              <div 
+                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
+              >
+                {($actualFlow * 3600).toFixed(2)}
+              </div>
+            </div>
+
+            <!-- Actual Flow -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</label>
+              <div 
+                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
+              >
+                {$actualFlow.toFixed(6)}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -261,7 +316,7 @@
           </div>
         </div>
         
-        <!-- Chart Container -->
+        <!-- Chart container -->
         <div class="flex-1 border border-gray-300 rounded mb-4 min-h-0 overflow-hidden">
           {#if $junctions.length === 0}
             <!-- Empty State -->
