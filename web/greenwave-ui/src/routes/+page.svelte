@@ -239,6 +239,9 @@
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
                 {($actualFlowOptimized * 3600).toFixed(2)}
+                {#if $optimizedResultsAreOutdated.isOutdated}
+                  <span class="text-orange-500">(Outdated)</span>
+                {/if}
               </div>
             </div>
 
@@ -249,6 +252,9 @@
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
                 {$actualFlowOptimized.toFixed(6)}
+                {#if $optimizedResultsAreOutdated.isOutdated}
+                  <span class="text-orange-500">(Outdated)</span>
+                {/if}
               </div>
             </div>
           </div>
@@ -420,6 +426,9 @@
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
                 {($actualIntensity || 0).toFixed(2)}
+                {#if $wavesAreOutdated.isOutdated}
+                  <span class="text-orange-500">(Outdated)</span>
+                {/if}
               </div>
             </div>
         
@@ -430,6 +439,9 @@
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
                 {($actualFlow || 0).toFixed(6)}
+                {#if $wavesAreOutdated.isOutdated}
+                  <span class="text-orange-500">(Outdated)</span>
+                {/if}
               </div>
             </div>
           </div>
