@@ -3,8 +3,8 @@
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
-  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlow } from '$lib/stores/optimization';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
@@ -238,7 +238,7 @@
               <div 
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
-                {($actualFlow * 3600).toFixed(2)}
+                {($actualFlowOptimized * 3600).toFixed(2)}
               </div>
             </div>
 
@@ -248,7 +248,7 @@
               <div 
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
-                {$actualFlow.toFixed(6)}
+                {$actualFlowOptimized.toFixed(6)}
               </div>
             </div>
           </div>
@@ -352,7 +352,8 @@
         
         <!-- Controls -->
         <div class="border-t pt-4 mt-auto">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <!-- Desired speed -->
             <div>
               <label class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
               <input 
@@ -363,6 +364,8 @@
                 max="100"
               />
             </div>
+        
+            <!-- Junctions -->
             <div>
               <label class="block text-sm font-medium mb-2">Junctions</label>
               <p class="text-sm text-gray-600">{$junctions.length} junctions configured</p>
@@ -376,6 +379,58 @@
               {:else}
                 <p class="text-sm text-orange-600 mt-1">Press "Extract waves" to calculate green waves</p>
               {/if}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Desired intensity -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
+              <input 
+                type="number" 
+                bind:value={$desiredIntensity} 
+                class="w-full px-3 py-2 border rounded-md"
+                min="0"
+                class:border-orange-500={$wavesAreOutdated.isOutdated}
+                class:border-black-300={!$wavesAreOutdated.isOutdated}
+                disabled={$wavesAreOutdated.isOutdated}
+              />
+            </div>
+        
+            <!-- Desired flow -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
+              <input 
+                type="number" 
+                value={$desiredFlow} 
+                class="w-full px-3 py-2 border rounded-md"
+                min="0"
+                step="0.5"
+                class:border-orange-500={$wavesAreOutdated.isOutdated}
+                class:border-black-300={!$wavesAreOutdated.isOutdated}
+                on:input={(e) => desiredIntensity.set(e.target.value * 3600)}
+                disabled={$wavesAreOutdated.isOutdated}
+              />
+            </div>
+        
+            <!-- Actual intensity -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</label>
+              <div 
+                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
+              >
+                {($actualIntensity || 0).toFixed(2)}
+              </div>
+            </div>
+        
+            <!-- Actual flow -->
+            <div>
+              <label class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</label>
+              <div 
+                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
+              >
+                {($actualFlow || 0).toFixed(6)}
+              </div>
             </div>
           </div>
         </div>

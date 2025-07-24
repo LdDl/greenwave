@@ -50,7 +50,7 @@ export const optimizedResultsAreOutdated = derived(
 );
 
 // Actual flow (vehicles per second)
-export const actualFlow = derived(
+export const actualFlowOptimized = derived(
   [optimizedThroughWaves, junctions, desiredFlow],
   ([$optimizedThroughWaves, $junctions, $desiredFlow]) => {
     if ($optimizedThroughWaves.length === 0 || $junctions.length === 0) return 0;
