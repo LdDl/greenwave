@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { wavesAreOutdated, junctions, desiredSpeed } from '$lib/stores';
+import { junctions, desiredSpeed } from '$lib/stores';
 
 export const optimizedGreenWaves = writable([]);
 export const optimizedThroughWaves = writable([]);
@@ -14,13 +14,8 @@ export const optimizedLastCalculatedSpeed = writable(null);
 
 // Derived store to check if optimized results are outdated
 export const optimizedResultsAreOutdated = derived(
-  [wavesAreOutdated, junctions, desiredSpeed, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed],
-  ([$wavesAreOutdated, $junctions, $desiredSpeed, $optimizedWaveCalculationPositions, $optimizedLastCalculatedSpeed]) => {
-    // If waves are outdated, optimized results are also outdated
-    if ($wavesAreOutdated.isOutdated) {
-      return { isOutdated: true, reason: $wavesAreOutdated.reason };
-    }
-
+  [junctions, desiredSpeed, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed],
+  ([$junctions, $desiredSpeed, $optimizedWaveCalculationPositions, $optimizedLastCalculatedSpeed]) => {
     // No optimized results = not outdated
     if ($optimizedWaveCalculationPositions.length === 0 || $optimizedLastCalculatedSpeed === null) {
       return { isOutdated: false, reason: null };
