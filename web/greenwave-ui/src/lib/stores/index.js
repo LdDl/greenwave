@@ -1,73 +1,11 @@
 // lib/stores/index.js
-import { writable, derived } from 'svelte/store';
-
-// Core data stores
-export const junctions = writable([]);
-export const desiredSpeed = writable(40.0);
-
-// API result stores
-export const originalGreenWaves = writable([]);
-export const originalThroughWaves = writable([]);
-export const showGreenWaves = writable(false);
-
-// Track junction positions when waves were calculated
-export const waveCalculationPositions = writable([]);
-
-// Track speed value
-export const lastCalculatedSpeed = writable(null);
-
-// Derived store to check if waves are outdated
-export const wavesAreOutdated = derived(
-  [junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, waveCalculationPositions, lastCalculatedSpeed],
-  ([$junctions, $desiredSpeed, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions, $lastCalculatedSpeed]) => {
-    // No waves = not outdated
-    if ($originalGreenWaves.length === 0 && $originalThroughWaves.length === 0) {
-      return false;
-    }
-    
-    // No stored positions = not outdated (first time)
-    if ($waveCalculationPositions.length === 0) {
-      return false;
-    }
-    
-    // Different number of junctions = outdated
-    if ($junctions.length !== $waveCalculationPositions.length) {
-      return true;
-    }
-    
-    // Compare speed
-    const speedChanged = $desiredSpeed !== $lastCalculatedSpeed;
-
-    // Compare junction positions
-    const positionsChanged = $junctions.some(junction => {
-      const storedPosition = $waveCalculationPositions.find(pos => pos.id === junction.id);
-      return !storedPosition || storedPosition.y !== junction.point.y;
-    });
-
-    // Determine reason
-    if (positionsChanged && speedChanged) {
-      return { isOutdated: true, reason: "Both junction positions and desired speed changed" };
-    } else if (positionsChanged) {
-      return { isOutdated: true, reason: "Junction positions changed" };
-    } else if (speedChanged) {
-      return { isOutdated: true, reason: "Desired speed changed" };
-    }
-    
-    return { isOutdated: false, reason: null };
-  }
-);
+import { writable } from 'svelte/store';
+import { junctions, desiredSpeed } from './core';
+import { originalGreenWaves, originalThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
 
 // UI state stores
 export const isLoading = writable(false);
 export const error = writable(null);
-
-// Function to store current junction positions when waves are calculated
-export function storeWaveCalculationPositions(junctionsList, currentSpeed) {
-  waveCalculationPositions.set(
-    junctionsList.map(j => ({ id: j.id, y: j.point.y }))
-  );
-  lastCalculatedSpeed.set(currentSpeed);
-}
 
 export const DEMO_DATA = {
   junctions: [

@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { junctions, desiredSpeed } from '$lib/stores';
+import { junctions, desiredSpeed } from './core';
 
 export const optimizedGreenWaves = writable([]);
 export const optimizedThroughWaves = writable([]);

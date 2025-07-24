@@ -1,13 +1,14 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
-  import { junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, showGreenWaves, isLoading, error, resetToDemo, resetToEmpty, wavesAreOutdated } from '$lib/stores';
+  import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
+  import { junctions, desiredSpeed } from '$lib/stores/core';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
-  import { storeWaveCalculationPositions } from '$lib/stores';
 
   // Modal state
   let showResetModal = false;
