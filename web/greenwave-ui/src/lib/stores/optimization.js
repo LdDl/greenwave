@@ -71,3 +71,9 @@ export const actualFlowOptimized = derived(
     return actualFlow;
   }
 );
+
+// Actual intensity (vehicles per hour)
+export const actualIntensityOptimized = derived(
+  actualFlowOptimized,
+  $actualFlowOptimized => $actualFlowOptimized * 3600
+);

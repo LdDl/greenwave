@@ -4,7 +4,7 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized } from '$lib/stores/optimization';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
@@ -16,6 +16,7 @@
   
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
+  $: hasResults = $optimizedGreenWaves.length > 0 || $optimizedThroughWaves.length > 0;
   $: isExtractDisabled = $isLoading || $junctions.length < 2;
   
   // Helper: Check if we're in "clean" state (no data loss risk)
@@ -127,6 +128,7 @@
     optimizedOffsets.set([]);
     optimizedGreenWaves.set([]);
     optimizedThroughWaves.set([]);
+    optimizedResultsAreOutdated.set(false);
   }
 </script>
 
@@ -202,7 +204,7 @@
         <!-- Controls for results -->
         <div class="border-t pt-4 mt-auto">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Desired Intensity -->
+            <!-- Desired intensity -->
             <div>
               <label class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
               <input 
@@ -210,9 +212,9 @@
                 bind:value={$desiredIntensity} 
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
-                class:border-orange-500={$optimizedResultsAreOutdated.isOutdated}
-                class:border-black-300={!$optimizedResultsAreOutdated.isOutdated}
-                disabled={$optimizedResultsAreOutdated.isOutdated}
+                class:border-orange-500={hasResults && $optimizedResultsAreOutdated.isOutdated}
+                class:border-black-300={!hasResults || !$optimizedResultsAreOutdated.isOutdated}
+                disabled={hasResults && $optimizedResultsAreOutdated.isOutdated}
               />
             </div>
 
@@ -225,10 +227,10 @@
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
                 step="0.5"
-                class:border-orange-500={$optimizedResultsAreOutdated.isOutdated}
-                class:border-black-300={!$optimizedResultsAreOutdated.isOutdated}
+                class:border-orange-500={hasResults && $optimizedResultsAreOutdated.isOutdated}
+                class:border-black-300={!hasResults || !$optimizedResultsAreOutdated.isOutdated}
                 on:input={(e) => desiredIntensity.set(e.target.value * 3600)}
-                disabled={$optimizedResultsAreOutdated.isOutdated}
+                disabled={hasResults && $optimizedResultsAreOutdated.isOutdated}
               />
             </div>
 
@@ -238,8 +240,8 @@
               <div 
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
-                {($actualFlowOptimized * 3600).toFixed(2)}
-                {#if $optimizedResultsAreOutdated.isOutdated}
+                {($actualIntensityOptimized || 0).toFixed(2)}
+                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
@@ -252,7 +254,7 @@
                 class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
               >
                 {$actualFlowOptimized.toFixed(6)}
-                {#if $optimizedResultsAreOutdated.isOutdated}
+                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
