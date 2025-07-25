@@ -1,6 +1,7 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
+  import EditSignalModal from '../components/EditSignalModal.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
@@ -10,10 +11,15 @@
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
 
-  // Modal state
+  // Confirmation modal state
   let showResetModal = false;
   let showDemoModal = false;
   
+  // Signal modal state
+  let selectedSignal = null;
+  let selectedSignalContext = null;
+  let isSignalModalOpen = false;
+
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
   $: hasResults = $optimizedGreenWaves.length > 0 || $optimizedThroughWaves.length > 0;
@@ -130,6 +136,65 @@
     optimizedThroughWaves.set([]);
     optimizedResultsAreOutdated.set(false);
   }
+
+  function saveSignal(e) {
+    const updatedSignal = e.detail.signal;
+
+    console.log("Saving signal:", updatedSignal);
+    console.log("Selected signal context:", selectedSignalContext);
+
+    // Ensure selectedSignalContext has the full context
+    if (!selectedSignalContext || !selectedSignalContext.junction || !selectedSignalContext.phase) {
+      console.error("Invalid selectedSignalContext:", selectedSignalContext);
+      return;
+    }
+
+    // Update the signal in the corresponding junction
+    junctions.update((junctionList) => {
+      const updatedJunctions = junctionList.map((junction) => {
+        if (junction.id === selectedSignalContext.junction.id) {
+          return {
+            ...junction,
+            cycle: junction.cycle.map((phase) => {
+              if (phase === selectedSignalContext.phase) {
+                return {
+                  ...phase,
+                  signals: phase.signals.map((signal) => {
+                    if (signal === selectedSignal) {
+                      return { ...signal, ...updatedSignal }; // Update the signal
+                    }
+                    return signal;
+                  }),
+                };
+              }
+              return phase;
+            }),
+          };
+        }
+        return junction;
+      });
+
+      return updatedJunctions; // Reassign the store to trigger reactivity
+    });
+
+    // Close the modal
+    closeSignalModal();
+  }
+
+  function openSignalModal(event) {
+    const { junction, phase, signal } = event.detail;
+    // Store the context for saving
+    selectedSignalContext = { junction, phase };
+    // Pass only the signal to the modal
+    selectedSignal = signal;
+    isSignalModalOpen = true;
+  }
+
+  function closeSignalModal() {
+    selectedSignal = null;
+    isSignalModalOpen = false;
+  }
+
 </script>
 
 <!-- Reset Confirmation Modal -->
@@ -153,6 +218,14 @@
   onConfirm={confirmDemoData}
   danger={false}
 />
+
+{#if isSignalModalOpen}
+  <EditSignalModal
+    signal={selectedSignal}
+    on:save={saveSignal}
+    on:close={closeSignalModal}
+  />
+{/if}
 
 <div class="min-h-screen bg-gray-50 flex flex-col">
   <div class="container mx-auto p-4 flex-1 flex flex-col">
@@ -354,6 +427,7 @@
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
               isResults={false}
+              on:editSignal={openSignalModal}
             />
           {/if}
         </div>

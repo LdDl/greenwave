@@ -228,9 +228,8 @@
           if (signal.duration > 0) {
             const startTime = currentTime % junction.total_duration;
             const endTime = (currentTime + signal.duration) % junction.total_duration;
-            
             if (endTime < startTime) {
-              chart.append("line")
+              const linePartOne = chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
                 .attr("x2", xScale(junction.total_duration))
@@ -238,8 +237,22 @@
                 .attr("y2", y)
                 .attr("stroke", getSignalColor(signal.color))
                 .attr("stroke-width", 4);
-              
-              chart.append("line")
+              if (interactive) {
+                linePartOne
+                  .style("cursor", "pointer")
+                  .on("mouseover", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 8)
+                      .attr("stroke-opacity", 0.8);
+                  })
+                  .on("mouseout", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 4)
+                      .attr("stroke-opacity", 1);
+                  })
+                  .on("click", () => handleSignalClick(junction, phase, signal));
+              }
+              const linePartTwo = chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(0))
                 .attr("x2", xScale(endTime))
@@ -247,8 +260,23 @@
                 .attr("y2", y)
                 .attr("stroke", getSignalColor(signal.color))
                 .attr("stroke-width", 4);
+              if (interactive) {
+                linePartTwo
+                  .style("cursor", "pointer")
+                  .on("mouseover", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 8)
+                      .attr("stroke-opacity", 0.8);
+                  })
+                  .on("mouseout", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 4)
+                      .attr("stroke-opacity", 1);
+                  })
+                  .on("click", () => handleSignalClick(junction, phase, signal));
+              }
             } else {
-              chart.append("line")
+              const line = chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
                 .attr("x2", xScale(endTime))
@@ -256,6 +284,21 @@
                 .attr("y2", y)
                 .attr("stroke", getSignalColor(signal.color))
                 .attr("stroke-width", 4);
+              if (interactive) {
+                line
+                  .style("cursor", "pointer")
+                  .on("mouseover", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 8)
+                      .attr("stroke-opacity", 0.8);
+                  })
+                  .on("mouseout", function () {
+                    d3.select(this)
+                      .attr("stroke-width", 4)
+                      .attr("stroke-opacity", 1);
+                  })
+                  .on("click", () => handleSignalClick(junction, phase, signal));
+              }
             }
           }
           currentTime += signal.duration;
@@ -346,7 +389,7 @@
   }
   
   // Update chart when ANY relevant state changes
-  $: if (svg) {
+  $: if (svg && junctions.length > 0) {
     updateChart();
   }
   
@@ -360,7 +403,11 @@
       updateChart();
     }
   }
-  
+
+  function handleSignalClick(junction, phase, signal) {
+    dispatch('editSignal', { junction, phase, signal });
+  }
+
   onMount(() => {
     updateSize();
     window.addEventListener('resize', updateSize);
@@ -369,31 +416,60 @@
 </script>
 
 <div bind:this={container} class="diagram-container w-full h-full relative">
-  <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
-  {#if junctions.length > 0}
-    <div class="absolute bottom-3 right-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
-      <div class="flex items-center gap-2">
-        <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        {#if isResults}
-          <!-- Results plot -->
-          {#if resultsAreOutdated.isOutdated}
+  <!-- SVG Chart -->
+  <div class="plot-container relative">
+    <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
+  </div>
+
+  <!-- Status/Info Box -->
+<!-- Status/Info Box -->
+{#if junctions.length > 0}
+  <div class="tip-container mb-3 mr-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
+    <div class="flex flex-col gap-2">
+      {#if isResults}
+        <!-- Results plot -->
+        {#if resultsAreOutdated.isOutdated}
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
             <span class="text-orange-600 ml-2">⚠️ Results outdated: {resultsAreOutdated.reason}</span>
-          {:else}
-            <span>💡 <strong>Press 'Optimize' to refresh</strong></span>
-          {/if}
+          </div>
         {:else}
-          <!-- Input data plot -->
-          {#if wavesAreOutdated.isOutdated}
-            <span class="text-orange-600 ml-2">⚠️ Waves outdated: {wavesAreOutdated.reason}</span>
-          {:else}
-            <span>💡 <strong>Drag junctions</strong> to change distance</span>
-          {/if}
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>💡 <strong>Press 'Optimize' to refresh</strong></span>
+          </div>
         {/if}
-      </div>
+      {:else}
+        <!-- Input data plot -->
+        {#if wavesAreOutdated.isOutdated}
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="text-orange-600 ml-2">⚠️ Waves outdated: {wavesAreOutdated.reason}</span>
+          </div>
+        {:else}
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>💡 <strong>Drag junctions</strong> to change distances</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>💡 <strong>Click signal</strong> to change its color or duration</div>
+          </div>
+        {/if}
+      {/if}
     </div>
-  {/if}
+  </div>
+{/if}
 </div>
 
 <style>
@@ -402,5 +478,12 @@
     height: 100%;
     min-height: 300px;
     position: relative;
+    display: flex;
+    flex-direction: column;
   }
+  
+  .tip-container {
+    align-self: flex-end;
+  }
+
 </style>
