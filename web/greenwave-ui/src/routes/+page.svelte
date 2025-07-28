@@ -11,6 +11,13 @@
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
+  import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
+  
+  onMount(() => {
+    // Mark desired speed as initialized after the first render
+    isDesiredSpeedInitialized = true;
+    previousDesiredSpeed = $desiredSpeed;
+  });
 
   // Confirmation modal state
   let showResetModal = false;
@@ -44,6 +51,8 @@
       originalThroughWaves.set(response.through_green_waves || []);
       showGreenWaves.set(true);
       storeWaveCalculationPositions($junctions, $desiredSpeed);
+
+      validateInput();
     } catch (apiError) {
       error.set(apiError.message || 'Failed to extract green waves');
       console.error('API Error:', apiError);
@@ -81,6 +90,19 @@
     resetToDemo();
   }
 
+  // Handle desired speed changes
+  let desiredSpeedTimeout;
+  let isDesiredSpeedInitialized = false;
+  let previousDesiredSpeed = null;
+    $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
+    previousDesiredSpeed = $desiredSpeed; // Update the previous value
+    clearTimeout(desiredSpeedTimeout);
+    desiredSpeedTimeout = setTimeout(() => {
+      invalidateAll('desired speed changed');
+    }, 100);
+  }
+
+
   let debounceTimeout;
   // Update the store with new distance
   function updateJunction(event) {
@@ -96,6 +118,7 @@
         });
       });
     }, 100);
+    invalidateAll('junction positions changed');
   }
 
   // Handle optimization
@@ -123,7 +146,7 @@
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
       optimizedLastCalculatedSpeed.set($desiredSpeed);
 
-      resetResultsInvalidation();
+      validateResults()
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
       console.error('Optimize Error:', optimizeError);
@@ -180,8 +203,7 @@
       return updatedJunctions; // Reassign the store to trigger reactivity
     });
 
-    // Invadiate signals due to changes
-    invalidateSignals();
+    invalidateAll('signal changes');
 
     // Close the modal
     closeSignalModal();

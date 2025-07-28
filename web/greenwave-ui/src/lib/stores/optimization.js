@@ -2,6 +2,7 @@ import { writable, derived } from 'svelte/store';
 import { junctions, desiredSpeed, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 import { resultsInvalidated } from './signals';
+import { resultsInvalidationReasons, isResultsInvalidated } from '$lib/stores/invalidation';
 
 export const optimizedGreenWaves = writable([]);
 export const optimizedThroughWaves = writable([]);
@@ -16,46 +17,13 @@ export const optimizedLastCalculatedSpeed = writable(null);
 
 // Derived store to check if optimized results are outdated
 export const optimizedResultsAreOutdated = derived(
-  [resultsInvalidated, junctions, desiredSpeed, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed],
-  ([$resultsInvalidated, $junctions, $desiredSpeed, $optimizedWaveCalculationPositions, $optimizedLastCalculatedSpeed]) => {
-    const reasons = [];
-
-    // No optimized results = not outdated
-    if ($optimizedWaveCalculationPositions.length === 0 || $optimizedLastCalculatedSpeed === null) {
-      return { isOutdated: false, reason: null };
-    }
-
-    // Check for results invalidation
-    if ($resultsInvalidated) {
-      reasons.push("signal changes");
-    }
-
-    // Check for junction configuration changes
-    if ($junctions.length !== $optimizedWaveCalculationPositions.length) {
-      reasons.push("junction configuration changed");
-    }
-
-    // Check for speed changes
-    if ($desiredSpeed !== $optimizedLastCalculatedSpeed) {
-      reasons.push("desired speed changed");
-    }
-
-    // Check for junction position changes
-    const positionsChanged = $junctions.some(junction => {
-      const storedPosition = $optimizedWaveCalculationPositions.find(pos => pos.id === junction.id);
-      return !storedPosition || storedPosition.y !== junction.point.y;
-    });
-    if (positionsChanged) {
-      reasons.push("junction positions changed");
-    }
-
-    // If there are reasons, results are outdated
-    if (reasons.length > 0) {
-      return { isOutdated: true, reason: `Results outdated due to: ${reasons.join(", ")}` };
-    }
-
-    return { isOutdated: false, reason: null };
-  }
+  [isResultsInvalidated, resultsInvalidationReasons],
+  ([$isResultsInvalidated, $resultsInvalidationReasons]) => ({
+    isOutdated: $isResultsInvalidated,
+    reason: $isResultsInvalidated
+      ? `Results are outdated due to: ${$resultsInvalidationReasons.join(", ")}`
+      : null
+  })
 );
 
 // Actual flow (vehicles per second)

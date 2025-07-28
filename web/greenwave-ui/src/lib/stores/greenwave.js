@@ -2,6 +2,7 @@ import { writable, derived } from 'svelte/store';
 import { junctions, desiredSpeed, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 import { signalsInvalidated, resetSignalsInvalidation } from './signals';
+import { inputInvalidationReasons, isInputInvalidated } from '$lib/stores/invalidation';
 
 // Wave-related stores
 export const originalGreenWaves = writable([]);
@@ -12,46 +13,13 @@ export const lastCalculatedSpeed = writable(null);
 
 // Derived store to check if waves are outdated
 export const wavesAreOutdated = derived(
-  [signalsInvalidated, junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, waveCalculationPositions, lastCalculatedSpeed],
-  ([$signalsInvalidated, $junctions, $desiredSpeed, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions, $lastCalculatedSpeed]) => {
-    const reasons = [];
-
-    // No waves = not outdated
-    if ($originalGreenWaves.length === 0 && $originalThroughWaves.length === 0) {
-      return { isOutdated: false, reason: null };
-    }
-
-    // Check for signal changes
-    if ($signalsInvalidated) {
-      reasons.push("signal changes");
-    }
-
-    // Check for junction configuration changes
-    if ($junctions.length !== $waveCalculationPositions.length) {
-      reasons.push("junction configuration changed");
-    }
-
-    // Check for speed changes
-    if ($desiredSpeed !== $lastCalculatedSpeed) {
-      reasons.push("desired speed changed");
-    }
-
-    // Check for junction position changes
-    const positionsChanged = $junctions.some(junction => {
-      const storedPosition = $waveCalculationPositions.find(pos => pos.id === junction.id);
-      return !storedPosition || storedPosition.y !== junction.point.y;
-    });
-    if (positionsChanged) {
-      reasons.push("junction positions changed");
-    }
-
-    // If there are reasons, waves are outdated
-    if (reasons.length > 0) {
-      return { isOutdated: true, reason: `Waves outdated due to: ${reasons.join(", ")}` };
-    }
-
-    return { isOutdated: false, reason: null };
-  }
+  [isInputInvalidated, inputInvalidationReasons],
+  ([$isInputInvalidated, $inputInvalidationReasons]) => ({
+    isOutdated: $isInputInvalidated,
+    reason: $isInputInvalidated
+      ? `Input data is outdated due to: ${$inputInvalidationReasons.join(", ")}`
+      : null
+  })
 );
 
 // Function to store current junction positions when waves are calculated
