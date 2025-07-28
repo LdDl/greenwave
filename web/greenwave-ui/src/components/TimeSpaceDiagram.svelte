@@ -96,6 +96,9 @@
       }
     }
     
+    // Draw phases
+    drawPhases(chart, junctionsWithDuration, xScale, yScale);
+
     // Draw signal timelines
     drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale);
     
@@ -303,6 +306,77 @@
           }
           currentTime += signal.duration;
         });
+      });
+    });
+  }
+
+  function drawPhases(chart, junctionsWithDuration, xScale, yScale) {
+    junctionsWithDuration.forEach((junction) => {
+      let currentTime = junction.offset; // Start at the junction's offset
+      const y = yScale(junction.point.y);
+
+      junction.cycle.forEach((phase, phaseIdx) => {
+        // Calculate phase duration
+        const phaseDuration = phase.signals.reduce((sum, signal) => sum + signal.duration, 0);
+
+        // Calculate phase start and end times
+        const phaseStart = currentTime % junction.total_duration;
+        const phaseEnd = (currentTime + phaseDuration) % junction.total_duration;
+
+        // Define alternating colors for phases
+        const phaseColor = phaseIdx % 2 === 0 ? "#4B0082" : "#18B7CC";
+
+        // Handle wrapping (phase goes from end to start)
+        if (phaseEnd < phaseStart) {
+          // Draw first part (from phaseStart to the end of the timeline)
+          chart.append("rect")
+            .attr("x", xScale(phaseStart))
+            .attr("width", xScale(junction.total_duration) - xScale(phaseStart))
+            .attr("y", y - 10)
+            .attr("height", 5)
+            .attr("fill", phaseColor)
+            .attr("fill-opacity", 0.5)
+            .attr("stroke", "black") // Add black stroke
+            .attr("stroke-width", 1);
+
+          // Draw second part (from 0 to phaseEnd)
+          chart.append("rect")
+            .attr("x", xScale(0))
+            .attr("width", xScale(phaseEnd) - xScale(0))
+            .attr("y", y - 10)
+            .attr("height", 5)
+            .attr("fill", phaseColor)
+            .attr("fill-opacity", 0.5)
+            .attr("stroke", "black") // Add black stroke
+            .attr("stroke-width", 1);
+        } else {
+          // Draw phase interval (no wrapping)
+          chart.append("rect")
+            .attr("x", xScale(phaseStart))
+            .attr("width", xScale(phaseEnd) - xScale(phaseStart))
+            .attr("y", y - 10)
+            .attr("height", 5)
+            .attr("fill", phaseColor)
+            .attr("fill-opacity", 0.5)
+            .attr("stroke", "black") // Add black stroke
+            .attr("stroke-width", 1);
+        }
+
+        // Draw phase label (centered)
+        const labelX = phaseEnd < phaseStart
+          ? xScale((phaseStart + junction.total_duration + phaseEnd) / 2 % junction.total_duration)
+          : xScale((phaseStart + phaseEnd) / 2);
+
+        chart.append("text")
+          .attr("x", labelX)
+          .attr("y", y - 15)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "10px")
+          .attr("fill", "#4B0082")
+          .text(`Phase ${phaseIdx + 1}`);
+
+        // Update currentTime for the next phase
+        currentTime += phaseDuration;
       });
     });
   }
