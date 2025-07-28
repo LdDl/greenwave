@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { junctions, desiredSpeed, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
+import { resultsInvalidated } from './signals';
 
 export const optimizedGreenWaves = writable([]);
 export const optimizedThroughWaves = writable([]);
@@ -15,34 +16,42 @@ export const optimizedLastCalculatedSpeed = writable(null);
 
 // Derived store to check if optimized results are outdated
 export const optimizedResultsAreOutdated = derived(
-  [junctions, desiredSpeed, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed],
-  ([$junctions, $desiredSpeed, $optimizedWaveCalculationPositions, $optimizedLastCalculatedSpeed]) => {
+  [resultsInvalidated, junctions, desiredSpeed, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed],
+  ([$resultsInvalidated, $junctions, $desiredSpeed, $optimizedWaveCalculationPositions, $optimizedLastCalculatedSpeed]) => {
+    const reasons = [];
+
     // No optimized results = not outdated
     if ($optimizedWaveCalculationPositions.length === 0 || $optimizedLastCalculatedSpeed === null) {
       return { isOutdated: false, reason: null };
     }
 
-    // Different number of junctions = outdated
-    if ($junctions.length !== $optimizedWaveCalculationPositions.length) {
-      return { isOutdated: true, reason: "Junction configuration changed" };
+    // Check for results invalidation
+    if ($resultsInvalidated) {
+      reasons.push("signal changes");
     }
 
-    // Compare junction positions
+    // Check for junction configuration changes
+    if ($junctions.length !== $optimizedWaveCalculationPositions.length) {
+      reasons.push("junction configuration changed");
+    }
+
+    // Check for speed changes
+    if ($desiredSpeed !== $optimizedLastCalculatedSpeed) {
+      reasons.push("desired speed changed");
+    }
+
+    // Check for junction position changes
     const positionsChanged = $junctions.some(junction => {
       const storedPosition = $optimizedWaveCalculationPositions.find(pos => pos.id === junction.id);
       return !storedPosition || storedPosition.y !== junction.point.y;
     });
+    if (positionsChanged) {
+      reasons.push("junction positions changed");
+    }
 
-    // Compare speed
-    const speedChanged = $desiredSpeed !== $optimizedLastCalculatedSpeed;
-
-    // Determine reason
-    if (positionsChanged && speedChanged) {
-      return { isOutdated: true, reason: "Both junction positions and desired speed changed" };
-    } else if (positionsChanged) {
-      return { isOutdated: true, reason: "Junction positions changed" };
-    } else if (speedChanged) {
-      return { isOutdated: true, reason: "Desired speed changed" };
+    // If there are reasons, results are outdated
+    if (reasons.length > 0) {
+      return { isOutdated: true, reason: `Results outdated due to: ${reasons.join(", ")}` };
     }
 
     return { isOutdated: false, reason: null };

@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { junctions, desiredSpeed, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
+import { signalsInvalidated, resetSignalsInvalidation } from './signals';
 
 // Wave-related stores
 export const originalGreenWaves = writable([]);
@@ -11,34 +12,42 @@ export const lastCalculatedSpeed = writable(null);
 
 // Derived store to check if waves are outdated
 export const wavesAreOutdated = derived(
-  [junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, waveCalculationPositions, lastCalculatedSpeed],
-  ([$junctions, $desiredSpeed, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions, $lastCalculatedSpeed]) => {
+  [signalsInvalidated, junctions, desiredSpeed, originalGreenWaves, originalThroughWaves, waveCalculationPositions, lastCalculatedSpeed],
+  ([$signalsInvalidated, $junctions, $desiredSpeed, $originalGreenWaves, $originalThroughWaves, $waveCalculationPositions, $lastCalculatedSpeed]) => {
+    const reasons = [];
+
     // No waves = not outdated
     if ($originalGreenWaves.length === 0 && $originalThroughWaves.length === 0) {
-      return false;
+      return { isOutdated: false, reason: null };
     }
 
-    // Different number of junctions = outdated
+    // Check for signal changes
+    if ($signalsInvalidated) {
+      reasons.push("signal changes");
+    }
+
+    // Check for junction configuration changes
     if ($junctions.length !== $waveCalculationPositions.length) {
-      return { isOutdated: true, reason: "Junction configuration changed" };
+      reasons.push("junction configuration changed");
     }
 
-    // Compare speed
-    const speedChanged = $desiredSpeed !== $lastCalculatedSpeed;
+    // Check for speed changes
+    if ($desiredSpeed !== $lastCalculatedSpeed) {
+      reasons.push("desired speed changed");
+    }
 
-    // Compare junction positions
+    // Check for junction position changes
     const positionsChanged = $junctions.some(junction => {
       const storedPosition = $waveCalculationPositions.find(pos => pos.id === junction.id);
       return !storedPosition || storedPosition.y !== junction.point.y;
     });
+    if (positionsChanged) {
+      reasons.push("junction positions changed");
+    }
 
-    // Determine reason
-    if (positionsChanged && speedChanged) {
-      return { isOutdated: true, reason: "Both junction positions and desired speed changed" };
-    } else if (positionsChanged) {
-      return { isOutdated: true, reason: "Junction positions changed" };
-    } else if (speedChanged) {
-      return { isOutdated: true, reason: "Desired speed changed" };
+    // If there are reasons, waves are outdated
+    if (reasons.length > 0) {
+      return { isOutdated: true, reason: `Waves outdated due to: ${reasons.join(", ")}` };
     }
 
     return { isOutdated: false, reason: null };
@@ -51,6 +60,7 @@ export function storeWaveCalculationPositions(junctionsList, currentSpeed) {
     junctionsList.map(j => ({ id: j.id, y: j.point.y }))
   );
   lastCalculatedSpeed.set(currentSpeed);
+  resetSignalsInvalidation();
 }
 
 // Actual flow for input data plot (vehicles per second)

@@ -6,6 +6,7 @@
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
+  import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
@@ -121,6 +122,8 @@
       // Store the current state for validation
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
       optimizedLastCalculatedSpeed.set($desiredSpeed);
+
+      resetResultsInvalidation();
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
       console.error('Optimize Error:', optimizeError);
@@ -176,6 +179,9 @@
 
       return updatedJunctions; // Reassign the store to trigger reactivity
     });
+
+    // Invadiate signals due to changes
+    invalidateSignals();
 
     // Close the modal
     closeSignalModal();
