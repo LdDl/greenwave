@@ -58,6 +58,12 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 			})
 		}
 
+		if len(requestData.Junctions) < 2 {
+			return ctx.JSON(400, echo.Map{
+				"Error": "At least 2 junctions are required",
+			})
+		}
+
 		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
