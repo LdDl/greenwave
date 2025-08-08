@@ -5,10 +5,13 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 // Configuration represents the application configuration.
@@ -31,11 +34,53 @@ func PrepareConfiguration() (*Configuration, error) {
 	confName := flag.String("conf", "", "Config file path")
 	flag.Parse()
 
-	// Explicitly call PrepareFileConfiguration due in future we can use different
-	// configuration sources (e.g. environment variables)
-	mainCfg, err := PrepareFileConfiguration(*confName)
+	// Read configuration from the specified file if provided
+	if confName != nil && *confName != "" {
+		mainCfg, err := PrepareFileConfiguration(*confName)
+		if err != nil {
+			return nil, err
+		}
+		return mainCfg, nil
+	}
+
+	// Read configuration from environment variables
+	if _, err := os.Stat(".env"); err == nil {
+		log.Info().Str("scope", "configuration").Msg("Found '.env' file. Trying to loading environment variables")
+		err := godotenv.Load()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	serverHost := os.Getenv("SERVER_HOST")
+	serverPortStr := os.Getenv("SERVER_PORT")
+	serverPort, err := strconv.Atoi(serverPortStr)
 	if err != nil {
-		return nil, errors.Wrap(err, "Can't read configuration file")
+		return nil, errors.Wrapf(err, "invalid SERVER_PORT environment variable: '%s'", serverPortStr)
+	}
+	serverMainPath := os.Getenv("SERVER_MAIN_PATH")
+	serverStartupMessageStr := os.Getenv("SERVER_STARTUP_MESSAGE")
+	serverStartupMessage, err := strconv.ParseBool(serverStartupMessageStr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid SERVER_STARTUP_MESSAGE environment variable: '%s'", serverStartupMessageStr)
+	}
+
+	corsEnableStr := os.Getenv("USE_CORS")
+	corsEnable, err := strconv.ParseBool(corsEnableStr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid USE_CORS environment variable: '%s'", corsEnableStr)
+	}
+	docsPathStr := os.Getenv("DOCS_PATH")
+
+	mainCfg := &Configuration{
+		ServerCfg: ServerConf{
+			Host:           serverHost,
+			Port:           serverPort,
+			MainPath:       serverMainPath,
+			StartupMessage: serverStartupMessage,
+		},
+		UseCORS:    corsEnable,
+		DocsFolder: docsPathStr,
 	}
 	return mainCfg, nil
 }
