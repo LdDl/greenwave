@@ -17,6 +17,20 @@ Do not consider it to be any usable for production. It it just toy for understan
     ```bash
     docker run -p 36000:36000 -v ./cmd/greenwave/conf.toml:/app/conf.toml greenwave_api --conf conf.toml
     ```
+* Or you can run docker image with provided environment variables
+    ```bash
+    # From file
+    docker run -p 36000:36000 --env-file .env greenwave_api
+    # From args
+    docker run -p 35000:35000 \
+        -e SERVER_HOST=0.0.0.0 \
+        -e SERVER_PORT=35000 \
+        -e SERVER_MAIN_PATH=api \
+        -e SERVER_STARTUP_MESSAGE=true \
+        -e USE_CORS=true \
+        -e DOCS_PATH=./app/rest/docs \
+        greenwave_api
+    ```
 
 * Navigate to `http://localhost:36000/api/greenwave/docs/` and you are good to go.
 
