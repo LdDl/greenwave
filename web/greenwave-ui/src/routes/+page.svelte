@@ -12,7 +12,7 @@
   import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
-  
+
   onMount(() => {
     // Mark desired speed as initialized after the first render
     isDesiredSpeedInitialized = true;
@@ -221,6 +221,11 @@
   function closeSignalModal() {
     selectedSignal = null;
     isSignalModalOpen = false;
+  }
+
+  function startDiagram() {
+    console.log("Starting diagram with empty junctions");
+    junctions.set([]);
   }
 
 </script>
@@ -437,10 +442,10 @@
                 <h3 class="text-lg font-medium mb-2">No junctions configured</h3>
                 <p class="text-sm mb-4">Add junctions to start visualizing traffic light coordination</p>
                 <button 
-                  on:click={handleDemoDataClick}
-                  class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                  on:click={startDiagram}
+                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
                 >
-                  Load demo data
+                  Start
                 </button>
               </div>
             </div>
