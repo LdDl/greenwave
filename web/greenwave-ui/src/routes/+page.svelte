@@ -65,8 +65,7 @@
       error.set(null);
       
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed);
-      
+      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection);
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
       showGreenWaves.set(true);
@@ -181,7 +180,7 @@
 
       // Extract the optimized green waves
       const optimizedJunctionsForAPI = prepareJunctionsForAPI($optimizedJunctions);
-      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed);
+      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
 
