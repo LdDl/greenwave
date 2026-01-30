@@ -491,6 +491,8 @@
               junctions={$optimizedJunctions}
               greenWaves={$optimizedGreenWaves}
               throughWaves={$optimizedThroughWaves}
+              reverseGreenWaves={$optimizedReverseGreenWaves}
+              reverseThroughWaves={$optimizedReverseThroughWaves}
               showWaves={true}
               interactive={false}
               resultsAreOutdated={$optimizedResultsAreOutdated}
@@ -658,6 +660,8 @@
               interactive={true}
               greenWaves={$originalGreenWaves}
               throughWaves={$originalThroughWaves}
+              reverseGreenWaves={$originalReverseGreenWaves}
+              reverseThroughWaves={$originalReverseThroughWaves}
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
               isResults={false}
