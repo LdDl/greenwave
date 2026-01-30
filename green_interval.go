@@ -3,7 +3,9 @@ package greenwave
 import "math"
 
 const (
-	eps = 0.01
+	// @todo: consider making eps configurable (e.g. via function parameter or global config)
+	// Minimum overlap in seconds to consider intervals as connected
+	EPS_INTERVAL = 0.01
 )
 
 // GreenInterval represents a time interval during which a traffic light is green (for specific phase).
@@ -29,7 +31,7 @@ func NewGreenInterval(phaseIdx int, start, end float64) *GreenInterval {
 func (interval *GreenInterval) CanConnect(otherInterval *GreenInterval) *GreenInterval {
 	overlapStart := math.Max(interval.Start, otherInterval.Start)
 	overlapEnd := math.Min(interval.End, otherInterval.End)
-	if overlapEnd-overlapStart > eps {
+	if overlapEnd-overlapStart > EPS_INTERVAL {
 		return NewGreenInterval(interval.PhaseIdx, overlapStart, overlapEnd)
 	}
 	return nil
