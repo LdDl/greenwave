@@ -43,8 +43,14 @@ func (jun *Junction) GetOffset() int {
 }
 
 // SetOffset sets the offset for the junction.
+// Offset is normalized to [0, totalDuration) range (ring buffer semantics).
 func (jun *Junction) SetOffset(offset int) {
-	jun.offset = offset
+	if jun.totalDuration <= 0 {
+		jun.offset = 0
+		return
+	}
+	// Normalize offset to [0, totalDuration) - handles negative values correctly
+	jun.offset = ((offset % jun.totalDuration) + jun.totalDuration) % jun.totalDuration
 }
 
 // WithID is an option function that sets the ID for the junction.
