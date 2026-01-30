@@ -7,6 +7,8 @@ It includes calculation of best offset via genetic algorithm also.
 
 Do not consider it to be any usable for production. It it just toy for understanding basics.
 
+It works (as for `7th Jan 2026`) with only single direction of the given road.
+
 ## Docker
 
 ### Build
