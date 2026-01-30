@@ -27,7 +27,15 @@ docker run -p 36000:36000 greenwave
 
 #### Web UI Demo
 
-<img src="./docs/demo.gif" width="720" title="Web UI Demo">
+Forward direction only |
+:-------------------------:|
+<img src="./docs/demo.gif" width="720"> |
+
+Both directions |
+:-------------------------:|
+<img src="./docs/demo2.gif" width="720"> |
+
+__Note__: In second example only reverse direction got "green wave" through all junctions, therefore vehicles per hour for forward direction is zero. So intensity is calculated only for cases when there ARE "green waves" which pass through all junctions.
 
 #### Swagger Documentation
 
