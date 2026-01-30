@@ -121,14 +121,30 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 	for i, junction := range optga.junctions {
 		junction.SetOffset(int(individual.Offsets[i]))
 	}
-	// Find green waves
-	greenWavs := FindGreenWaves(optga.junctions, optga.speedKhm)
+
+	// Calculate forward fitness
+	forwardFitness := calculateDirectionalFitness(optga.junctions, optga.speedKhm)
+
+	// If bidirectional mode, also calculate reverse fitness
+	if optga.optimizationMode == OPTIMIZATION_BIDIRECTIONAL {
+		reversedJunctions := reverseJunctions(optga.junctions)
+		reverseFitness := calculateDirectionalFitness(reversedJunctions, optga.speedKhm)
+		// Combine forward and reverse fitness (equal weight)
+		return forwardFitness + reverseFitness
+	}
+
+	return forwardFitness
+}
+
+// calculateDirectionalFitness calculates fitness for a given direction (order of junctions)
+func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float64 {
+	greenWavs := FindGreenWaves(junctions, speedKhm)
 	throughGreenWaves := MergeGreenWaves(greenWavs)
 	if len(throughGreenWaves) == 0 {
 		return 0.0 // No green waves found
 	}
 	// Calculate total fitness based on the depth and band size of the green waves
-	maxDepth := len(optga.junctions)
+	maxDepth := len(junctions)
 	totalFitness := 0.0
 	for _, wave := range throughGreenWaves {
 		depthRatio := float64(wave.Depth()) / float64(maxDepth)
@@ -137,6 +153,16 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 		totalFitness += waveFitness
 	}
 	return totalFitness
+}
+
+// reverseJunctions returns a new slice with junctions in reverse order
+func reverseJunctions(junctions []*Junction) []*Junction {
+	n := len(junctions)
+	reversed := make([]*Junction, n)
+	for i := 0; i < n; i++ {
+		reversed[i] = junctions[n-1-i]
+	}
+	return reversed
 }
 
 func (optga *OptimizerGenetic) selectParent(population []*Individual) *Individual {
