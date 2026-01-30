@@ -10,7 +10,7 @@
   import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
-  import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
+  import { prepareJunctionsForAPI, applyOffsetsToJunctions, validateJunctionCycles, calculateTotalDuration } from '$lib/utils/junction-helpers.js';
   import { onMount } from 'svelte';
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
@@ -37,7 +37,15 @@
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
   $: hasResults = $optimizedGreenWaves.length > 0 || $optimizedThroughWaves.length > 0;
-  $: isExtractDisabled = $isLoading || $junctions.length < 2;
+
+  // Validation: check if all junctions have the same cycle duration
+  $: cycleValidation = $junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
+  $: hasValidationError = !cycleValidation.isValid;
+  $: validationErrorMessage = hasValidationError
+    ? `Different cycle durations: ${$junctions.map((j, i) => `${j.label}: ${cycleValidation.durations[i]}s`).join(', ')}`
+    : '';
+
+  $: isExtractDisabled = $isLoading || $junctions.length < 2 || hasValidationError;
   
   // Helper: Check if we're in "clean" state (no data loss risk)
   $: isCleanState = $junctions.length === 0 && !hasGreenWaveData;
@@ -492,7 +500,8 @@
 
               <button
                 on:click={handleOptimize}
-                class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
+                disabled={isExtractDisabled}
+                class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center disabled:bg-gray-400 disabled:cursor-not-allowed"
                 title="Recalculate waves and optimize offsets"
               >
                 Optimize
@@ -585,6 +594,8 @@
                 <p class="text-sm text-blue-600 mt-1">📍 Click "Demo data" or add junctions manually</p>
               {:else if $junctions.length === 1}
                 <p class="text-sm text-orange-600 mt-1">⚠️ Add at least 1 more junction to extract waves</p>
+              {:else if hasValidationError}
+                <p class="text-sm text-red-600 mt-1">⚠️ {validationErrorMessage}</p>
               {:else if hasGreenWaveData}
                 <p class="text-sm text-green-600 mt-1">✓ Green waves calculated</p>
               {:else}
