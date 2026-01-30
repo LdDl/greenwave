@@ -183,14 +183,14 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 		population[i] = optga.createIndividual()
 	}
 
-	bestFitness := 0.0
+	bestFitness := -1.0
 	var bestIndividual *Individual
 
 	for generation := 0; generation < optga.generations; generation++ {
 		// Evaluate fitness for each individual in the population
 		for _, individual := range population {
 			individual.Fitness = optga.evaluateFitness(individual)
-			if individual.Fitness > bestFitness {
+			if individual.Fitness > bestFitness || bestIndividual == nil {
 				bestFitness = individual.Fitness
 				bestIndividual = individual
 			}
@@ -215,6 +215,12 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 		population = newPopulation
 		optga.bestFitenessHistory = append(optga.bestFitenessHistory, bestFitness)
 
+	}
+
+	// Safety check: if no best individual found, return zero offsets
+	if bestIndividual == nil {
+		zeroOffsets := make([]float64, len(optga.junctions))
+		return zeroOffsets
 	}
 	return bestIndividual.Offsets
 }
