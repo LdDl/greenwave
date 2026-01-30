@@ -58,11 +58,18 @@ Available environment variables:
 * Examples of JSON data for requests for can be found in [the following README.md](./cmd/greenwave/README.md)
 
 ## Docker pull
-* Pull docker image
-@tbd
 
-* Run docker image
-@tbd
+### From GitHub сontainer registry
+```bash
+docker pull ghcr.io/lddl/greenwave:latest
+docker run -p 36000:36000 ghcr.io/lddl/greenwave:latest
+```
+
+### From Dockerhub
+```bash
+docker pull dimahkiin/greenwave:latest
+docker run -p 36000:36000 dimahkiin/greenwave:latest
+```
 
 ## Swagger and REST API
 
