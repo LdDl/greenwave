@@ -6,7 +6,7 @@
   import DropdownMenu from '../components/DropdownMenu.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
-  import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
+  import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
   import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
@@ -17,9 +17,11 @@
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
   onMount(() => {
-    // Mark desired speed as initialized after the first render
+    // Mark stores as initialized after the first render
     isDesiredSpeedInitialized = true;
     previousDesiredSpeed = $desiredSpeed;
+    isDirectionInitialized = true;
+    previousDirection = $optimizationDirection;
   });
 
   // Confirmation modal state
@@ -113,6 +115,7 @@
       junctions.set(pendingImportData.junctions);
       if (pendingImportData.desiredSpeed) desiredSpeed.set(pendingImportData.desiredSpeed);
       if (pendingImportData.desiredIntensity) desiredIntensity.set(pendingImportData.desiredIntensity);
+      if (pendingImportData.direction) optimizationDirection.set(pendingImportData.direction);
       invalidateAll('configuration imported');
       pendingImportData = null;
     }
@@ -122,11 +125,23 @@
   let desiredSpeedTimeout;
   let isDesiredSpeedInitialized = false;
   let previousDesiredSpeed = null;
-    $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
-    previousDesiredSpeed = $desiredSpeed; // Update the previous value
+  $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
+    previousDesiredSpeed = $desiredSpeed;
     clearTimeout(desiredSpeedTimeout);
     desiredSpeedTimeout = setTimeout(() => {
       invalidateAll('desired speed changed');
+    }, 100);
+  }
+
+  // Handle optimization direction changes
+  let directionTimeout;
+  let isDirectionInitialized = false;
+  let previousDirection = null;
+  $: if (isDirectionInitialized && $optimizationDirection !== previousDirection) {
+    previousDirection = $optimizationDirection;
+    clearTimeout(directionTimeout);
+    directionTimeout = setTimeout(() => {
+      invalidateAll('optimization direction changed');
     }, 100);
   }
 
@@ -156,7 +171,7 @@
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, 'forward');
+      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection);
 
       // Update the store with optimized offsets
       optimizedOffsets.set(optimizeResponse.best_offsets || []);
@@ -335,7 +350,7 @@
 
     switch (id) {
       case 'export-input':
-        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity);
+        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(inputData, 'greenwave-input.json');
         break;
 
@@ -354,6 +369,7 @@
             junctions.set(imported.junctions);
             if (imported.desiredSpeed) desiredSpeed.set(imported.desiredSpeed);
             if (imported.desiredIntensity) desiredIntensity.set(imported.desiredIntensity);
+            if (imported.direction) optimizationDirection.set(imported.direction);
             invalidateAll('configuration imported');
           } else {
             // Has data - show confirmation
@@ -368,7 +384,7 @@
         break;
 
       case 'export-output':
-        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity);
+        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(outputData, 'greenwave-output.json');
         break;
 
@@ -648,6 +664,19 @@
         
         <!-- Controls -->
         <div class="border-t pt-4 mt-auto">
+          <!-- Optimization direction -->
+          <div class="mb-4">
+            <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
+            <select
+              id="input-direction"
+              bind:value={$optimizationDirection}
+              class="w-full px-3 py-2 border rounded-md"
+            >
+              <option value="forward">Forward only</option>
+              <option value="bidirectional">Bidirectional</option>
+            </select>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <!-- Desired speed -->
             <div>
@@ -681,7 +710,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <!-- Desired intensity -->
             <div>
               <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
