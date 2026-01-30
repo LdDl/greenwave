@@ -58,7 +58,6 @@ func GreenIntervalToDTO(interval *greenwave.GreenInterval) *GreenIntervalDTO {
 
 // GreenWaveToDTO converts a GreenWave to a DTO
 func GreenWaveToDTO(wave *greenwave.GreenWave) GreenWaveDTO {
-	wave.Clone()
 	return GreenWaveDTO{
 		IntervalJunOne: GreenIntervalToDTO(wave.IntervalJunOne()),
 		IntervalJunTwo: GreenIntervalToDTO(wave.IntervalJunTwo()),
