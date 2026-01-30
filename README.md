@@ -23,6 +23,12 @@ docker run -p 36000:36000 greenwave
 * **Web UI**: http://localhost:36000
 * **Swagger API docs**: http://localhost:36000/api/greenwave/docs/
 
+#### Web UI Demo
+
+<img src="./docs/demo.gif" width="720" title="Web UI Demo">
+
+#### Swagger Documentation
+
 <img src="./images/screen0.png" width="720" title="Swagger documentation">
 
 ### Custom configuration

@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -f docker/Dockerfile -t greenwave . .
+docker build -f docker/Dockerfile -t greenwave .
