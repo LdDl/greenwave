@@ -34,13 +34,17 @@ type OptimizeResponse struct {
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`
-	// List of segments of green waves between junctions considering the optimal offsets (forward direction)
+	// List of segments of green waves between junctions considering the optimal offsets (forward direction).
+	// Ordered from first junction to last: [0] = J0->J1, [1] = J1->J2, etc.
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// List of through green waves (forward direction, so they can be passed through multiple junctions)
+	// List of through green waves (forward direction, so they can be passed through multiple junctions).
+	// Intervals ordered from first junction to last.
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
-	// List of segments of green waves (reverse direction, only for `bidirectional` case)
+	// List of segments of green waves (reverse direction, only for `bidirectional` case).
+	// Ordered from last junction to first: [0] = JN->JN-1, [1] = JN-1->JN-2, etc.
 	ReverseGreenWaves [][]dto.GreenWaveDTO `json:"reverse_green_waves"`
-	// List of through green waves (reverse direction, only for `bidirectional` case)
+	// List of through green waves (reverse direction, only for `bidirectional` case).
+	// Intervals ordered from last junction to first.
 	ReverseThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"reverse_through_green_waves"`
 }
 

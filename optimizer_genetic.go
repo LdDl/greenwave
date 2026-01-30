@@ -156,7 +156,7 @@ func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float6
 }
 
 // ReverseJunctions returns a new slice with junctions in reverse order
-// Note: it containes pointers to the same Junction objects
+// Note: it contains pointers to the same Junction objects
 func ReverseJunctions(junctions []*Junction) []*Junction {
 	n := len(junctions)
 	reversed := make([]*Junction, n)

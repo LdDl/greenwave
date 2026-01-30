@@ -25,13 +25,17 @@ type GreenWavesRequest struct {
 // GreenWavesResponse represents the response structure for green waves requests.
 // swagger:model
 type GreenWavesResponse struct {
-	// List of segments of green waves between junctions (forward direction)
+	// List of segments of green waves between junctions (forward direction).
+	// Ordered from first junction to last: [0] = J0->J1, [1] = J1->J2, etc.
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// List of through green waves (forward direction)
+	// List of through green waves (forward direction).
+	// Intervals ordered from first junction to last.
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
-	// List of segments of green waves between junctions (reverse direction, only for `bidirectional` case)
+	// List of segments of green waves (reverse direction, only for `bidirectional` case).
+	// Ordered from last junction to first: [0] = JN->JN-1, [1] = JN-1->JN-2, etc.
 	ReverseGreenWaves [][]dto.GreenWaveDTO `json:"reverse_green_waves"`
-	// List of through green waves (reverse direction, only for `bidirectional` case)
+	// List of through green waves (reverse direction, only for `bidirectional` case).
+	// Intervals ordered from last junction to first.
 	ReverseThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"reverse_through_green_waves"`
 }
 
