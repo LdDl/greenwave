@@ -127,7 +127,7 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 
 	// If bidirectional mode, also calculate reverse fitness
 	if optga.optimizationMode == OPTIMIZATION_BIDIRECTIONAL {
-		reversedJunctions := reverseJunctions(optga.junctions)
+		reversedJunctions := ReverseJunctions(optga.junctions)
 		reverseFitness := calculateDirectionalFitness(reversedJunctions, optga.speedKhm)
 		// Combine forward and reverse fitness (equal weight)
 		return forwardFitness + reverseFitness
@@ -155,8 +155,9 @@ func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float6
 	return totalFitness
 }
 
-// reverseJunctions returns a new slice with junctions in reverse order
-func reverseJunctions(junctions []*Junction) []*Junction {
+// ReverseJunctions returns a new slice with junctions in reverse order
+// Note: it containes pointers to the same Junction objects
+func ReverseJunctions(junctions []*Junction) []*Junction {
 	n := len(junctions)
 	reversed := make([]*Junction, n)
 	for i := 0; i < n; i++ {
