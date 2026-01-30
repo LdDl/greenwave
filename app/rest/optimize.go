@@ -205,6 +205,7 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 	}
 
 	crossoverTypeStr := getStringParam("crossover_type", "blend")
+	optimizationModeStr := getStringParam("optimization_mode", "forward")
 
 	// Parse crossover type
 	var crossoverType greenwave.CrossoverType
@@ -215,6 +216,17 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		crossoverType = greenwave.CROSSOVER_BLEND
 	default:
 		return nil, fmt.Errorf("unsupported crossover type: %s", crossoverTypeStr)
+	}
+
+	// Parse optimization mode
+	var optimizationMode greenwave.OptimizationMode
+	switch strings.ToLower(optimizationModeStr) {
+	case "forward":
+		optimizationMode = greenwave.OPTIMIZATION_FORWARD
+	case "bidirectional":
+		optimizationMode = greenwave.OPTIMIZATION_BIDIRECTIONAL
+	default:
+		return nil, fmt.Errorf("unsupported optimization mode: %s", optimizationModeStr)
 	}
 
 	// Validate parameters
@@ -239,5 +251,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		mutationRate,
 		tournamentSize,
 		crossoverType,
+		optimizationMode,
 	), nil
 }

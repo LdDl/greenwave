@@ -26,6 +26,23 @@ func (ioutIndex CrossoverType) String() string {
 	return crossoverTypeToStr[ioutIndex]
 }
 
+// OptimizationMode defines the direction(s) for green wave optimization
+type OptimizationMode uint8
+
+const (
+	// OPTIMIZATION_FORWARD optimizes green waves for forward direction only (junction 0 -> 1 -> 2 -> ...)
+	OPTIMIZATION_FORWARD OptimizationMode = iota
+	// OPTIMIZATION_BIDIRECTIONAL optimizes green waves for both forward and reverse directions
+	OPTIMIZATION_BIDIRECTIONAL
+)
+
+var optimizationModeToStr = [...]string{"forward", "bidirectional"}
+
+// String returns the string representation of the OptimizationMode
+func (mode OptimizationMode) String() string {
+	return optimizationModeToStr[mode]
+}
+
 // Individual represents a single solution in the genetic algorithm
 type Individual struct {
 	Offsets []float64
@@ -48,6 +65,8 @@ type OptimizerGenetic struct {
 	tournamentSize int
 	// crossoverType defines the type of crossover to use in the genetic algorithm
 	crossoverType CrossoverType
+	// optimizationMode defines whether to optimize for forward only or bidirectional traffic
+	optimizationMode OptimizationMode
 	// crossoverFunc is the function used for crossover between two parents
 	crossoverFunc func(cycleLengths []float64, parent1, parent2 *Individual) *Individual
 	// cycleLengths contains the total duration of each junction in seconds
@@ -57,7 +76,7 @@ type OptimizerGenetic struct {
 }
 
 // NewOptimizerGenetic creates a new instance of OptimizerGenetic with the provided parameters
-func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType) Optimizer {
+func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode) Optimizer {
 	cycleLengths := make([]float64, len(junctions))
 	for i, junction := range junctions {
 		cycleLengths[i] = float64(junction.totalDuration)
@@ -74,6 +93,7 @@ func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize
 		mutationRate:        mutationRate,
 		tournamentSize:      tournamentSize,
 		crossoverType:       crossoverType,
+		optimizationMode:    optimizationMode,
 		crossoverFunc:       crossoverFunc,
 		cycleLengths:        cycleLengths,
 		bestFitenessHistory: make([]float64, 0, generations),

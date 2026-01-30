@@ -75,6 +75,7 @@ func main() {
 		0.1,
 		3,
 		CROSSOVER_BLEND,
+		OPTIMIZATION_FORWARD,
 	)
 	newOffsets := optimizer.Optimize()
 	fmt.Println("Best fitness history:")
