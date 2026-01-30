@@ -96,15 +96,17 @@ export function validateImportedConfig(data) {
  * @param {Array} junctions - Junctions array
  * @param {number} desiredSpeed - Desired speed in km/h
  * @param {number} desiredIntensity - Desired intensity in vehicles/hour
+ * @param {string} direction - Optimization direction ('forward' or 'bidirectional')
  * @returns {Object} Export-ready configuration
  */
-export function prepareInputExport(junctions, desiredSpeed, desiredIntensity) {
+export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, direction = 'forward') {
   return {
     version: 1,
     type: 'input',
     exportedAt: new Date().toISOString(),
     desiredSpeed,
     desiredIntensity,
+    direction,
     junctions: junctions.map(j => ({
       id: j.id,
       label: j.label,
@@ -126,15 +128,17 @@ export function prepareInputExport(junctions, desiredSpeed, desiredIntensity) {
  * @param {Array} optimizedJunctions - Optimized junctions with offsets
  * @param {number} desiredSpeed - Desired speed in km/h
  * @param {number} desiredIntensity - Desired intensity in vehicles/hour
+ * @param {string} direction - Optimization direction ('forward' or 'bidirectional')
  * @returns {Object} Export-ready configuration
  */
-export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredIntensity) {
+export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredIntensity, direction = 'forward') {
   return {
     version: 1,
     type: 'output',
     exportedAt: new Date().toISOString(),
     desiredSpeed,
     desiredIntensity,
+    direction,
     junctions: optimizedJunctions.map(j => ({
       id: j.id,
       label: j.label,

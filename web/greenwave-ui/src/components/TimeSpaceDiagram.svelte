@@ -11,6 +11,8 @@
   export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
+  export let reverseGreenWaves = [];
+  export let reverseThroughWaves = [];
   export let showWaves = false;
   
   const dispatch = createEventDispatcher();
@@ -88,11 +90,19 @@
     
     // Draw waves if enabled
     if (showWaves) {
+      // Forward direction waves
       if (throughWaves.length > 0) {
         drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
       }
       if (greenWaves.length > 0) {
         drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
+      }
+      // Reverse direction waves (for bidirectional mode)
+      if (reverseThroughWaves.length > 0) {
+        drawReverseThroughWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
+      }
+      if (reverseGreenWaves.length > 0) {
+        drawReverseGreenWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
       }
     }
     
@@ -455,24 +465,24 @@
   function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
     const waveColor = "#541FE4";
     const alpha = isOutdated ? 0.1 : 0.2; // Fade if outdated
-    
+
     throughWaves.forEach(wave => {
       const starts = [];
       const ends = [];
-      
+
       wave.intervals.forEach((interval, junctionIdx) => {
         if (junctionIdx < junctionsWithDuration.length) {
           const junction = junctionsWithDuration[junctionIdx];
           const y = yScale(junction.point.y);
-          
+
           starts.push([xScale(interval.start), y]);
           ends.push([xScale(interval.end), y]);
         }
       });
-      
+
       ends.reverse();
       const polygonPoints = [...starts, ...ends];
-      
+
       chart.append("polygon")
         .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
         .attr("fill", waveColor)
@@ -481,6 +491,82 @@
         .attr("stroke-width", isOutdated ? 1 : 0.5)
         .attr("stroke-opacity", isOutdated ? 0.6 : 0.8)
         .attr("stroke-dasharray", isOutdated ? "3,3" : "none"); // Dashed if outdated
+    });
+  }
+
+  // Draw reverse green waves (bidirectional mode) - light blue color
+  function drawReverseGreenWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
+    const waveColor = "#4FC3F7"; // Light blue
+    const alpha = isOutdated ? 0.15 : 0.3;
+    const numJunctions = junctionsWithDuration.length;
+
+    reverseGreenWaves.forEach((segmentWaves, segmentIdx) => {
+      if (segmentIdx >= numJunctions - 1) return;
+
+      // Reverse direction: map segment index to actual junctions (from last to first)
+      const j1 = junctionsWithDuration[numJunctions - 1 - segmentIdx];
+      const j2 = junctionsWithDuration[numJunctions - 2 - segmentIdx];
+      const y1 = yScale(j1.point.y);
+      const y2 = yScale(j2.point.y);
+
+      segmentWaves.forEach(wave => {
+        const startJ1 = wave.interval_jun_one.start;
+        const endJ1 = wave.interval_jun_one.end;
+        const startJ2 = wave.interval_jun_two.start;
+        const endJ2 = wave.interval_jun_two.end;
+
+        const polygonPoints = [
+          [xScale(startJ1), y1],
+          [xScale(startJ2), y2],
+          [xScale(endJ2), y2],
+          [xScale(endJ1), y1]
+        ];
+
+        chart.append("polygon")
+          .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
+          .attr("fill", waveColor)
+          .attr("fill-opacity", alpha)
+          .attr("stroke", isOutdated ? "#ff6b35" : waveColor)
+          .attr("stroke-width", isOutdated ? 1 : 0.5)
+          .attr("stroke-opacity", isOutdated ? 0.6 : 0.8)
+          .attr("stroke-dasharray", isOutdated ? "3,3" : "none");
+      });
+    });
+  }
+
+  // Draw reverse through waves (bidirectional mode) - stronger blue color
+  function drawReverseThroughWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
+    const waveColor = "#1976D2"; // Stronger blue
+    const alpha = isOutdated ? 0.1 : 0.2;
+    const numJunctions = junctionsWithDuration.length;
+
+    reverseThroughWaves.forEach(wave => {
+      const starts = [];
+      const ends = [];
+
+      wave.intervals.forEach((interval, idx) => {
+        // Reverse direction: map index to junctions from last to first
+        const junctionIdx = numJunctions - 1 - idx;
+        if (junctionIdx >= 0 && junctionIdx < numJunctions) {
+          const junction = junctionsWithDuration[junctionIdx];
+          const y = yScale(junction.point.y);
+
+          starts.push([xScale(interval.start), y]);
+          ends.push([xScale(interval.end), y]);
+        }
+      });
+
+      ends.reverse();
+      const polygonPoints = [...starts, ...ends];
+
+      chart.append("polygon")
+        .attr("points", polygonPoints.map(p => p.join(",")).join(" "))
+        .attr("fill", waveColor)
+        .attr("fill-opacity", alpha)
+        .attr("stroke", isOutdated ? "#ff6b35" : waveColor)
+        .attr("stroke-width", isOutdated ? 1 : 0.5)
+        .attr("stroke-opacity", isOutdated ? 0.6 : 0.8)
+        .attr("stroke-dasharray", isOutdated ? "3,3" : "none");
     });
   }
   
@@ -499,8 +585,8 @@
     updateChart();
   }
   
-  // Also reactive to all prop changes  
-  $: greenWaves, throughWaves, showWaves, wavesAreOutdated, updateChart();
+  // Also reactive to all prop changes
+  $: greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
   
   function updateSize() {
     if (container) {

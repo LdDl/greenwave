@@ -23,6 +23,8 @@ type OptimizeRequest struct {
 	OptimizerType string `json:"optimizer_type"`
 	// Contains parameters for the optimizer
 	OptimizerParams map[string]interface{} `json:"optimizer_params"`
+	// Direction for optimization: "forward" (default) or "bidirectional"
+	Direction string `json:"direction"`
 }
 
 // OptimizeResponse represents the response structure for optimization requests.
@@ -32,10 +34,18 @@ type OptimizeResponse struct {
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`
-	// List of segments of green waves between junctions considering the optimal offsets
+	// List of segments of green waves between junctions considering the optimal offsets (forward direction).
+	// Ordered from first junction to last: [0] = J0->J1, [1] = J1->J2, etc.
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// List of through green waves (so they can be passed through multiple junctions) considering the optimal offsets
+	// List of through green waves (forward direction, so they can be passed through multiple junctions).
+	// Intervals ordered from first junction to last.
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
+	// List of segments of green waves (reverse direction, only for `bidirectional` case).
+	// Ordered from last junction to first: [0] = JN->JN-1, [1] = JN-1->JN-2, etc.
+	ReverseGreenWaves [][]dto.GreenWaveDTO `json:"reverse_green_waves"`
+	// List of through green waves (reverse direction, only for `bidirectional` case).
+	// Intervals ordered from last junction to first.
+	ReverseThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"reverse_through_green_waves"`
 }
 
 // OptimizerExtra contains additional information about the optimization process.
@@ -89,6 +99,18 @@ func RequestOptimize() func(ctx echo.Context) error {
 			})
 		}
 
+		var optimizationMode greenwave.OptimizationMode
+		switch strings.ToLower(requestData.Direction) {
+		case "", "forward":
+			optimizationMode = greenwave.OPTIMIZATION_FORWARD
+		case "bidirectional":
+			optimizationMode = greenwave.OPTIMIZATION_BIDIRECTIONAL
+		default:
+			return ctx.JSON(400, echo.Map{
+				"Error": "Direction must be either 'forward' or 'bidirectional'",
+			})
+		}
+
 		// Convert DTOs to domain objects
 		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
@@ -96,7 +118,7 @@ func RequestOptimize() func(ctx echo.Context) error {
 		}
 
 		// Create optimizer based on type
-		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, requestData.DesiredSpeedKmh, requestData.OptimizerParams)
+		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, requestData.DesiredSpeedKmh, requestData.OptimizerParams, optimizationMode)
 		if err != nil {
 			return ctx.JSON(400, echo.Map{
 				"Error": err.Error(),
@@ -120,10 +142,22 @@ func RequestOptimize() func(ctx echo.Context) error {
 		}
 
 		response := OptimizeResponse{
-			BestOffsets:       bestOffsets,
-			OptimizerExtra:    optimizerExtra,
-			GreenWaves:        convertGreenWavesToDTO(greenWaves),
-			ThroughGreenWaves: convertThroughGreenWavesToDTO(throughGreenWaves),
+			BestOffsets:              bestOffsets,
+			OptimizerExtra:           optimizerExtra,
+			GreenWaves:               convertGreenWavesToDTO(greenWaves),
+			ThroughGreenWaves:        convertThroughGreenWavesToDTO(throughGreenWaves),
+			ReverseGreenWaves:        [][]dto.GreenWaveDTO{},
+			ReverseThroughGreenWaves: []dto.ThroughGreenWaveDTO{},
+		}
+
+		// If bidirectional, also calculate reverse waves
+		if optimizationMode == greenwave.OPTIMIZATION_BIDIRECTIONAL {
+			reversedJunctions := greenwave.ReverseJunctions(junctions)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.DesiredSpeedKmh)
+			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
+
+			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)
+			response.ReverseThroughGreenWaves = convertThroughGreenWavesToDTO(reverseThroughGreenWaves)
 		}
 
 		return ctx.JSON(200, response)
@@ -131,17 +165,17 @@ func RequestOptimize() func(ctx echo.Context) error {
 }
 
 // createOptimizer creates an optimizer based on the specified type and parameters
-func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}) (greenwave.Optimizer, error) {
+func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	switch strings.ToLower(optimizerType) {
 	case "genetic":
-		return createGeneticOptimizer(junctions, speedKmh, params)
+		return createGeneticOptimizer(junctions, speedKmh, params, optimizationMode)
 	default:
 		return nil, fmt.Errorf("unsupported optimizer type: %s", optimizerType)
 	}
 }
 
 // createGeneticOptimizer creates a genetic algorithm optimizer with flexible parameters
-func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}) (greenwave.Optimizer, error) {
+func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	// Helper function to get parameter with default value
 	getParam := func(key string, defaultValue interface{}) interface{} {
 		if val, exists := params[key]; exists {
@@ -239,5 +273,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		mutationRate,
 		tournamentSize,
 		crossoverType,
+		optimizationMode,
 	), nil
 }

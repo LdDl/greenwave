@@ -1,7 +1,7 @@
 // lib/stores/index.js
 import { writable } from 'svelte/store';
 import { junctions, desiredSpeed } from './core';
-import { originalGreenWaves, originalThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
+import { originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
 
 // UI state stores
 export const isLoading = writable(false);
@@ -112,8 +112,10 @@ export function resetToDemo() {
   // Clear API results
   originalGreenWaves.set([]);
   originalThroughWaves.set([]);
+  originalReverseGreenWaves.set([]);
+  originalReverseThroughWaves.set([]);
   showGreenWaves.set(false);
-  
+
   // Clear wave calculation positions
   waveCalculationPositions.set([]);
   // Clear last calculated speed
@@ -127,17 +129,19 @@ export function resetToDemo() {
 export function resetToEmpty() {
   junctions.set([]);
   desiredSpeed.set(40.0);
-  
+
   // Clear API results
   originalGreenWaves.set([]);
   originalThroughWaves.set([]);
+  originalReverseGreenWaves.set([]);
+  originalReverseThroughWaves.set([]);
   showGreenWaves.set(false);
-  
+
   // Clear wave calculation positions
   waveCalculationPositions.set([]);
   // Clear last calculated speed
   lastCalculatedSpeed.set(null);
-  
+
   // Clear UI state
   isLoading.set(false);
   error.set(null);

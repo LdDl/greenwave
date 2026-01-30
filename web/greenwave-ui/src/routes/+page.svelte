@@ -6,9 +6,9 @@
   import DropdownMenu from '../components/DropdownMenu.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
-  import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
-  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
+  import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
@@ -17,9 +17,11 @@
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
   onMount(() => {
-    // Mark desired speed as initialized after the first render
+    // Mark stores as initialized after the first render
     isDesiredSpeedInitialized = true;
     previousDesiredSpeed = $desiredSpeed;
+    isDirectionInitialized = true;
+    previousDirection = $optimizationDirection;
   });
 
   // Confirmation modal state
@@ -63,10 +65,11 @@
       error.set(null);
       
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed);
-      
+      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection);
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
+      originalReverseGreenWaves.set(response.reverse_green_waves || []);
+      originalReverseThroughWaves.set(response.reverse_through_green_waves || []);
       showGreenWaves.set(true);
       storeWaveCalculationPositions($junctions, $desiredSpeed);
 
@@ -113,6 +116,7 @@
       junctions.set(pendingImportData.junctions);
       if (pendingImportData.desiredSpeed) desiredSpeed.set(pendingImportData.desiredSpeed);
       if (pendingImportData.desiredIntensity) desiredIntensity.set(pendingImportData.desiredIntensity);
+      if (pendingImportData.direction) optimizationDirection.set(pendingImportData.direction);
       invalidateAll('configuration imported');
       pendingImportData = null;
     }
@@ -122,11 +126,23 @@
   let desiredSpeedTimeout;
   let isDesiredSpeedInitialized = false;
   let previousDesiredSpeed = null;
-    $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
-    previousDesiredSpeed = $desiredSpeed; // Update the previous value
+  $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
+    previousDesiredSpeed = $desiredSpeed;
     clearTimeout(desiredSpeedTimeout);
     desiredSpeedTimeout = setTimeout(() => {
       invalidateAll('desired speed changed');
+    }, 100);
+  }
+
+  // Handle optimization direction changes
+  let directionTimeout;
+  let isDirectionInitialized = false;
+  let previousDirection = null;
+  $: if (isDirectionInitialized && $optimizationDirection !== previousDirection) {
+    previousDirection = $optimizationDirection;
+    clearTimeout(directionTimeout);
+    directionTimeout = setTimeout(() => {
+      invalidateAll('optimization direction changed');
     }, 100);
   }
 
@@ -156,7 +172,7 @@
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed);
+      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection);
 
       // Update the store with optimized offsets
       optimizedOffsets.set(optimizeResponse.best_offsets || []);
@@ -166,9 +182,11 @@
 
       // Extract the optimized green waves
       const optimizedJunctionsForAPI = prepareJunctionsForAPI($optimizedJunctions);
-      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed);
+      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
+      optimizedReverseGreenWaves.set(response.reverse_green_waves || []);
+      optimizedReverseThroughWaves.set(response.reverse_through_green_waves || []);
 
       // Store the current state for validation
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
@@ -188,6 +206,8 @@
     optimizedOffsets.set([]);
     optimizedGreenWaves.set([]);
     optimizedThroughWaves.set([]);
+    optimizedReverseGreenWaves.set([]);
+    optimizedReverseThroughWaves.set([]);
     optimizedResultsAreOutdated.set(false);
   }
 
@@ -335,7 +355,7 @@
 
     switch (id) {
       case 'export-input':
-        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity);
+        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(inputData, 'greenwave-input.json');
         break;
 
@@ -354,6 +374,7 @@
             junctions.set(imported.junctions);
             if (imported.desiredSpeed) desiredSpeed.set(imported.desiredSpeed);
             if (imported.desiredIntensity) desiredIntensity.set(imported.desiredIntensity);
+            if (imported.direction) optimizationDirection.set(imported.direction);
             invalidateAll('configuration imported');
           } else {
             // Has data - show confirmation
@@ -368,7 +389,7 @@
         break;
 
       case 'export-output':
-        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity);
+        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(outputData, 'greenwave-output.json');
         break;
 
@@ -470,6 +491,8 @@
               junctions={$optimizedJunctions}
               greenWaves={$optimizedGreenWaves}
               throughWaves={$optimizedThroughWaves}
+              reverseGreenWaves={$optimizedReverseGreenWaves}
+              reverseThroughWaves={$optimizedReverseThroughWaves}
               showWaves={true}
               interactive={false}
               resultsAreOutdated={$optimizedResultsAreOutdated}
@@ -517,27 +540,59 @@
               />
             </div>
 
-            <!-- Actual Intensity -->
+            <!-- Actual Intensity (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensityOptimized || 0).toFixed(2)}
+                {($actualIntensityOptimized || 0).toFixed(2)} veh/h
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
 
-            <!-- Actual Flow -->
+            <!-- Actual Flow (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {$actualFlowOptimized.toFixed(6)}
+                {$actualFlowOptimized.toFixed(6)} veh/s
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
+
+            {#if $optimizationDirection === 'bidirectional'}
+              <!-- Actual Intensity (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual intensity <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Actual Flow (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual flow <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {$actualReverseFlowOptimized.toFixed(6)} veh/s
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       </div>
@@ -637,6 +692,8 @@
               interactive={true}
               greenWaves={$originalGreenWaves}
               throughWaves={$originalThroughWaves}
+              reverseGreenWaves={$originalReverseGreenWaves}
+              reverseThroughWaves={$originalReverseThroughWaves}
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
               isResults={false}
@@ -648,6 +705,19 @@
         
         <!-- Controls -->
         <div class="border-t pt-4 mt-auto">
+          <!-- Optimization direction -->
+          <div class="mb-4">
+            <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
+            <select
+              id="input-direction"
+              bind:value={$optimizationDirection}
+              class="w-full px-3 py-2 border rounded-md"
+            >
+              <option value="forward">Forward only</option>
+              <option value="bidirectional">Bidirectional</option>
+            </select>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <!-- Desired speed -->
             <div>
@@ -681,7 +751,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <!-- Desired intensity -->
             <div>
               <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
@@ -714,27 +784,59 @@
               />
             </div>
 
-            <!-- Actual intensity -->
+            <!-- Actual intensity (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensity || 0).toFixed(2)}
+                {($actualIntensity || 0).toFixed(2)} veh/h
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
 
-            <!-- Actual flow -->
+            <!-- Actual flow (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualFlow || 0).toFixed(6)}
+                {($actualFlow || 0).toFixed(6)} veh/s
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
+
+            {#if $optimizationDirection === 'bidirectional'}
+              <!-- Actual intensity (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual intensity <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseIntensity || 0).toFixed(2)} veh/h
+                  {#if $wavesAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Actual flow (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual flow <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseFlow || 0).toFixed(6)} veh/s
+                  {#if $wavesAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       </div>

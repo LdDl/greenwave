@@ -26,6 +26,23 @@ func (ioutIndex CrossoverType) String() string {
 	return crossoverTypeToStr[ioutIndex]
 }
 
+// OptimizationMode defines the direction(s) for green wave optimization
+type OptimizationMode uint8
+
+const (
+	// OPTIMIZATION_FORWARD optimizes green waves for forward direction only (junction 0 -> 1 -> 2 -> ...)
+	OPTIMIZATION_FORWARD OptimizationMode = iota
+	// OPTIMIZATION_BIDIRECTIONAL optimizes green waves for both forward and reverse directions
+	OPTIMIZATION_BIDIRECTIONAL
+)
+
+var optimizationModeToStr = [...]string{"forward", "bidirectional"}
+
+// String returns the string representation of the OptimizationMode
+func (mode OptimizationMode) String() string {
+	return optimizationModeToStr[mode]
+}
+
 // Individual represents a single solution in the genetic algorithm
 type Individual struct {
 	Offsets []float64
@@ -48,6 +65,8 @@ type OptimizerGenetic struct {
 	tournamentSize int
 	// crossoverType defines the type of crossover to use in the genetic algorithm
 	crossoverType CrossoverType
+	// optimizationMode defines whether to optimize for forward only or bidirectional traffic
+	optimizationMode OptimizationMode
 	// crossoverFunc is the function used for crossover between two parents
 	crossoverFunc func(cycleLengths []float64, parent1, parent2 *Individual) *Individual
 	// cycleLengths contains the total duration of each junction in seconds
@@ -57,7 +76,7 @@ type OptimizerGenetic struct {
 }
 
 // NewOptimizerGenetic creates a new instance of OptimizerGenetic with the provided parameters
-func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType) Optimizer {
+func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode) Optimizer {
 	cycleLengths := make([]float64, len(junctions))
 	for i, junction := range junctions {
 		cycleLengths[i] = float64(junction.totalDuration)
@@ -74,6 +93,7 @@ func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize
 		mutationRate:        mutationRate,
 		tournamentSize:      tournamentSize,
 		crossoverType:       crossoverType,
+		optimizationMode:    optimizationMode,
 		crossoverFunc:       crossoverFunc,
 		cycleLengths:        cycleLengths,
 		bestFitenessHistory: make([]float64, 0, generations),
@@ -101,14 +121,30 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 	for i, junction := range optga.junctions {
 		junction.SetOffset(int(individual.Offsets[i]))
 	}
-	// Find green waves
-	greenWavs := FindGreenWaves(optga.junctions, optga.speedKhm)
+
+	// Calculate forward fitness
+	forwardFitness := calculateDirectionalFitness(optga.junctions, optga.speedKhm)
+
+	// If bidirectional mode, also calculate reverse fitness
+	if optga.optimizationMode == OPTIMIZATION_BIDIRECTIONAL {
+		reversedJunctions := ReverseJunctions(optga.junctions)
+		reverseFitness := calculateDirectionalFitness(reversedJunctions, optga.speedKhm)
+		// Combine forward and reverse fitness (equal weight)
+		return forwardFitness + reverseFitness
+	}
+
+	return forwardFitness
+}
+
+// calculateDirectionalFitness calculates fitness for a given direction (order of junctions)
+func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float64 {
+	greenWavs := FindGreenWaves(junctions, speedKhm)
 	throughGreenWaves := MergeGreenWaves(greenWavs)
 	if len(throughGreenWaves) == 0 {
 		return 0.0 // No green waves found
 	}
 	// Calculate total fitness based on the depth and band size of the green waves
-	maxDepth := len(optga.junctions)
+	maxDepth := len(junctions)
 	totalFitness := 0.0
 	for _, wave := range throughGreenWaves {
 		depthRatio := float64(wave.Depth()) / float64(maxDepth)
@@ -117,6 +153,17 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 		totalFitness += waveFitness
 	}
 	return totalFitness
+}
+
+// ReverseJunctions returns a new slice with junctions in reverse order
+// Note: it contains pointers to the same Junction objects
+func ReverseJunctions(junctions []*Junction) []*Junction {
+	n := len(junctions)
+	reversed := make([]*Junction, n)
+	for i := 0; i < n; i++ {
+		reversed[i] = junctions[n-1-i]
+	}
+	return reversed
 }
 
 func (optga *OptimizerGenetic) selectParent(population []*Individual) *Individual {
