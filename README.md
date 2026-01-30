@@ -7,34 +7,45 @@ It includes calculation of best offset via genetic algorithm also.
 
 Do not consider it to be any usable for production. It it just toy for understanding basics.
 
-## Docker build
-* Build docker image:
-    ```bash
-    docker build -t greenwave_api -f ./docker/Dockerfile .
-    ```
+## Docker
 
-* Run docker image with provided configuration file
-    ```bash
-    docker run -p 36000:36000 -v ./cmd/greenwave/conf.toml:/app/conf.toml greenwave_api --conf conf.toml
-    ```
-* Or you can run docker image with provided environment variables
-    ```bash
-    # From file
-    docker run -p 36000:36000 --env-file .env greenwave_api
-    # From args
-    docker run -p 35000:35000 \
-        -e SERVER_HOST=0.0.0.0 \
-        -e SERVER_PORT=35000 \
-        -e SERVER_MAIN_PATH=api \
-        -e SERVER_STARTUP_MESSAGE=true \
-        -e USE_CORS=true \
-        -e DOCS_PATH=./app/rest/docs \
-        greenwave_api
-    ```
+### Build
+```bash
+./docker.sh
+```
 
-* Navigate to `http://localhost:36000/api/greenwave/docs/` and you are good to go.
+### Run
+```bash
+docker run -p 36000:36000 greenwave
+```
 
-    <img src="./images/screen0.png" width="720" title="Swagger documentation">
+### Usage
+* **Web UI**: http://localhost:36000
+* **Swagger API docs**: http://localhost:36000/api/greenwave/docs/
+
+<img src="./images/screen0.png" width="720" title="Swagger documentation">
+
+### Custom configuration
+```bash
+docker run -p 35000:35000 \
+    -e SERVER_HOST=0.0.0.0 \
+    -e SERVER_PORT=35000 \
+    -e SERVER_MAIN_PATH=api \
+    -e SERVER_STARTUP_MESSAGE=true \
+    -e USE_CORS=true \
+    greenwave
+```
+
+Available environment variables:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER_HOST` | `0.0.0.0` | Server bind address |
+| `SERVER_PORT` | `36000` | Server port |
+| `SERVER_MAIN_PATH` | `api` | API base path* |
+| `SERVER_STARTUP_MESSAGE` | `true` | Show startup message |
+| `USE_CORS` | `true` | Enable CORS |
+
+\* `SERVER_MAIN_PATH`: Web UI uses hardcoded path `/api/greenwave`. Changing this variable requires rebuilding the UI.
 
 * Examples of JSON data for requests for can be found in [the following README.md](./cmd/greenwave/README.md)
 

@@ -1,4 +1,7 @@
-export const API_BASE = 'http://localhost:36000/api/greenwave';
+// In dev mode: use VITE_API_URL or default to localhost:36000
+// In production: use relative path (same origin)
+const DEV_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:36000';
+export const API_BASE = import.meta.env.DEV ? `${DEV_API_URL}/api/greenwave` : '/api/greenwave';
 
 export class APIError extends Error {
   constructor(message, status, response) {
