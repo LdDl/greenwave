@@ -7,8 +7,8 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
-  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
   import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
@@ -68,6 +68,8 @@
       const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection);
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
+      originalReverseGreenWaves.set(response.reverse_green_waves || []);
+      originalReverseThroughWaves.set(response.reverse_through_green_waves || []);
       showGreenWaves.set(true);
       storeWaveCalculationPositions($junctions, $desiredSpeed);
 
@@ -183,6 +185,8 @@
       const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
+      optimizedReverseGreenWaves.set(response.reverse_green_waves || []);
+      optimizedReverseThroughWaves.set(response.reverse_through_green_waves || []);
 
       // Store the current state for validation
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
@@ -202,6 +206,8 @@
     optimizedOffsets.set([]);
     optimizedGreenWaves.set([]);
     optimizedThroughWaves.set([]);
+    optimizedReverseGreenWaves.set([]);
+    optimizedReverseThroughWaves.set([]);
     optimizedResultsAreOutdated.set(false);
   }
 
