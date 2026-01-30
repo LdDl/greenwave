@@ -34,10 +34,14 @@ type OptimizeResponse struct {
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`
-	// List of segments of green waves between junctions considering the optimal offsets
+	// List of segments of green waves between junctions considering the optimal offsets (forward direction)
 	GreenWaves [][]dto.GreenWaveDTO `json:"green_waves"`
-	// List of through green waves (so they can be passed through multiple junctions) considering the optimal offsets
+	// List of through green waves (forward direction, so they can be passed through multiple junctions)
 	ThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"through_green_waves"`
+	// List of segments of green waves (reverse direction, only for `bidirectional` case)
+	ReverseGreenWaves [][]dto.GreenWaveDTO `json:"reverse_green_waves"`
+	// List of through green waves (reverse direction, only for `bidirectional` case)
+	ReverseThroughGreenWaves []dto.ThroughGreenWaveDTO `json:"reverse_through_green_waves"`
 }
 
 // OptimizerExtra contains additional information about the optimization process.
@@ -134,10 +138,22 @@ func RequestOptimize() func(ctx echo.Context) error {
 		}
 
 		response := OptimizeResponse{
-			BestOffsets:       bestOffsets,
-			OptimizerExtra:    optimizerExtra,
-			GreenWaves:        convertGreenWavesToDTO(greenWaves),
-			ThroughGreenWaves: convertThroughGreenWavesToDTO(throughGreenWaves),
+			BestOffsets:              bestOffsets,
+			OptimizerExtra:           optimizerExtra,
+			GreenWaves:               convertGreenWavesToDTO(greenWaves),
+			ThroughGreenWaves:        convertThroughGreenWavesToDTO(throughGreenWaves),
+			ReverseGreenWaves:        [][]dto.GreenWaveDTO{},
+			ReverseThroughGreenWaves: []dto.ThroughGreenWaveDTO{},
+		}
+
+		// If bidirectional, also calculate reverse waves
+		if optimizationMode == greenwave.OPTIMIZATION_BIDIRECTIONAL {
+			reversedJunctions := greenwave.ReverseJunctions(junctions)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.DesiredSpeedKmh)
+			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
+
+			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)
+			response.ReverseThroughGreenWaves = convertThroughGreenWavesToDTO(reverseThroughGreenWaves)
 		}
 
 		return ctx.JSON(200, response)
