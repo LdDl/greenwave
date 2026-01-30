@@ -1,7 +1,7 @@
 # Just a toy project to extract "green waves"
 
 ## About
-This project is just a tool to see how "green waves" extraction works in traffic lights signal timing planning.
+This project is just a tool to see how "green waves" (see ref. https://en.wikipedia.org/wiki/Green_wave) extraction works in traffic lights signal timing planning.
 
 It includes calculation of best offset via genetic algorithm also.
 
