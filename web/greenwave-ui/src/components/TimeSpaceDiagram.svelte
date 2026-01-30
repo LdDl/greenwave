@@ -152,7 +152,7 @@
     }
     
     // Draw junction labels with duration
-    junctionGroups.append("text")
+    const junctionLabels = junctionGroups.append("text")
       .attr("x", 0)
       .attr("y", -15)
       .attr("text-anchor", "middle")
@@ -160,15 +160,47 @@
       .attr("font-weight", "bold")
       .attr("fill", "#333")
       .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s`);
-    
+
+    // Make labels clickable in interactive mode
+    if (interactive) {
+      junctionLabels
+        .style("cursor", "pointer")
+        .on("mouseover", function() {
+          d3.select(this).attr("fill", "#4B0082");
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("fill", "#333");
+        })
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          dispatch('editJunction', { junction: d });
+        });
+    }
+
     // Draw junction circles
-    junctionGroups.append("circle")
+    const junctionCircles = junctionGroups.append("circle")
       .attr("cx", 0)
       .attr("cy", 0)
       .attr("r", 6)
       .attr("fill", "#D8BFD8")
       .attr("stroke", "#4B0082")
       .attr("stroke-width", 2);
+
+    // Make circles clickable in interactive mode
+    if (interactive) {
+      junctionCircles
+        .style("cursor", "pointer")
+        .on("mouseover", function() {
+          d3.select(this).attr("r", 8).attr("fill", "#C8A2C8");
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("r", 6).attr("fill", "#D8BFD8");
+        })
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          dispatch('editJunction', { junction: d });
+        });
+    }
   }
   
   // Function to update signal lines for a specific junction during drag
@@ -532,6 +564,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
             <div>💡 <strong>Drag junctions</strong> to change distances</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>💡 <strong>Click junction</strong> to edit phases and signals</div>
           </div>
           <div class="flex items-center gap-2">
             <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

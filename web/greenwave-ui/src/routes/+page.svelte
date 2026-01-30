@@ -2,6 +2,7 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
+  import EditJunctionModal from '../components/EditJunctionModal.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
@@ -27,6 +28,11 @@
   let selectedSignal = null;
   let selectedSignalContext = null;
   let isSignalModalOpen = false;
+
+  // Junction modal state
+  let selectedJunction = null;
+  let isJunctionModalOpen = false;
+  let isNewJunction = false;
 
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
@@ -223,6 +229,70 @@
     isSignalModalOpen = false;
   }
 
+  // Junction modal handlers
+  function openJunctionModal(event) {
+    const { junction } = event.detail;
+    // Find the original junction from the store (not the one with calculated total_duration)
+    const originalJunction = $junctions.find(j => j.id === junction.id);
+    selectedJunction = originalJunction || junction;
+    isNewJunction = false;
+    isJunctionModalOpen = true;
+  }
+
+  function openNewJunctionModal() {
+    // Create a new junction with default values
+    const maxId = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.id)) : -1;
+    const maxY = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.point.y)) : -100;
+
+    selectedJunction = {
+      id: maxId + 1,
+      label: `Junction ${maxId + 2}`,
+      cycle: [
+        {
+          id: (maxId + 1) * 10,
+          signals: [
+            { duration: 30, color: 'GREEN' },
+            { duration: 20, color: 'RED' }
+          ]
+        }
+      ],
+      offset: 0,
+      point: { x: 0, y: maxY + 150 }
+    };
+    isNewJunction = true;
+    isJunctionModalOpen = true;
+  }
+
+  function saveJunction(event) {
+    const { junction, isNew } = event.detail;
+
+    if (isNew) {
+      // Add new junction
+      junctions.update(junctionList => [...junctionList, junction]);
+    } else {
+      // Update existing junction
+      junctions.update(junctionList =>
+        junctionList.map(j => j.id === junction.id ? junction : j)
+      );
+    }
+
+    invalidateAll('junction configuration changed');
+    closeJunctionModal();
+  }
+
+  function deleteJunction(event) {
+    const { junction } = event.detail;
+    junctions.update(junctionList => junctionList.filter(j => j.id !== junction.id));
+    invalidateAll('junction deleted');
+    closeJunctionModal();
+  }
+
+  function closeJunctionModal() {
+    selectedJunction = null;
+    isJunctionModalOpen = false;
+    isNewJunction = false;
+  }
+
   function startDiagram() {
     console.log("Starting diagram with empty junctions");
     junctions.set([]);
@@ -257,6 +327,16 @@
     signal={selectedSignal}
     on:save={saveSignal}
     on:close={closeSignalModal}
+  />
+{/if}
+
+{#if isJunctionModalOpen}
+  <EditJunctionModal
+    junction={selectedJunction}
+    isNew={isNewJunction}
+    on:save={saveJunction}
+    on:delete={deleteJunction}
+    on:close={closeJunctionModal}
   />
 {/if}
 
@@ -312,10 +392,11 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <!-- Desired intensity -->
             <div>
-              <label class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
-              <input 
-                type="number" 
-                bind:value={$desiredIntensity} 
+              <label for="opt-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
+              <input
+                id="opt-desired-intensity"
+                type="number"
+                bind:value={$desiredIntensity}
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
                 class:border-orange-500={hasResults && $optimizedResultsAreOutdated.isOutdated}
@@ -326,10 +407,11 @@
 
             <!-- Desired Flow -->
             <div>
-              <label class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
-              <input 
-                type="number" 
-                value={$desiredFlow} 
+              <label for="opt-desired-flow" class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
+              <input
+                id="opt-desired-flow"
+                type="number"
+                value={$desiredFlow}
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
                 step="0.5"
@@ -342,10 +424,8 @@
 
             <!-- Actual Intensity -->
             <div>
-              <label class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</label>
-              <div 
-                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
-              >
+              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
                 {($actualIntensityOptimized || 0).toFixed(2)}
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
@@ -355,10 +435,8 @@
 
             <!-- Actual Flow -->
             <div>
-              <label class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</label>
-              <div 
-                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
-              >
+              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
                 {$actualFlowOptimized.toFixed(6)}
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
@@ -375,23 +453,31 @@
           <h2 class="text-xl font-semibold">Input configuration</h2>
           <div class="flex gap-4 items-center">
             <div class="flex gap-2">
-              <button 
+              <button
                 on:click={handleResetClick}
                 class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
                 title="Clear all data and start fresh"
               >
                 Reset
               </button>
-        
-              <button 
+
+              <button
                 on:click={handleDemoDataClick}
                 class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm w-24 text-center"
                 title="Load sample configuration"
               >
                 Demo data
               </button>
-              
-              <button 
+
+              <button
+                on:click={openNewJunctionModal}
+                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm w-32 text-center"
+                title="Add a new junction"
+              >
+                + Add Junction
+              </button>
+
+              <button
                 on:click={handleExtractWaves}
                 disabled={isExtractDisabled}
                 class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-32"
@@ -403,8 +489,8 @@
                   Extract waves
                 {/if}
               </button>
-              
-              <button 
+
+              <button
                 on:click={handleOptimize}
                 class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center"
                 title="Recalculate waves and optimize offsets"
@@ -441,12 +527,20 @@
                 </svg>
                 <h3 class="text-lg font-medium mb-2">No junctions configured</h3>
                 <p class="text-sm mb-4">Add junctions to start visualizing traffic light coordination</p>
-                <button 
-                  on:click={startDiagram}
-                  class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
-                >
-                  Start
-                </button>
+                <div class="flex gap-2 justify-center">
+                  <button
+                    on:click={openNewJunctionModal}
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                  >
+                    + Add First Junction
+                  </button>
+                  <button
+                    on:click={handleDemoDataClick}
+                    class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                  >
+                    Load Demo Data
+                  </button>
+                </div>
               </div>
             </div>
           {:else}
@@ -461,6 +555,7 @@
               on:updateJunction={updateJunction}
               isResults={false}
               on:editSignal={openSignalModal}
+              on:editJunction={openJunctionModal}
             />
           {/if}
         </div>
@@ -470,21 +565,22 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <!-- Desired speed -->
             <div>
-              <label class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
-              <input 
-                type="number" 
-                bind:value={$desiredSpeed} 
+              <label for="input-desired-speed" class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
+              <input
+                id="input-desired-speed"
+                type="number"
+                bind:value={$desiredSpeed}
                 class="w-full px-3 py-2 border rounded-md"
                 min="10"
                 max="100"
               />
             </div>
-        
+
             <!-- Junctions -->
             <div>
-              <label class="block text-sm font-medium mb-2">Junctions</label>
+              <span class="block text-sm font-medium mb-2">Junctions</span>
               <p class="text-sm text-gray-600">{$junctions.length} junctions configured</p>
-              
+
               {#if $junctions.length === 0}
                 <p class="text-sm text-blue-600 mt-1">📍 Click "Demo data" or add junctions manually</p>
               {:else if $junctions.length === 1}
@@ -500,10 +596,11 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <!-- Desired intensity -->
             <div>
-              <label class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
-              <input 
-                type="number" 
-                bind:value={$desiredIntensity} 
+              <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
+              <input
+                id="input-desired-intensity"
+                type="number"
+                bind:value={$desiredIntensity}
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
                 class:border-orange-500={$wavesAreOutdated.isOutdated}
@@ -511,13 +608,14 @@
                 disabled={$wavesAreOutdated.isOutdated}
               />
             </div>
-        
+
             <!-- Desired flow -->
             <div>
-              <label class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
-              <input 
-                type="number" 
-                value={$desiredFlow} 
+              <label for="input-desired-flow" class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
+              <input
+                id="input-desired-flow"
+                type="number"
+                value={$desiredFlow}
                 class="w-full px-3 py-2 border rounded-md"
                 min="0"
                 step="0.5"
@@ -527,26 +625,22 @@
                 disabled={$wavesAreOutdated.isOutdated}
               />
             </div>
-        
+
             <!-- Actual intensity -->
             <div>
-              <label class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</label>
-              <div 
-                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
-              >
+              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
                 {($actualIntensity || 0).toFixed(2)}
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
-        
+
             <!-- Actual flow -->
             <div>
-              <label class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</label>
-              <div 
-                class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700"
-              >
+              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
                 {($actualFlow || 0).toFixed(6)}
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>

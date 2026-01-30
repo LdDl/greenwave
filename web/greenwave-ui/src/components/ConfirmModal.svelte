@@ -26,13 +26,15 @@
 </script>
 
 {#if show}
-  <!-- Modal Backdrop - Using inline styles to bypass Tailwind issues -->
-  <div 
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
     class="fixed inset-0 flex items-center justify-center z-50"
     style="background-color: rgba(0, 0, 0, 0.75);"
     on:click={handleBackdropClick}
+    on:keydown={(e) => e.key === 'Escape' && handleCancel()}
     role="dialog"
     aria-modal="true"
+    tabindex="-1"
   >
     <!-- Modal Content -->
     <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 border border-gray-300">
