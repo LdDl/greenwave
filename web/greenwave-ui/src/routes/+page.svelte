@@ -3,7 +3,9 @@
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
   import EditJunctionModal from '../components/EditJunctionModal.svelte';
+  import DropdownMenu from '../components/DropdownMenu.svelte';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
+  import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow } from '$lib/stores/core';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
@@ -23,6 +25,8 @@
   // Confirmation modal state
   let showResetModal = false;
   let showDemoModal = false;
+  let showImportModal = false;
+  let pendingImportData = null;
   
   // Signal modal state
   let selectedSignal = null;
@@ -102,6 +106,16 @@
   
   function confirmDemoData() {
     resetToDemo();
+  }
+
+  function confirmImport() {
+    if (pendingImportData) {
+      junctions.set(pendingImportData.junctions);
+      if (pendingImportData.desiredSpeed) desiredSpeed.set(pendingImportData.desiredSpeed);
+      if (pendingImportData.desiredIntensity) desiredIntensity.set(pendingImportData.desiredIntensity);
+      invalidateAll('configuration imported');
+      pendingImportData = null;
+    }
   }
 
   // Handle desired speed changes
@@ -306,6 +320,68 @@
     junctions.set([]);
   }
 
+  // File menu items
+  $: fileMenuItems = [
+    { id: 'import-input', label: 'Import' },
+    { id: 'export-input', label: 'Export Input' },
+    { id: 'export-output', label: 'Export Output', disabled: $optimizedJunctions.length === 0 },
+    { separator: true },
+    { id: 'demo-data', label: 'Load Demo Data' },
+    { id: 'reset', label: 'Reset All', danger: true }
+  ];
+
+  async function handleFileMenuSelect(event) {
+    const { id } = event.detail;
+
+    switch (id) {
+      case 'export-input':
+        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity);
+        exportToJSON(inputData, 'greenwave-input.json');
+        break;
+
+      case 'import-input':
+        try {
+          const imported = await importFromJSON();
+          const validation = validateImportedConfig(imported);
+
+          if (!validation.isValid) {
+            error.set(`Invalid file: ${validation.errors.join(', ')}`);
+            return;
+          }
+
+          if (isCleanState) {
+            // No data to lose - import directly
+            junctions.set(imported.junctions);
+            if (imported.desiredSpeed) desiredSpeed.set(imported.desiredSpeed);
+            if (imported.desiredIntensity) desiredIntensity.set(imported.desiredIntensity);
+            invalidateAll('configuration imported');
+          } else {
+            // Has data - show confirmation
+            pendingImportData = imported;
+            showImportModal = true;
+          }
+        } catch (err) {
+          if (err.message !== 'No file selected') {
+            error.set(err.message);
+          }
+        }
+        break;
+
+      case 'export-output':
+        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity);
+        exportToJSON(outputData, 'greenwave-output.json');
+        break;
+
+      case 'demo-data':
+        handleDemoDataClick();
+        break;
+
+      case 'reset':
+        handleResetClick();
+        break;
+    }
+  }
+
 </script>
 
 <!-- Reset Confirmation Modal -->
@@ -320,13 +396,24 @@
 />
 
 <!-- Demo Data Confirmation Modal -->
-<ConfirmModal 
+<ConfirmModal
   bind:show={showDemoModal}
   title="Load Demo Data"
   message="This will replace your current configuration with sample data and clear all calculated results."
   confirmText="Load Demo Data"
   cancelText="Cancel"
   onConfirm={confirmDemoData}
+  danger={false}
+/>
+
+<!-- Import Confirmation Modal -->
+<ConfirmModal
+  bind:show={showImportModal}
+  title="Import Configuration"
+  message="This will replace your current configuration with imported data and clear all calculated results."
+  confirmText="Import"
+  cancelText="Cancel"
+  onConfirm={confirmImport}
   danger={false}
 />
 
@@ -461,21 +548,11 @@
           <h2 class="text-xl font-semibold">Input configuration</h2>
           <div class="flex gap-4 items-center">
             <div class="flex gap-2">
-              <button
-                on:click={handleResetClick}
-                class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
-                title="Clear all data and start fresh"
-              >
-                Reset
-              </button>
-
-              <button
-                on:click={handleDemoDataClick}
-                class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm w-24 text-center"
-                title="Load sample configuration"
-              >
-                Demo data
-              </button>
+              <DropdownMenu
+                label="File"
+                items={fileMenuItems}
+                on:select={handleFileMenuSelect}
+              />
 
               <button
                 on:click={openNewJunctionModal}
@@ -591,7 +668,7 @@
               <p class="text-sm text-gray-600">{$junctions.length} junctions configured</p>
 
               {#if $junctions.length === 0}
-                <p class="text-sm text-blue-600 mt-1">📍 Click "Demo data" or add junctions manually</p>
+                <p class="text-sm text-blue-600 mt-1">📍 Use File menu or add junctions manually</p>
               {:else if $junctions.length === 1}
                 <p class="text-sm text-orange-600 mt-1">⚠️ Add at least 1 more junction to extract waves</p>
               {:else if hasValidationError}
