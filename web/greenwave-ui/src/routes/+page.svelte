@@ -156,10 +156,7 @@
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const optimizerParams = {
-        optimization_mode: "forward"
-      };
-      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', optimizerParams);
+      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, 'forward');
 
       // Update the store with optimized offsets
       optimizedOffsets.set(optimizeResponse.best_offsets || []);

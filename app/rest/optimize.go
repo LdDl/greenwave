@@ -23,6 +23,8 @@ type OptimizeRequest struct {
 	OptimizerType string `json:"optimizer_type"`
 	// Contains parameters for the optimizer
 	OptimizerParams map[string]interface{} `json:"optimizer_params"`
+	// Direction for optimization: "forward" (default) or "bidirectional"
+	Direction string `json:"direction"`
 }
 
 // OptimizeResponse represents the response structure for optimization requests.
@@ -89,6 +91,18 @@ func RequestOptimize() func(ctx echo.Context) error {
 			})
 		}
 
+		var optimizationMode greenwave.OptimizationMode
+		switch strings.ToLower(requestData.Direction) {
+		case "", "forward":
+			optimizationMode = greenwave.OPTIMIZATION_FORWARD
+		case "bidirectional":
+			optimizationMode = greenwave.OPTIMIZATION_BIDIRECTIONAL
+		default:
+			return ctx.JSON(400, echo.Map{
+				"Error": "Direction must be either 'forward' or 'bidirectional'",
+			})
+		}
+
 		// Convert DTOs to domain objects
 		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
@@ -96,7 +110,7 @@ func RequestOptimize() func(ctx echo.Context) error {
 		}
 
 		// Create optimizer based on type
-		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, requestData.DesiredSpeedKmh, requestData.OptimizerParams)
+		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, requestData.DesiredSpeedKmh, requestData.OptimizerParams, optimizationMode)
 		if err != nil {
 			return ctx.JSON(400, echo.Map{
 				"Error": err.Error(),
@@ -131,17 +145,17 @@ func RequestOptimize() func(ctx echo.Context) error {
 }
 
 // createOptimizer creates an optimizer based on the specified type and parameters
-func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}) (greenwave.Optimizer, error) {
+func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	switch strings.ToLower(optimizerType) {
 	case "genetic":
-		return createGeneticOptimizer(junctions, speedKmh, params)
+		return createGeneticOptimizer(junctions, speedKmh, params, optimizationMode)
 	default:
 		return nil, fmt.Errorf("unsupported optimizer type: %s", optimizerType)
 	}
 }
 
 // createGeneticOptimizer creates a genetic algorithm optimizer with flexible parameters
-func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}) (greenwave.Optimizer, error) {
+func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	// Helper function to get parameter with default value
 	getParam := func(key string, defaultValue interface{}) interface{} {
 		if val, exists := params[key]; exists {
@@ -205,7 +219,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 	}
 
 	crossoverTypeStr := getStringParam("crossover_type", "blend")
-	optimizationModeStr := getStringParam("optimization_mode", "forward")
 
 	// Parse crossover type
 	var crossoverType greenwave.CrossoverType
@@ -216,17 +229,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		crossoverType = greenwave.CROSSOVER_BLEND
 	default:
 		return nil, fmt.Errorf("unsupported crossover type: %s", crossoverTypeStr)
-	}
-
-	// Parse optimization mode
-	var optimizationMode greenwave.OptimizationMode
-	switch strings.ToLower(optimizationModeStr) {
-	case "forward":
-		optimizationMode = greenwave.OPTIMIZATION_FORWARD
-	case "bidirectional":
-		optimizationMode = greenwave.OPTIMIZATION_BIDIRECTIONAL
-	default:
-		return nil, fmt.Errorf("unsupported optimization mode: %s", optimizationModeStr)
 	}
 
 	// Validate parameters
