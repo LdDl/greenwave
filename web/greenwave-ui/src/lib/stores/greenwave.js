@@ -58,3 +58,28 @@ export const actualFlow = derived(
 
 // Actual intensity for input data plot (vehicles per hour)
 export const actualIntensity = derived(actualFlow, $actualFlow => $actualFlow * 3600);
+
+// Actual flow for reverse direction (vehicles per second)
+export const actualReverseFlow = derived(
+  [originalReverseThroughWaves, junctions, desiredFlow],
+  ([$originalReverseThroughWaves, $junctions, $desiredFlow]) => {
+    if ($originalReverseThroughWaves.length === 0 || $junctions.length === 0) return 0;
+
+    // Filter waves with depth equal to the number of junctions
+    const validWaves = $originalReverseThroughWaves.filter(wave => wave.depth === $junctions.length);
+
+    // Calculate total bandwidth of valid waves
+    const totalBandwidth = validWaves.reduce((total, wave) => total + wave.bandwidth, 0);
+
+    // Assume total cycle length is the same for all junctions
+    const totalCycleLength = calculateTotalDuration($junctions[0]) || 0;
+
+    if (totalCycleLength === 0) return 0;
+
+    // Calculate actual flow
+    return (totalBandwidth / totalCycleLength) * $desiredFlow;
+  }
+);
+
+// Actual intensity for reverse direction (vehicles per hour)
+export const actualReverseIntensity = derived(actualReverseFlow, $actualReverseFlow => $actualReverseFlow * 3600);

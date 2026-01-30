@@ -7,8 +7,8 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
-  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity } from '$lib/stores/greenwave';
-  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized } from '$lib/stores/optimization';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
+  import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
@@ -540,27 +540,59 @@
               />
             </div>
 
-            <!-- Actual Intensity -->
+            <!-- Actual Intensity (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensityOptimized || 0).toFixed(2)}
+                {($actualIntensityOptimized || 0).toFixed(2)} veh/h
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
 
-            <!-- Actual Flow -->
+            <!-- Actual Flow (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {$actualFlowOptimized.toFixed(6)}
+                {$actualFlowOptimized.toFixed(6)} veh/s
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
+
+            {#if $optimizationDirection === 'bidirectional'}
+              <!-- Actual Intensity (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual intensity <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Actual Flow (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual flow <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {$actualReverseFlowOptimized.toFixed(6)} veh/s
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       </div>
@@ -752,27 +784,59 @@
               />
             </div>
 
-            <!-- Actual intensity -->
+            <!-- Actual intensity (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual intensity (vehicles/hour)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensity || 0).toFixed(2)}
+                {($actualIntensity || 0).toFixed(2)} veh/h
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
 
-            <!-- Actual flow -->
+            <!-- Actual flow (Forward) -->
             <div>
-              <span class="block text-sm font-medium mb-2">Actual flow (vehicles/second)</span>
+              <span class="block text-sm font-medium mb-2">
+                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
+              </span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualFlow || 0).toFixed(6)}
+                {($actualFlow || 0).toFixed(6)} veh/s
                 {#if $wavesAreOutdated.isOutdated}
                   <span class="text-orange-500">(Outdated)</span>
                 {/if}
               </div>
             </div>
+
+            {#if $optimizationDirection === 'bidirectional'}
+              <!-- Actual intensity (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual intensity <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseIntensity || 0).toFixed(2)} veh/h
+                  {#if $wavesAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Actual flow (Reverse) -->
+              <div>
+                <span class="block text-sm font-medium mb-2">
+                  Actual flow <span class="text-blue-600">(rev)</span>
+                </span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
+                  {($actualReverseFlow || 0).toFixed(6)} veh/s
+                  {#if $wavesAreOutdated.isOutdated}
+                    <span class="text-orange-500">(Outdated)</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
       </div>
