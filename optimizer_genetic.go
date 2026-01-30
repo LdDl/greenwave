@@ -13,6 +13,10 @@ const (
 	CROSSOVER_BLEND CrossoverType = iota
 	// CROSSOVER_UNIFORM uses a uniform crossover method where offspring are created by randomly selecting offsets from each parent
 	CROSSOVER_UNIFORM
+
+	// @todo: consider making CONVERGENCE_GENERATIONS configurable
+	// Number of generations without fitness improvement before early stopping (convergence)
+	CONVERGENCE_GENERATIONS = 15
 )
 
 var crossoverTypeToStr = [...]string{"blend", "uniform"}
@@ -185,6 +189,8 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 
 	bestFitness := -1.0
 	var bestIndividual *Individual
+	generationsWithoutImprovement := 0
+	previousBestFitness := -1.0
 
 	for generation := 0; generation < optga.generations; generation++ {
 		// Evaluate fitness for each individual in the population
@@ -193,6 +199,18 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 			if individual.Fitness > bestFitness || bestIndividual == nil {
 				bestFitness = individual.Fitness
 				bestIndividual = individual
+			}
+		}
+
+		// Check for convergence
+		if bestFitness > previousBestFitness {
+			generationsWithoutImprovement = 0
+			previousBestFitness = bestFitness
+		} else {
+			generationsWithoutImprovement++
+			if generationsWithoutImprovement >= CONVERGENCE_GENERATIONS {
+				// Early stopping due to convergence
+				break
 			}
 		}
 
