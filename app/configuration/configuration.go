@@ -16,9 +16,10 @@ import (
 
 // Configuration represents the application configuration.
 type Configuration struct {
-	ServerCfg  ServerConf `json:"server_cfg" toml:"server_cfg"`
-	UseCORS    bool       `json:"use_cors" toml:"use_cors"`
-	DocsFolder string     `json:"docs_folder" toml:"docs_folder"`
+	ServerCfg    ServerConf `json:"server_cfg" toml:"server_cfg"`
+	UseCORS      bool       `json:"use_cors" toml:"use_cors"`
+	DocsFolder   string     `json:"docs_folder" toml:"docs_folder"`
+	StaticFolder string     `json:"static_folder" toml:"static_folder"`
 }
 
 // ServerConf contains the server configuration details.
@@ -71,6 +72,7 @@ func PrepareConfiguration() (*Configuration, error) {
 		return nil, errors.Wrapf(err, "invalid USE_CORS environment variable: '%s'", corsEnableStr)
 	}
 	docsPathStr := os.Getenv("DOCS_PATH")
+	staticPathStr := os.Getenv("STATIC_PATH")
 
 	mainCfg := &Configuration{
 		ServerCfg: ServerConf{
@@ -79,8 +81,9 @@ func PrepareConfiguration() (*Configuration, error) {
 			MainPath:       serverMainPath,
 			StartupMessage: serverStartupMessage,
 		},
-		UseCORS:    corsEnable,
-		DocsFolder: docsPathStr,
+		UseCORS:      corsEnable,
+		DocsFolder:   docsPathStr,
+		StaticFolder: staticPathStr,
 	}
 	return mainCfg, nil
 }

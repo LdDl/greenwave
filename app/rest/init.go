@@ -3,6 +3,8 @@ package rest
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/LdDl/greenwave/app/configuration"
 	"github.com/labstack/echo/v4"
@@ -54,5 +56,27 @@ func MainAPI(app *echo.Echo, appCfg *configuration.Configuration) {
 		routerGroup.GET("/health", GetHealth())
 		routerGroup.POST("/extract", ExtractGreenWaves())
 		routerGroup.POST("/optimize", RequestOptimize())
+	}
+
+	// Serve static files from the UI build folder if configured
+	if appCfg.StaticFolder != "" {
+		// Serve static assets
+		app.Static("/", appCfg.StaticFolder)
+
+		// SPA fallback: serve index.html for all non-API, non-file routes
+		app.GET("/*", func(c echo.Context) error {
+			requestPath := c.Request().URL.Path
+
+			// Check if the requested file exists
+			filePath := filepath.Join(appCfg.StaticFolder, requestPath)
+			if _, err := os.Stat(filePath); err == nil {
+				return c.File(filePath)
+			}
+
+			// Fallback to index.html for SPA routing
+			return c.File(filepath.Join(appCfg.StaticFolder, "index.html"))
+		})
+
+		log.Info().Str("scope", "api").Str("folder", appCfg.StaticFolder).Msg("Serving static UI files")
 	}
 }

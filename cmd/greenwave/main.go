@@ -29,7 +29,9 @@ func main() {
 
 	microservice := rest.Setup(mainCfg)
 	microserviceAddr := fmt.Sprintf(":%d", mainCfg.ServerCfg.Port)
-	log.Info().Str("scope", "api").Msg(fmt.Sprintf("Start microservice on URL: '%s'", microserviceAddr))
+	if mainCfg.ServerCfg.StartupMessage {
+		log.Info().Str("scope", "api").Msg(fmt.Sprintf("Start microservice on URL: '%s'", microserviceAddr))
+	}
 	err = microservice.Start(microserviceAddr)
 	if err != nil {
 		log.Error().Err(err).Str("scope", "api").Msg("Can't start REST API")
