@@ -4,8 +4,12 @@ import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 import { resultsInvalidated } from './signals';
 import { resultsInvalidationReasons, isResultsInvalidated } from '$lib/stores/invalidation';
 
+// Optimized waves (forward direction)
 export const optimizedGreenWaves = writable([]);
 export const optimizedThroughWaves = writable([]);
+// Optimized waves (reverse direction, for bidirectional mode)
+export const optimizedReverseGreenWaves = writable([]);
+export const optimizedReverseThroughWaves = writable([]);
 export const optimizedOffsets = writable([]);
 export const optimizedJunctions = writable([]);
 export const optimizationHistory = writable([]);

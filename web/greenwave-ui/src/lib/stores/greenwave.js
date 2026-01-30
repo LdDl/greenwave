@@ -4,9 +4,12 @@ import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 import { signalsInvalidated, resetSignalsInvalidation } from './signals';
 import { inputInvalidationReasons, isInputInvalidated } from '$lib/stores/invalidation';
 
-// Wave-related stores
+// Wave-related stores (forward direction)
 export const originalGreenWaves = writable([]);
 export const originalThroughWaves = writable([]);
+// Wave-related stores (reverse direction, for bidirectional mode)
+export const originalReverseGreenWaves = writable([]);
+export const originalReverseThroughWaves = writable([]);
 export const showGreenWaves = writable(false);
 export const waveCalculationPositions = writable([]);
 export const lastCalculatedSpeed = writable(null);
