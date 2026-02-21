@@ -212,7 +212,12 @@
         });
     }
   }
-  
+
+  // Helper function to handle modulo with negative numbers correctly
+  function positiveModulo(value, modulus) {
+    return ((value % modulus) + modulus) % modulus;
+  }
+
   // Function to update signal lines for a specific junction during drag
   function updateSignalLinesForJunction(junctionId, newY, junctionsWithDuration, xScale, yScale, chart) {
     const junction = junctionsWithDuration.find(j => j.id === junctionId);
@@ -225,8 +230,8 @@
     junction.cycle.forEach(phase => {
       phase.signals.forEach(signal => {
         if (signal.duration > 0) {
-          const startTime = currentTime % junction.total_duration;
-          const endTime = (currentTime + signal.duration) % junction.total_duration;
+          const startTime = positiveModulo(currentTime, junction.total_duration);
+          const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
           
           if (endTime < startTime) {
             chart.append("line")
@@ -271,8 +276,8 @@
       junction.cycle.forEach(phase => {
         phase.signals.forEach(signal => {
           if (signal.duration > 0) {
-            const startTime = currentTime % junction.total_duration;
-            const endTime = (currentTime + signal.duration) % junction.total_duration;
+            const startTime = positiveModulo(currentTime, junction.total_duration);
+            const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
             if (endTime < startTime) {
               const linePartOne = chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
@@ -362,8 +367,8 @@
         const phaseDuration = phase.signals.reduce((sum, signal) => sum + signal.duration, 0);
 
         // Calculate phase start and end times
-        const phaseStart = currentTime % junction.total_duration;
-        const phaseEnd = (currentTime + phaseDuration) % junction.total_duration;
+        const phaseStart = positiveModulo(currentTime, junction.total_duration);
+        const phaseEnd = positiveModulo(currentTime + phaseDuration, junction.total_duration);
 
         // Define alternating colors for phases
         const phaseColor = phaseIdx % 2 === 0 ? "#4B0082" : "#18B7CC";
@@ -406,7 +411,7 @@
 
         // Draw phase label (centered)
         const labelX = phaseEnd < phaseStart
-          ? xScale((phaseStart + junction.total_duration + phaseEnd) / 2 % junction.total_duration)
+          ? xScale(positiveModulo((phaseStart + junction.total_duration + phaseEnd) / 2, junction.total_duration))
           : xScale((phaseStart + phaseEnd) / 2);
 
         chart.append("text")
