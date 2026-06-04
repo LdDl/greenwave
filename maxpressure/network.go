@@ -11,28 +11,30 @@ const (
 	VEHICLE_DEFAULT_LENGTH_M = 7.0
 )
 
-// SignalGroupID identifies a phase within an intersection.
-type SignalGroupID int
+// StageID identifies a stage within an intersection.
+// A stage is a set of simultaneous compatible turn movements (European usage),
+// equivalent to an "intersection control matrix" in Varaiya (2013).
+type StageID int
 
-// SignalGroup is a set of non-conflicting connector link IDs (movements)
+// Stage is a set of non-conflicting connector link IDs (movements)
 // that can be served simultaneously at an intersection.
-type SignalGroup struct {
-	ID           SignalGroupID
-	ConnectorIDs []gmns.LinkID // meso connector link IDs belonging to this group
+type Stage struct {
+	ID           StageID
+	ConnectorIDs []gmns.LinkID // meso connector link IDs belonging to this stage
 }
 
 // IntersectionState holds runtime state for a signalized intersection.
 type IntersectionState struct {
-	MacroNodeID  gmns.NodeID
-	SignalGroups []SignalGroup
+	MacroNodeID gmns.NodeID
+	Stages      []Stage
 
 	MinGreenS  float64
 	MaxGreenS  float64
 	ClearanceS float64
 
-	ActivePhase      SignalGroupID
-	ActivePhaseSince float64
-	PreviousPhase    SignalGroupID
+	ActiveStage      StageID
+	ActiveStageSince float64
+	PreviousStage    StageID
 }
 
 // Network wraps a meso.Net and adds queue lengths + phase assignments

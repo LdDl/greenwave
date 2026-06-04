@@ -30,11 +30,11 @@ func DefaultSmoothingConfig() SmoothingConfig {
 // given intersection in its previous phase.
 func (net *Network) ServedLinks(inter *IntersectionState) map[gmns.LinkID]bool {
 	served := make(map[gmns.LinkID]bool)
-	for i := range inter.SignalGroups {
-		if inter.SignalGroups[i].ID != inter.PreviousPhase {
+	for i := range inter.Stages {
+		if inter.Stages[i].ID != inter.PreviousStage {
 			continue
 		}
-		for _, cid := range inter.SignalGroups[i].ConnectorIDs {
+		for _, cid := range inter.Stages[i].ConnectorIDs {
 			if link, ok := net.Meso.Links[cid]; ok {
 				if downID := link.MovementMesoLinkOutcome(); downID >= 0 {
 					served[downID] = true
@@ -51,7 +51,7 @@ func (net *Network) ServedLinks(inter *IntersectionState) map[gmns.LinkID]bool {
 //
 // Logic: for connector C at intersection J with upstream road link U,
 // scan all connectors in meso.Net that discharge into U. If any of them
-// belongs to a different intersection whose PreviousPhase matches, return true.
+// belongs to a different intersection whose PreviousStage matches, return true.
 func (net *Network) IsUpstreamServed(connectorID gmns.LinkID) bool {
 	link, ok := net.Meso.Links[connectorID]
 	if !ok {
@@ -80,11 +80,11 @@ func (net *Network) IsUpstreamServed(connectorID gmns.LinkID) bool {
 		if !ok {
 			continue
 		}
-		for i := range upInter.SignalGroups {
-			if upInter.SignalGroups[i].ID != upInter.PreviousPhase {
+		for i := range upInter.Stages {
+			if upInter.Stages[i].ID != upInter.PreviousStage {
 				continue
 			}
-			for _, pid := range upInter.SignalGroups[i].ConnectorIDs {
+			for _, pid := range upInter.Stages[i].ConnectorIDs {
 				if pid == otherLink.ID {
 					return true
 				}
@@ -115,7 +115,7 @@ func (net *Network) SmoothedMovementWeight(connectorID gmns.LinkID, cfg Smoothin
 }
 
 // SmoothedPhasePressure computes pressure for a phase with Smoothing-MP boost.
-func (net *Network) SmoothedPhasePressure(phase *SignalGroup, cfg SmoothingConfig) float64 {
+func (net *Network) SmoothedPhasePressure(phase *Stage, cfg SmoothingConfig) float64 {
 	total := 0.0
 	for _, cid := range phase.ConnectorIDs {
 		total += net.SmoothedMovementWeight(cid, cfg)
@@ -124,14 +124,14 @@ func (net *Network) SmoothedPhasePressure(phase *SignalGroup, cfg SmoothingConfi
 }
 
 // SmoothedSelectPhase returns the phase with maximum smoothed pressure.
-func (net *Network) SmoothedSelectPhase(inter *IntersectionState, cfg SmoothingConfig) (SignalGroupID, float64) {
-	bestPhase := inter.SignalGroups[0].ID
+func (net *Network) SmoothedSelectPhase(inter *IntersectionState, cfg SmoothingConfig) (StageID, float64) {
+	bestPhase := inter.Stages[0].ID
 	bestPressure := math.Inf(-1)
-	for i := range inter.SignalGroups {
-		p := net.SmoothedPhasePressure(&inter.SignalGroups[i], cfg)
-		if p > bestPressure || (p == bestPressure && inter.SignalGroups[i].ID < bestPhase) {
+	for i := range inter.Stages {
+		p := net.SmoothedPhasePressure(&inter.Stages[i], cfg)
+		if p > bestPressure || (p == bestPressure && inter.Stages[i].ID < bestPhase) {
 			bestPressure = p
-			bestPhase = inter.SignalGroups[i].ID
+			bestPhase = inter.Stages[i].ID
 		}
 	}
 	return bestPhase, bestPressure

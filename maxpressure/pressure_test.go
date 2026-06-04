@@ -46,7 +46,7 @@ func buildIntersectionA() *Network {
 
 	net.Intersections[50] = &IntersectionState{
 		MacroNodeID: 50,
-		SignalGroups: []SignalGroup{
+		Stages: []Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{110, 111, 112, 113}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{120, 121, 122, 123}},
 		},
@@ -71,8 +71,8 @@ func TestPhasePressure_P0_GreaterThan_P1(t *testing.T) {
 	net := buildIntersectionA()
 	inter := net.Intersections[50]
 
-	p0 := net.PhasePressure(&inter.SignalGroups[0])
-	p1 := net.PhasePressure(&inter.SignalGroups[1])
+	p0 := net.PhasePressure(&inter.Stages[0])
+	p1 := net.PhasePressure(&inter.Stages[1])
 
 	assert.Greater(t, p0, p1)
 	assert.InDelta(t, 927.0, p0, 100.0, "p0 (EW) should be ~927")
@@ -84,7 +84,7 @@ func TestSelectPhase_ChoosesP0(t *testing.T) {
 	inter := net.Intersections[50]
 
 	phase, pressure := net.SelectPhase(inter)
-	assert.Equal(t, SignalGroupID(0), phase)
+	assert.Equal(t, StageID(0), phase)
 	assert.Positive(t, pressure)
 }
 
@@ -119,12 +119,12 @@ func TestSelectPhase_TieBreaksLowerID(t *testing.T) {
 
 	net.Intersections[50] = &IntersectionState{
 		MacroNodeID: 50,
-		SignalGroups: []SignalGroup{
+		Stages: []Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{100}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{200}},
 		},
 	}
 
 	phase, _ := net.SelectPhase(net.Intersections[50])
-	assert.Equal(t, SignalGroupID(0), phase, "tie should break to lower ID")
+	assert.Equal(t, StageID(0), phase, "tie should break to lower ID")
 }

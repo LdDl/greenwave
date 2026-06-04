@@ -68,14 +68,14 @@ func runScenario(alpha float64) {
 
 	net.Intersections[50] = &maxpressure.IntersectionState{
 		MacroNodeID: 50,
-		SignalGroups: []maxpressure.SignalGroup{
+		Stages: []maxpressure.Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{100, 101}}, // EW
 			{ID: 1, ConnectorIDs: []gmns.LinkID{102, 103}}, // NS
 		},
 	}
 	net.Intersections[60] = &maxpressure.IntersectionState{
 		MacroNodeID: 60,
-		SignalGroups: []maxpressure.SignalGroup{
+		Stages: []maxpressure.Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{200, 201}}, // EW
 			{ID: 1, ConnectorIDs: []gmns.LinkID{202, 203}}, // NS
 		},
@@ -124,7 +124,7 @@ func runScenario(alpha float64) {
 
 		for _, r := range stepResults {
 			if r.IntersectionID == 60 {
-				if r.SelectedPhase == 0 {
+				if r.SelectedStage == 0 {
 					bEWcount++
 				} else {
 					bNScount++
@@ -136,7 +136,7 @@ func runScenario(alpha float64) {
 		if int(timeSec)%30 == 0 || i == steps-1 {
 			fmt.Printf("  t=%4.0fs | total %5.1f | link3 %5.1f |", timeSec, queueLen, link3queue)
 			for _, r := range stepResults {
-				fmt.Printf(" int%d=>sg%d", r.IntersectionID, r.SelectedPhase)
+				fmt.Printf(" int%d=>sg%d", r.IntersectionID, r.SelectedStage)
 			}
 			fmt.Println()
 		}

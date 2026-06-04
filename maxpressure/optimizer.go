@@ -85,7 +85,7 @@ func (opt *MPOptimizer) Time() float64 {
 // StepResult holds the outcome of one simulation step for an intersection.
 type StepResult struct {
 	IntersectionID gmns.NodeID
-	SelectedPhase  SignalGroupID
+	SelectedStage  StageID
 	Pressure       float64
 	Boosted        bool
 }
@@ -122,10 +122,10 @@ func (opt *MPOptimizer) Step() []StepResult {
 
 	// 3. Select signal groups
 	results := make([]StepResult, 0, len(net.Intersections))
-	phaseDecisions := make(map[gmns.NodeID]SignalGroupID, len(net.Intersections))
+	phaseDecisions := make(map[gmns.NodeID]StageID, len(net.Intersections))
 
 	for nid, inter := range net.Intersections {
-		var selected SignalGroupID
+		var selected StageID
 		var pressure float64
 
 		if opt.Config.Smoothing.Alpha > 0 {
@@ -137,7 +137,7 @@ func (opt *MPOptimizer) Step() []StepResult {
 		phaseDecisions[nid] = selected
 		results = append(results, StepResult{
 			IntersectionID: nid,
-			SelectedPhase:  selected,
+			SelectedStage:  selected,
 			Pressure:       pressure,
 			Boosted:        opt.Config.Smoothing.Alpha > 0,
 		})
@@ -147,11 +147,11 @@ func (opt *MPOptimizer) Step() []StepResult {
 	linkDelta := make(map[gmns.LinkID]float64)
 	for nid, sgID := range phaseDecisions {
 		inter := net.Intersections[nid]
-		for i := range inter.SignalGroups {
-			if inter.SignalGroups[i].ID != sgID {
+		for i := range inter.Stages {
+			if inter.Stages[i].ID != sgID {
 				continue
 			}
-			for _, cid := range inter.SignalGroups[i].ConnectorIDs {
+			for _, cid := range inter.Stages[i].ConnectorIDs {
 				link, ok := net.Meso.Links[cid]
 				if !ok {
 					continue
@@ -189,10 +189,10 @@ func (opt *MPOptimizer) Step() []StepResult {
 	// Update intersection state
 	for nid, sgID := range phaseDecisions {
 		inter := net.Intersections[nid]
-		inter.PreviousPhase = inter.ActivePhase
-		if sgID != inter.ActivePhase {
-			inter.ActivePhase = sgID
-			inter.ActivePhaseSince = opt.time
+		inter.PreviousStage = inter.ActiveStage
+		if sgID != inter.ActiveStage {
+			inter.ActiveStage = sgID
+			inter.ActiveStageSince = opt.time
 		}
 	}
 

@@ -69,21 +69,21 @@ func buildTwoIntersectionCorridor() *Network {
 
 	net.Intersections[50] = &IntersectionState{
 		MacroNodeID: 50,
-		SignalGroups: []SignalGroup{
+		Stages: []Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{110, 111, 112, 113}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{114, 115, 116, 117}},
 		},
-		ActivePhase:   0,
-		PreviousPhase: 0,
+		ActiveStage:   0,
+		PreviousStage: 0,
 	}
 	net.Intersections[60] = &IntersectionState{
 		MacroNodeID: 60,
-		SignalGroups: []SignalGroup{
+		Stages: []Stage{
 			{ID: 0, ConnectorIDs: []gmns.LinkID{130, 131, 132, 133}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{134, 135, 136, 137}},
 		},
-		ActivePhase:   1,
-		PreviousPhase: 1,
+		ActiveStage:   1,
+		PreviousStage: 1,
 	}
 
 	return net
@@ -127,7 +127,7 @@ func TestSmoothedSelectPhase_BoostFlipsDecision(t *testing.T) {
 	stdPhase, _ := net.SelectPhase(interB)
 	smoothPhase, _ := net.SmoothedSelectPhase(interB, SmoothingConfig{Alpha: 1.5})
 
-	assert.Equal(t, SignalGroupID(0), smoothPhase, "Smoothing-MP should pick EW to serve arriving platoon")
+	assert.Equal(t, StageID(0), smoothPhase, "Smoothing-MP should pick EW to serve arriving platoon")
 	t.Logf("Standard MP: sg%d, Smoothing-MP: sg%d", stdPhase, smoothPhase)
 }
 
@@ -150,7 +150,7 @@ func TestOptimizer_StandardMP_SelectsEW(t *testing.T) {
 
 	results := opt.Step()
 	require.Len(t, results, 1)
-	assert.Equal(t, SignalGroupID(0), results[0].SelectedPhase)
+	assert.Equal(t, StageID(0), results[0].SelectedStage)
 }
 
 func TestOptimizer_QueuesNonNegative(t *testing.T) {
@@ -169,7 +169,7 @@ func TestOptimizer_QueuesNonNegative(t *testing.T) {
 func TestOptimizer_IntersectionStateUpdated(t *testing.T) {
 	net := buildIntersectionA()
 	inter := net.Intersections[50]
-	inter.ActivePhase = 1
+	inter.ActiveStage = 1
 
 	opt := NewMPOptimizer(net, MPConfig{
 		DeltaT:    5.0,
@@ -177,8 +177,8 @@ func TestOptimizer_IntersectionStateUpdated(t *testing.T) {
 	})
 	opt.Step()
 
-	assert.Equal(t, SignalGroupID(1), inter.PreviousPhase)
-	assert.Equal(t, SignalGroupID(0), inter.ActivePhase)
+	assert.Equal(t, StageID(1), inter.PreviousStage)
+	assert.Equal(t, StageID(0), inter.ActiveStage)
 }
 
 func TestOptimizer_BoundaryDepartures(t *testing.T) {
@@ -202,7 +202,7 @@ func TestOptimizer_MultiStep(t *testing.T) {
 	for step := 0; step < 10; step++ {
 		results := opt.Step()
 		for _, result := range results {
-			assert.GreaterOrEqual(t, int(result.SelectedPhase), 0)
+			assert.GreaterOrEqual(t, int(result.SelectedStage), 0)
 		}
 		for lid, queue := range net.Queues {
 			assert.GreaterOrEqual(t, queue, 0.0, "Step %d, link %d", step, lid)

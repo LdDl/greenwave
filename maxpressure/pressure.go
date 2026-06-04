@@ -29,7 +29,7 @@ func (net *Network) MovementWeight(connectorID gmns.LinkID) float64 {
 // PhasePressure computes the total pressure for a phase at an intersection:
 //
 //	W(p) = sum_{connector in p} w_{connector}
-func (net *Network) PhasePressure(phase *SignalGroup) float64 {
+func (net *Network) PhasePressure(phase *Stage) float64 {
 	total := 0.0
 	for _, cid := range phase.ConnectorIDs {
 		total += net.MovementWeight(cid)
@@ -38,25 +38,25 @@ func (net *Network) PhasePressure(phase *SignalGroup) float64 {
 }
 
 // PhasePressures computes pressures for all phases of an intersection.
-func (net *Network) PhasePressures(inter *IntersectionState) map[SignalGroupID]float64 {
-	result := make(map[SignalGroupID]float64, len(inter.SignalGroups))
-	for i := range inter.SignalGroups {
-		result[inter.SignalGroups[i].ID] = net.PhasePressure(&inter.SignalGroups[i])
+func (net *Network) PhasePressures(inter *IntersectionState) map[StageID]float64 {
+	result := make(map[StageID]float64, len(inter.Stages))
+	for i := range inter.Stages {
+		result[inter.Stages[i].ID] = net.PhasePressure(&inter.Stages[i])
 	}
 	return result
 }
 
 // SelectPhase returns the phase with maximum pressure.
-// Ties are broken by lower SignalGroupID.
-func (net *Network) SelectPhase(inter *IntersectionState) (SignalGroupID, float64) {
-	bestPhase := inter.SignalGroups[0].ID
+// Ties are broken by lower StageID.
+func (net *Network) SelectPhase(inter *IntersectionState) (StageID, float64) {
+	bestPhase := inter.Stages[0].ID
 	bestPressure := math.Inf(-1)
 
-	for i := range inter.SignalGroups {
-		p := net.PhasePressure(&inter.SignalGroups[i])
-		if p > bestPressure || (p == bestPressure && inter.SignalGroups[i].ID < bestPhase) {
+	for i := range inter.Stages {
+		p := net.PhasePressure(&inter.Stages[i])
+		if p > bestPressure || (p == bestPressure && inter.Stages[i].ID < bestPhase) {
 			bestPressure = p
-			bestPhase = inter.SignalGroups[i].ID
+			bestPhase = inter.Stages[i].ID
 		}
 	}
 	return bestPhase, bestPressure

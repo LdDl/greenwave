@@ -39,7 +39,7 @@ Each intersection has connector links (movements) that connect upstream segments
 
 Intersection A (macroNode=50):
 
-| Connector ID | Movement | Upstream -> Downstream | $S$ (veh/h) | Signal Group |
+| Connector ID | Movement | Upstream -> Downstream | $S$ (veh/h) | Stage |
 |:---:|:---:|:---:|:---:|:---:|
 | 100 | EBT | [1] WA->A -> [3] A->B | 900 | sg0 (EW) |
 | 101 | EBR | [1] WA->A -> [6] A->NA | 700 | sg0 (EW) |
@@ -48,7 +48,7 @@ Intersection A (macroNode=50):
 
 Intersection B (macroNode=60):
 
-| Connector ID | Movement | Upstream -> Downstream | $S$ (veh/h) | Signal Group |
+| Connector ID | Movement | Upstream -> Downstream | $S$ (veh/h) | Stage |
 |:---:|:---:|:---:|:---:|:---:|
 | 200 | EBT | [3] A->B -> [7] B->EB | 900 | sg0 (EW) |
 | 201 | EBR | [3] A->B -> [8] B->NB | 700 | sg0 (EW) |
@@ -106,7 +106,7 @@ Example: WA->A at peak ($q = 2080$ veh/h), $\Delta t = 5$ s $\Rightarrow$ inject
 
 Links 5, 6, 7, 8 are auto-detected as boundary departures (they are `MovementMesoLinkOutcome` of some connector but `MovementMesoLinkIncome` of none). Their queues are set to 0 each step - vehicles that arrive here have exited the network.
 
-### Step 3: Compute pressure for each signal group
+### Step 3: Compute pressure for each stage
 
 Note: the Original-MP (Varaiya, 2013) uses absolute queue lengths with infinite link capacity. We use the Modified MP formulation (Kouvelas et al., 2014) which normalizes queues by storage capacity $K$, accounting for finite link lengths. On the meso graph, turning ratios are encoded in the graph structure (each connector = one movement), so they do not appear in the formula.
 
@@ -119,7 +119,7 @@ where:
 - $K_l = \dfrac{\text{length}_l \cdot \text{lanes}_l}{L_{\text{veh}}}$ - storage capacity ($L_{\text{veh}} = 7$ m)
 - $S_{u,d}$ - saturation flow of the connector (veh/h)
 
-Then sum weights per signal group $p$:
+Then sum weights per stage $p$:
 
 $$W(p) = \sum_{(u,d) \in p} w_{u,d}$$
 
@@ -134,7 +134,7 @@ Example (initial state, intersection A, $K_1 = 57.1$, $K_3 = 85.7$):
 | 103 (SBL) | 700 | 8 | 57.1 | 5 | 85.7 | 0.140 | 0.058 | 57.3 |
 | sg1 total | | | | | | | | 183.3 |
 
-Phase selection - activate the signal group with maximum pressure:
+Phase selection - activate the stage with maximum pressure:
 
 $$p^* = \arg\max_p W(p)$$
 
@@ -142,7 +142,7 @@ Decision: $W(\text{sg0}) = 367.9 > W(\text{sg1}) = 183.3$ $\Rightarrow$ activate
 
 ### Step 4: Discharge vehicles
 
-For the active signal group, each connector discharges vehicles from upstream to downstream:
+For the active stage, each connector discharges vehicles from upstream to downstream:
 
 $$d_{u,d}(k) = \min\!\left(\frac{S_{u,d} \cdot \Delta t}{3600},\; x_u(k)\right)$$
 
@@ -154,7 +154,7 @@ $$x_l(k+1) = x_l(k) - \sum_{\text{out}} d_{\text{out}}(k) + \sum_{\text{in}} d_{
 
 ### Step 6: Update intersection state
 
-Record which signal group was active (needed for Smoothing-MP boost in next step). Advance simulation time by $\Delta t$.
+Record which stage was active (needed for Smoothing-MP boost in next step). Advance simulation time by $\Delta t$.
 
 ## Smoothing-MP enhancement
 
@@ -235,8 +235,8 @@ Each line shows a snapshot every 30 seconds:
 - `t=120s` - simulation time
 - `total 84.9` - sum of all queues across the network (vehicles)
 - `link3 20.3` - queue on link 3 (A->B), the coordination link between intersections
-- `int50=>sg0` - intersection A activated signal group 0 (EW) at this step
-- `int60=>sg1` - intersection B activated signal group 1 (NS) at this step
+- `int50=>sg0` - intersection A activated stage 0 (EW) at this step
+- `int60=>sg1` - intersection B activated stage 1 (NS) at this step
 
 Summary metrics:
 - `avg total queue` / `max` - network-wide congestion over the simulation
