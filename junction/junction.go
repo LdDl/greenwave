@@ -1,6 +1,10 @@
-package greenwave
+package junction
 
-import "github.com/LdDl/greenwave/color"
+import (
+	"github.com/LdDl/greenwave/color"
+	"github.com/LdDl/greenwave/geom"
+	"github.com/LdDl/greenwave/greeninterval"
+)
 
 // Junction represents a traffic light junction
 type Junction struct {
@@ -15,7 +19,7 @@ type Junction struct {
 	// Offset of the cycle
 	offset int
 	// Location of the junction
-	point Point
+	point geom.Point
 }
 
 // NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases)
@@ -29,7 +33,7 @@ func NewJunction(cycle []*Phase, options ...func(*Junction)) *Junction {
 		Label:         "-1",
 		Cycle:         cycle,
 		totalDuration: totalDuration,
-		offset:        0, // Default offset is 0, can be set later if needed
+		offset:        0,
 	}
 	for _, option := range options {
 		option(junction)
@@ -49,7 +53,6 @@ func (jun *Junction) SetOffset(offset int) {
 		jun.offset = 0
 		return
 	}
-	// Normalize offset to [0, totalDuration) - handles negative values correctly
 	jun.offset = ((offset % jun.totalDuration) + jun.totalDuration) % jun.totalDuration
 }
 
@@ -68,7 +71,7 @@ func WithLabel(label string) func(*Junction) {
 }
 
 // WithPoint is an option function that sets the point (location) for the junction.
-func WithPoint(point Point) func(*Junction) {
+func WithPoint(point geom.Point) func(*Junction) {
 	return func(j *Junction) {
 		j.point = point
 	}
@@ -80,16 +83,17 @@ func (jun *Junction) GetTotalDuration() int {
 }
 
 // GetPoint returns the point (location) of the junction.
-func (jun *Junction) GetPoint() Point {
+func (jun *Junction) GetPoint() geom.Point {
 	return jun.point
 }
 
-func (jun *Junction) GetGreenIntervals() []*GreenInterval {
-	intervals := make([]*GreenInterval, 0)
+// GetGreenIntervals extracts green intervals from the junction's cycle.
+func (jun *Junction) GetGreenIntervals() []*greeninterval.GreenInterval {
+	intervals := make([]*greeninterval.GreenInterval, 0)
 
 	cycleDuration := jun.totalDuration
 	if cycleDuration <= 0 {
-		return intervals // No valid cycle duration, return empty intervals
+		return intervals
 	}
 
 	currentTime := 0
@@ -101,9 +105,9 @@ func (jun *Junction) GetGreenIntervals() []*GreenInterval {
 				start := signalStart
 				end := signalStart + signal.Duration
 				if end == cycleDuration {
-					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end)))
+					intervals = append(intervals, greeninterval.New(phaseIdx, float64(start%cycleDuration), float64(end)))
 				} else {
-					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end%cycleDuration)))
+					intervals = append(intervals, greeninterval.New(phaseIdx, float64(start%cycleDuration), float64(end%cycleDuration)))
 				}
 			}
 			signalStart += signal.Duration

@@ -1,13 +1,14 @@
-package greenwave
+package junction
 
 import (
-	"testing"
-
 	"github.com/LdDl/greenwave/color"
+	"github.com/LdDl/greenwave/geom"
 )
 
-func basicTestJuntions() []*Junction {
-	junctions := []*Junction{
+// BasicTestJunctions returns a set of 4 junctions used across tests.
+// Each junction has a cycle of 85 seconds (two phases).
+func BasicTestJunctions() []*Junction {
+	return []*Junction{
 		NewJunction(
 			[]*Phase{
 				NewPhase(0, []*Signal{
@@ -19,7 +20,7 @@ func basicTestJuntions() []*Junction {
 					NewSignal(15, color.RED),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 0}),
+			WithPoint(geom.Point{X: 0, Y: 0}),
 		),
 		NewJunction(
 			[]*Phase{
@@ -34,7 +35,7 @@ func basicTestJuntions() []*Junction {
 					NewSignal(5, color.YELLOW),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 200}),
+			WithPoint(geom.Point{X: 0, Y: 200}),
 		),
 		NewJunction(
 			[]*Phase{
@@ -48,7 +49,7 @@ func basicTestJuntions() []*Junction {
 					NewSignal(5, color.YELLOW),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 450}),
+			WithPoint(geom.Point{X: 0, Y: 450}),
 		),
 		NewJunction(
 			[]*Phase{
@@ -61,19 +62,7 @@ func basicTestJuntions() []*Junction {
 					NewSignal(20, color.GREEN),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 600}),
+			WithPoint(geom.Point{X: 0, Y: 600}),
 		),
-	}
-
-	return junctions
-}
-
-func TestCycleDurationCorrectness(t *testing.T) {
-	junctions := basicTestJuntions()
-	correctDuration := 85
-	for i, junction := range junctions {
-		if junction.totalDuration != correctDuration {
-			t.Errorf("Junction at position %d has incorrect total duration: got %d, want %d", i, junction.totalDuration, correctDuration)
-		}
 	}
 }

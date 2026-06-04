@@ -3,6 +3,8 @@ package greenwave
 import (
 	"math"
 	"math/rand/v2"
+
+	"github.com/LdDl/greenwave/junction"
 )
 
 // OptimizerGenetic implements a genetic algorithm for optimizing traffic light offsets
@@ -52,7 +54,7 @@ type Individual struct {
 // OptimizerGenetic is a genetic algorithm optimizer for traffic light offsets
 type OptimizerGenetic struct {
 	// contains the traffic junctions to optimize
-	junctions []*Junction
+	junctions []*junction.Junction
 	// speedKhm is the speed in kilometers per hour used for calculating offsets
 	speedKhm float64
 	// populationSize is the number of individuals in the population
@@ -76,10 +78,10 @@ type OptimizerGenetic struct {
 }
 
 // NewOptimizerGenetic creates a new instance of OptimizerGenetic with the provided parameters
-func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode) Optimizer {
+func NewOptimizerGenetic(junctions []*junction.Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode) Optimizer {
 	cycleLengths := make([]float64, len(junctions))
-	for i, junction := range junctions {
-		cycleLengths[i] = float64(junction.totalDuration)
+	for i, jun := range junctions {
+		cycleLengths[i] = float64(jun.GetTotalDuration())
 	}
 	crossoverFunc := blendCrossover
 	if crossoverType == CROSSOVER_UNIFORM {
@@ -118,8 +120,8 @@ func (optga *OptimizerGenetic) createIndividual() *Individual {
 // EvaluateFitness calculates the fitness of an individual based on the traffic light offsets
 func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 	// Apply the offsets to the junctions
-	for i, junction := range optga.junctions {
-		junction.SetOffset(int(individual.Offsets[i]))
+	for i, jun := range optga.junctions {
+		jun.SetOffset(int(individual.Offsets[i]))
 	}
 
 	// Calculate forward fitness
@@ -137,7 +139,7 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 }
 
 // calculateDirectionalFitness calculates fitness for a given direction (order of junctions)
-func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float64 {
+func calculateDirectionalFitness(junctions []*junction.Junction, speedKhm float64) float64 {
 	greenWavs := FindGreenWaves(junctions, speedKhm)
 	throughGreenWaves := MergeGreenWaves(greenWavs)
 	if len(throughGreenWaves) == 0 {
@@ -157,9 +159,9 @@ func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float6
 
 // ReverseJunctions returns a new slice with junctions in reverse order
 // Note: it contains pointers to the same Junction objects
-func ReverseJunctions(junctions []*Junction) []*Junction {
+func ReverseJunctions(junctions []*junction.Junction) []*junction.Junction {
 	n := len(junctions)
-	reversed := make([]*Junction, n)
+	reversed := make([]*junction.Junction, n)
 	for i := 0; i < n; i++ {
 		reversed[i] = junctions[n-1-i]
 	}

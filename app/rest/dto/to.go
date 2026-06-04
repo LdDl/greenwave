@@ -1,30 +1,34 @@
 package dto
 
-import "github.com/LdDl/greenwave"
+import (
+	"github.com/LdDl/greenwave"
+	"github.com/LdDl/greenwave/greeninterval"
+	"github.com/LdDl/greenwave/junction"
+)
 
 // JunctionToDTO converts a Junction to a DTO
-func JunctionToDTO(junction *greenwave.Junction) JunctionDTO {
-	cycleDTO := make([]PhaseDTO, len(junction.Cycle))
-	for i, phase := range junction.Cycle {
+func JunctionToDTO(jun *junction.Junction) JunctionDTO {
+	cycleDTO := make([]PhaseDTO, len(jun.Cycle))
+	for i, phase := range jun.Cycle {
 		cycleDTO[i] = PhaseToDTO(phase)
 	}
 
-	point := junction.GetPoint()
+	point := jun.GetPoint()
 	return JunctionDTO{
-		ID:            junction.ID,
-		Label:         junction.Label,
+		ID:            jun.ID,
+		Label:         jun.Label,
 		Cycle:         cycleDTO,
-		TotalDuration: junction.GetTotalDuration(),
-		Offset:        junction.GetOffset(),
+		TotalDuration: jun.GetTotalDuration(),
+		Offset:        jun.GetOffset(),
 		Point:         PointDTO{X: point.X, Y: point.Y},
 	}
 }
 
 // PhaseToDTO converts a Phase to a DTO
-func PhaseToDTO(phase *greenwave.Phase) PhaseDTO {
+func PhaseToDTO(phase *junction.Phase) PhaseDTO {
 	signalsDTO := make([]SignalDTO, len(phase.Signals))
-	for i, signal := range phase.Signals {
-		signalsDTO[i] = SignalToDTO(signal)
+	for i, sig := range phase.Signals {
+		signalsDTO[i] = SignalToDTO(sig)
 	}
 
 	return PhaseDTO{
@@ -35,17 +39,17 @@ func PhaseToDTO(phase *greenwave.Phase) PhaseDTO {
 }
 
 // SignalToDTO converts a Signal to a DTO
-func SignalToDTO(signal *greenwave.Signal) SignalDTO {
+func SignalToDTO(sig *junction.Signal) SignalDTO {
 	return SignalDTO{
-		Duration:    signal.Duration,
-		MinDuration: &signal.MinDuration,
-		MaxDuration: &signal.MaxDuration,
-		Color:       signal.Color.String(),
+		Duration:    sig.Duration,
+		MinDuration: &sig.MinDuration,
+		MaxDuration: &sig.MaxDuration,
+		Color:       sig.Color.String(),
 	}
 }
 
 // GreenIntervalToDTO converts a GreenInterval to a DTO
-func GreenIntervalToDTO(interval *greenwave.GreenInterval) *GreenIntervalDTO {
+func GreenIntervalToDTO(interval *greeninterval.GreenInterval) *GreenIntervalDTO {
 	if interval == nil {
 		return nil
 	}

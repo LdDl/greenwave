@@ -1,4 +1,4 @@
-package signal
+package junction
 
 // Phase represents a traffic light phase with an ID and a list of signals.
 type Phase struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -112,7 +113,7 @@ func RequestOptimize() func(ctx echo.Context) error {
 		}
 
 		// Convert DTOs to domain objects
-		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
+		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}
@@ -128,8 +129,8 @@ func RequestOptimize() func(ctx echo.Context) error {
 		// Run optimization
 		bestOffsets := optimizer.Optimize()
 		// Apply best offsets to junctions
-		for i, junction := range junctions {
-			junction.SetOffset(int(bestOffsets[i]))
+		for i, jun := range junctions {
+			jun.SetOffset(int(bestOffsets[i]))
 		}
 		// Calculate green waves with optimized offsets
 		greenWaves := greenwave.FindGreenWaves(junctions, requestData.DesiredSpeedKmh)
@@ -165,7 +166,7 @@ func RequestOptimize() func(ctx echo.Context) error {
 }
 
 // createOptimizer creates an optimizer based on the specified type and parameters
-func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
+func createOptimizer(optimizerType string, junctions []*junction.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	switch strings.ToLower(optimizerType) {
 	case "genetic":
 		return createGeneticOptimizer(junctions, speedKmh, params, optimizationMode)
@@ -175,7 +176,7 @@ func createOptimizer(optimizerType string, junctions []*greenwave.Junction, spee
 }
 
 // createGeneticOptimizer creates a genetic algorithm optimizer with flexible parameters
-func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
+func createGeneticOptimizer(junctions []*junction.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	// Helper function to get parameter with default value
 	getParam := func(key string, defaultValue interface{}) interface{} {
 		if val, exists := params[key]; exists {

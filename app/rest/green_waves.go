@@ -7,6 +7,7 @@ import (
 
 	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -75,7 +76,7 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 			})
 		}
 
-		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
+		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}

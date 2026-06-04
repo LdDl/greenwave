@@ -3,83 +3,85 @@ package main
 import (
 	"fmt"
 
-	. "github.com/LdDl/greenwave"
+	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/color"
+	"github.com/LdDl/greenwave/geom"
+	"github.com/LdDl/greenwave/junction"
 )
 
 func main() {
-	junctions := []*Junction{
-		NewJunction(
-			[]*Phase{
-				NewPhase(0, []*Signal{
-					NewSignal(30, color.GREEN),
-					NewSignal(20, color.RED),
+	junctions := []*junction.Junction{
+		junction.NewJunction(
+			[]*junction.Phase{
+				junction.NewPhase(0, []*junction.Signal{
+					junction.NewSignal(30, color.GREEN),
+					junction.NewSignal(20, color.RED),
 				}),
-				NewPhase(1, []*Signal{
-					NewSignal(20, color.GREEN),
-					NewSignal(15, color.RED),
+				junction.NewPhase(1, []*junction.Signal{
+					junction.NewSignal(20, color.GREEN),
+					junction.NewSignal(15, color.RED),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 0}),
+			junction.WithPoint(geom.Point{X: 0, Y: 0}),
 		),
-		NewJunction(
-			[]*Phase{
-				NewPhase(10, []*Signal{
-					NewSignal(20, color.RED),
-					NewSignal(35, color.GREEN),
-					NewSignal(5, color.YELLOW),
+		junction.NewJunction(
+			[]*junction.Phase{
+				junction.NewPhase(10, []*junction.Signal{
+					junction.NewSignal(20, color.RED),
+					junction.NewSignal(35, color.GREEN),
+					junction.NewSignal(5, color.YELLOW),
 				}),
-				NewPhase(11, []*Signal{
-					NewSignal(10, color.RED),
-					NewSignal(10, color.GREEN),
-					NewSignal(5, color.YELLOW),
+				junction.NewPhase(11, []*junction.Signal{
+					junction.NewSignal(10, color.RED),
+					junction.NewSignal(10, color.GREEN),
+					junction.NewSignal(5, color.YELLOW),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 200}),
+			junction.WithPoint(geom.Point{X: 0, Y: 200}),
 		),
-		NewJunction(
-			[]*Phase{
-				NewPhase(20, []*Signal{
-					NewSignal(45, color.RED),
-					NewSignal(10, color.GREEN),
+		junction.NewJunction(
+			[]*junction.Phase{
+				junction.NewPhase(20, []*junction.Signal{
+					junction.NewSignal(45, color.RED),
+					junction.NewSignal(10, color.GREEN),
 				}),
-				NewPhase(21, []*Signal{
-					NewSignal(7, color.RED),
-					NewSignal(18, color.GREEN),
-					NewSignal(5, color.YELLOW),
+				junction.NewPhase(21, []*junction.Signal{
+					junction.NewSignal(7, color.RED),
+					junction.NewSignal(18, color.GREEN),
+					junction.NewSignal(5, color.YELLOW),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 450}),
+			junction.WithPoint(geom.Point{X: 0, Y: 450}),
 		),
-		NewJunction(
-			[]*Phase{
-				NewPhase(20, []*Signal{
-					NewSignal(40, color.RED),
-					NewSignal(15, color.GREEN),
+		junction.NewJunction(
+			[]*junction.Phase{
+				junction.NewPhase(20, []*junction.Signal{
+					junction.NewSignal(40, color.RED),
+					junction.NewSignal(15, color.GREEN),
 				}),
-				NewPhase(21, []*Signal{
-					NewSignal(10, color.RED),
-					NewSignal(20, color.GREEN),
+				junction.NewPhase(21, []*junction.Signal{
+					junction.NewSignal(10, color.RED),
+					junction.NewSignal(20, color.GREEN),
 				}),
 			},
-			WithPoint(Point{X: 0, Y: 600}),
+			junction.WithPoint(geom.Point{X: 0, Y: 600}),
 		),
 	}
 
 	desiredSpeedKhm := 50.0
-	optimizer := NewOptimizerGenetic(
+	optimizer := greenwave.NewOptimizerGenetic(
 		junctions,
 		desiredSpeedKhm,
 		50,
 		100,
 		0.1,
 		3,
-		CROSSOVER_BLEND,
-		OPTIMIZATION_FORWARD,
+		greenwave.CROSSOVER_BLEND,
+		greenwave.OPTIMIZATION_FORWARD,
 	)
 	newOffsets := optimizer.Optimize()
 	fmt.Println("Best fitness history:")
-	fitnessHistory := optimizer.(*OptimizerGenetic).BestFitnessHistory()
+	fitnessHistory := optimizer.(*greenwave.OptimizerGenetic).BestFitnessHistory()
 	for i, fitness := range fitnessHistory {
 		fmt.Printf("Generation %d: %f\n", i, fitness)
 	}

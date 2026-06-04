@@ -1,13 +1,18 @@
 package greenwave
 
-import "math"
+import (
+	"math"
+
+	"github.com/LdDl/greenwave/greeninterval"
+	"github.com/LdDl/greenwave/junction"
+)
 
 // GreenWave represents a green wave between two junctions.
 type GreenWave struct {
 	// Green interval on the first junction.
-	intervalJunOne *GreenInterval
+	intervalJunOne *greeninterval.GreenInterval
 	// Green interval on the second junction.
-	intervalJunTwo *GreenInterval
+	intervalJunTwo *greeninterval.GreenInterval
 	// Distance in meters between the two junctions.
 	distance float64
 	// Travel time in seconds between the two junctions.
@@ -17,10 +22,10 @@ type GreenWave struct {
 }
 
 // NewGreenWave creates a new GreenWave instance with the specified parameters.
-func NewGreenWave(intervalJunOne, intervalJunTwo *GreenInterval, distanceMeters, travelTimeSeconds float64) *GreenWave {
+func NewGreenWave(intervalJunOne, intervalJunTwo *greeninterval.GreenInterval, distanceMeters, travelTimeSeconds float64) *GreenWave {
 	return &GreenWave{
-		intervalJunOne: NewGreenInterval(intervalJunOne.PhaseIdx, intervalJunOne.Start, intervalJunOne.End),
-		intervalJunTwo: NewGreenInterval(intervalJunTwo.PhaseIdx, intervalJunTwo.Start, intervalJunTwo.End),
+		intervalJunOne: greeninterval.New(intervalJunOne.PhaseIdx, intervalJunOne.Start, intervalJunOne.End),
+		intervalJunTwo: greeninterval.New(intervalJunTwo.PhaseIdx, intervalJunTwo.Start, intervalJunTwo.End),
 		distance:       distanceMeters,
 		travelTime:     travelTimeSeconds,
 		bandwidth:      float64(intervalJunOne.End - intervalJunOne.Start),
@@ -30,8 +35,8 @@ func NewGreenWave(intervalJunOne, intervalJunTwo *GreenInterval, distanceMeters,
 // Clone creates a deep copy of the GreenWave instance.
 func (gw *GreenWave) Clone() *GreenWave {
 	return &GreenWave{
-		intervalJunOne: NewGreenInterval(gw.intervalJunOne.PhaseIdx, gw.intervalJunOne.Start, gw.intervalJunOne.End),
-		intervalJunTwo: NewGreenInterval(gw.intervalJunTwo.PhaseIdx, gw.intervalJunTwo.Start, gw.intervalJunTwo.End),
+		intervalJunOne: greeninterval.New(gw.intervalJunOne.PhaseIdx, gw.intervalJunOne.Start, gw.intervalJunOne.End),
+		intervalJunTwo: greeninterval.New(gw.intervalJunTwo.PhaseIdx, gw.intervalJunTwo.Start, gw.intervalJunTwo.End),
 		distance:       gw.distance,
 		travelTime:     gw.travelTime,
 		bandwidth:      gw.bandwidth,
@@ -39,12 +44,12 @@ func (gw *GreenWave) Clone() *GreenWave {
 }
 
 // IntervalJunOne returns the green interval on the first junction.
-func (gw *GreenWave) IntervalJunOne() *GreenInterval {
+func (gw *GreenWave) IntervalJunOne() *greeninterval.GreenInterval {
 	return gw.intervalJunOne
 }
 
 // IntervalJunTwo returns the green interval on the second junction.
-func (gw *GreenWave) IntervalJunTwo() *GreenInterval {
+func (gw *GreenWave) IntervalJunTwo() *greeninterval.GreenInterval {
 	return gw.intervalJunTwo
 }
 
@@ -64,7 +69,7 @@ func (gw *GreenWave) Bandwidth() float64 {
 }
 
 // FindGreenWavesBetweenIntervals finds green waves between two sets of green intervals.
-func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*GreenInterval, distanceMeters, travelTimeSeconds float64) []*GreenWave {
+func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*greeninterval.GreenInterval, distanceMeters, travelTimeSeconds float64) []*GreenWave {
 	var greenWaves []*GreenWave
 	for _, greenIntervalOne := range greenIntervalsOne {
 		startOne, endOne := float64(greenIntervalOne.Start), float64(greenIntervalOne.End)
@@ -85,8 +90,8 @@ func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*Gree
 			// adjustedStartJunOne < adjustedEndJunOne - ensure valid interval
 			if adjustedStartJunOne >= startOne && adjustedEndJunOne <= endOne && adjustedStartJunOne < adjustedEndJunOne {
 				greenWave := NewGreenWave(
-					NewGreenInterval(greenIntervalOne.PhaseIdx, adjustedStartJunOne, adjustedEndJunOne),
-					NewGreenInterval(greenIntervalTwo.PhaseIdx, overlapStart, overlapEnd),
+					greeninterval.New(greenIntervalOne.PhaseIdx, adjustedStartJunOne, adjustedEndJunOne),
+					greeninterval.New(greenIntervalTwo.PhaseIdx, overlapStart, overlapEnd),
 					distanceMeters,
 					travelTimeSeconds,
 				)
@@ -99,7 +104,7 @@ func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*Gree
 
 // FindGreenWaves finds green waves between a sequence of junctions based on their green intervals and desired speed.
 // It returns a slice of slices, where each inner slice contains green waves for the segment between two junctions.
-func FindGreenWaves(junctions []*Junction, desiredSpeedKmh float64) [][]*GreenWave {
+func FindGreenWaves(junctions []*junction.Junction, desiredSpeedKmh float64) [][]*GreenWave {
 	speedMs := desiredSpeedKmh / 3.6
 	waves := make([][]*GreenWave, 0, len(junctions)-1)
 	for i := 0; i < len(junctions)-1; i++ {
@@ -111,35 +116,40 @@ func FindGreenWaves(junctions []*Junction, desiredSpeedKmh float64) [][]*GreenWa
 		offsetJunctionOne := junctionOne.GetOffset()
 		offsetJunctionTwo := junctionTwo.GetOffset()
 
-		adjustedIntervalsOne := make([]*GreenInterval, 0, len(greenIntervalsOne))
+		totalDurationOne := junctionOne.GetTotalDuration()
+		totalDurationTwo := junctionTwo.GetTotalDuration()
+
+		adjustedIntervalsOne := make([]*greeninterval.GreenInterval, 0, len(greenIntervalsOne))
 		for _, interval := range greenIntervalsOne {
-			start := (int(interval.Start) + offsetJunctionOne) % junctionOne.totalDuration
-			end := (int(interval.End) + offsetJunctionOne) % junctionOne.totalDuration
+			start := (int(interval.Start) + offsetJunctionOne) % totalDurationOne
+			end := (int(interval.End) + offsetJunctionOne) % totalDurationOne
 			if end < start {
 				// Interval split due cycle wrap
-				adjustedIntervalsOne = append(adjustedIntervalsOne, NewGreenInterval(interval.PhaseIdx, float64(start), float64(junctionOne.totalDuration)))
-				adjustedIntervalsOne = append(adjustedIntervalsOne, NewGreenInterval(interval.PhaseIdx, 0, float64(end)))
+				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, float64(start), float64(totalDurationOne)))
+				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, 0, float64(end)))
 			} else {
 				// Common case
-				adjustedIntervalsOne = append(adjustedIntervalsOne, NewGreenInterval(interval.PhaseIdx, float64(start), float64(end)))
+				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, float64(start), float64(end)))
 			}
 		}
 
-		adjustedIntervalsTwo := make([]*GreenInterval, 0, len(greenIntervalsTwo))
+		adjustedIntervalsTwo := make([]*greeninterval.GreenInterval, 0, len(greenIntervalsTwo))
 		for _, interval := range greenIntervalsTwo {
-			start := (int(interval.Start) + offsetJunctionTwo) % junctionTwo.totalDuration
-			end := (int(interval.End) + offsetJunctionTwo) % junctionTwo.totalDuration
+			start := (int(interval.Start) + offsetJunctionTwo) % totalDurationTwo
+			end := (int(interval.End) + offsetJunctionTwo) % totalDurationTwo
 			if end < start {
 				// Interval split due cycle wrap
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, NewGreenInterval(interval.PhaseIdx, float64(start), float64(junctionTwo.totalDuration)))
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, NewGreenInterval(interval.PhaseIdx, 0, float64(end)))
+				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, float64(start), float64(totalDurationTwo)))
+				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, 0, float64(end)))
 			} else {
 				// Common case
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, NewGreenInterval(interval.PhaseIdx, float64(start), float64(end)))
+				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, float64(start), float64(end)))
 			}
 		}
 
-		distanceMeters := math.Sqrt(math.Pow(junctionOne.point.X-junctionTwo.point.X, 2) + math.Pow(junctionOne.point.Y-junctionTwo.point.Y, 2))
+		pointOne := junctionOne.GetPoint()
+		pointTwo := junctionTwo.GetPoint()
+		distanceMeters := math.Sqrt(math.Pow(pointOne.X-pointTwo.X, 2) + math.Pow(pointOne.Y-pointTwo.Y, 2))
 		travelTimeSeconds := distanceMeters / speedMs
 
 		segmentWaves := FindGreenWavesBetweenIntervals(adjustedIntervalsOne, adjustedIntervalsTwo, distanceMeters, travelTimeSeconds)
