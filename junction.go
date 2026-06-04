@@ -22,7 +22,7 @@ type Junction struct {
 func NewJunction(cycle []*Phase, options ...func(*Junction)) *Junction {
 	totalDuration := 0
 	for _, phase := range cycle {
-		totalDuration += phase.totalSeconds
+		totalDuration += phase.GetTotalSeconds()
 	}
 	junction := &Junction{
 		ID:            -1,
@@ -94,7 +94,7 @@ func (jun *Junction) GetGreenIntervals() []*GreenInterval {
 
 	currentTime := 0
 	for phaseIdx, phase := range jun.Cycle {
-		phaseEnd := currentTime + phase.totalSeconds
+		phaseEnd := currentTime + phase.GetTotalSeconds()
 		signalStart := currentTime
 		for _, signal := range phase.Signals {
 			if signal.Color == color.GREEN || signal.Color == color.GREENPRIORITY {
