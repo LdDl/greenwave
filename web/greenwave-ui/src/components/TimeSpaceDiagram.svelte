@@ -12,6 +12,7 @@
   export let reverseGreenWaves = [];
   export let reverseThroughWaves = [];
   export let showWaves = false;
+  export let showOffsets = false;
   
   const dispatch = createEventDispatcher();
 
@@ -170,6 +171,19 @@
       .attr("font-weight", "bold")
       .attr("fill", "#333")
       .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s`);
+
+    // Draw offset labels at the right end of X axis (results panel only)
+    if (showOffsets) {
+      junctionGroups.append("text")
+        .attr("x", chartWidth + 4)
+        .attr("y", 0)
+        .attr("dy", "0.35em")
+        .attr("text-anchor", "start")
+        .attr("font-size", "10px")
+        .attr("font-weight", "bold")
+        .attr("fill", "#4B0082")
+        .text(d => `+${d.offset}s`);
+    }
 
     // Make labels clickable in interactive mode
     if (interactive) {

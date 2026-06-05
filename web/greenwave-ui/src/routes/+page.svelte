@@ -666,6 +666,7 @@
               reverseGreenWaves={$optimizedReverseGreenWaves}
               reverseThroughWaves={$optimizedReverseThroughWaves}
               showWaves={true}
+              showOffsets={true}
               interactive={false}
             />
           {:else}
