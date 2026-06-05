@@ -1,4 +1,4 @@
-package greenwave
+package geom
 
 // Point in 2D space.
 type Point struct {
