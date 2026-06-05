@@ -4,10 +4,8 @@
 
   import * as d3 from 'd3';
 
-  export let isResults = false;
   export let junctions = [];
   export let wavesAreOutdated = { isOutdated: false, reason: null };
-  export let resultsAreOutdated = { isOutdated: false, reason: null };
   export let interactive = false;
   export let greenWaves = [];
   export let throughWaves = [];
@@ -24,8 +22,8 @@
   let isDragging = false; 
 
   const margin = { top: 30, right: 30, bottom: 40, left: 60 };
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
+  let chartWidth = width - margin.left - margin.right;
+  let chartHeight = height - margin.top - margin.bottom;
   
   // Helper function to calculate total duration for a junction.
   // Uses the first signal group as the reference (all groups are synchronized).
@@ -599,6 +597,10 @@
     if (container) {
       width = container.clientWidth;
       height = container.clientHeight;
+      // Recalculate derived dimensions so every D3 call (scales, axes, wave polygons)
+      // uses the correct pixel measurements for this container size.
+      chartWidth = width - margin.left - margin.right;
+      chartHeight = height - margin.top - margin.bottom;
       updateChart();
     }
   }
@@ -615,66 +617,11 @@
 </script>
 
 <div bind:this={container} class="diagram-container w-full h-full relative">
-  <!-- SVG Chart -->
-  <div class="plot-container relative">
-    <svg bind:this={svg} {width} {height} class="w-full h-full"></svg>
+  <!-- SVG fills the container absolutely  no flex space consumed, no layout impact -->
+  <div class="absolute inset-0 overflow-hidden">
+    <svg bind:this={svg} {width} {height} style="display:block"></svg>
   </div>
 
-  <!-- Status/Info Box -->
-<!-- Status/Info Box -->
-{#if junctions.length > 0}
-  <div class="tip-container mb-3 mr-3 bg-white bg-opacity-90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm border border-gray-200">
-    <div class="flex flex-col gap-2">
-      {#if isResults}
-        <!-- Results plot -->
-        {#if resultsAreOutdated.isOutdated}
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span class="text-orange-600 ml-2">⚠️ {resultsAreOutdated.reason}</span>
-          </div>
-        {:else}
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span>💡 <strong>Press 'Optimize' to refresh</strong></span>
-          </div>
-        {/if}
-      {:else}
-        <!-- Input data plot -->
-        {#if wavesAreOutdated.isOutdated}
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span class="text-orange-600 ml-2">⚠️{wavesAreOutdated.reason}</span>
-          </div>
-        {:else}
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <div>💡 <strong>Drag junctions</strong> to change distances</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <div>💡 <strong>Click junction</strong> to edit phases and signals</div>
-          </div>
-          <div class="flex items-center gap-2">
-            <svg class="icon w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <div>💡 <strong>Click signal</strong> to change its color or duration</div>
-          </div>
-        {/if}
-      {/if}
-    </div>
-  </div>
-{/if}
 </div>
 
 <style>
@@ -683,12 +630,5 @@
     height: 100%;
     min-height: 300px;
     position: relative;
-    display: flex;
-    flex-direction: column;
   }
-  
-  .tip-container {
-    align-self: flex-end;
-  }
-
 </style>
