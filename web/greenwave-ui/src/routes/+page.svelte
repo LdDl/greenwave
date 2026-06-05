@@ -233,12 +233,15 @@
               if (phase === selectedSignalContext.phase) {
                 return {
                   ...phase,
-                  signals: phase.signals.map((signal) => {
-                    if (signal === selectedSignal) {
-                      return { ...signal, ...updatedSignal }; // Update the signal
-                    }
-                    return signal;
-                  }),
+                  signal_groups: phase.signal_groups.map((sg) => ({
+                    ...sg,
+                    signals: sg.signals.map((signal) => {
+                      if (signal === selectedSignal) {
+                        return { ...signal, ...updatedSignal };
+                      }
+                      return signal;
+                    }),
+                  })),
                 };
               }
               return phase;
@@ -292,10 +295,10 @@
       cycle: [
         {
           id: (maxId + 1) * 10,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 30, color: 'GREEN' },
             { duration: 20, color: 'RED' }
-          ]
+          ]}]
         }
       ],
       offset: 0,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -20,6 +21,10 @@ type GreenWavesRequest struct {
 	DesiredSpeedKmh float64 `json:"desired_speed_kmh"`
 	// Direction for green wave calculation: "forward" (default) or "bidirectional"
 	Direction string `json:"direction"`
+	// GroupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
+	// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
+	// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
+	GroupIDs map[int]junction.GroupID `json:"group_ids"`
 }
 
 // GreenWavesResponse represents the response structure for green waves requests.
@@ -75,13 +80,13 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 			})
 		}
 
-		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
+		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}
 
 		// Extract forward green waves
-		greenWaves := greenwave.FindGreenWaves(junctions, requestData.DesiredSpeedKmh)
+		greenWaves := greenwave.FindGreenWaves(junctions, requestData.GroupIDs, requestData.DesiredSpeedKmh)
 		throughGreenWaves := greenwave.MergeGreenWaves(greenWaves)
 
 		response := GreenWavesResponse{
@@ -94,7 +99,7 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 		// If bidirectional, also calculate reverse waves
 		if strings.ToLower(requestData.Direction) == "bidirectional" {
 			reversedJunctions := greenwave.ReverseJunctions(junctions)
-			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.DesiredSpeedKmh)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.GroupIDs, requestData.DesiredSpeedKmh)
 			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
 
 			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)

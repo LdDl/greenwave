@@ -30,7 +30,7 @@
     }
 
     for (const phase of editedJunction.cycle) {
-      if (phase.signals.length === 0) {
+      if (phase.signal_groups[0].signals.length === 0) {
         alert('Each phase must have at least one signal');
         return;
       }
@@ -51,10 +51,10 @@
       ...editedJunction.cycle,
       {
         id: newPhaseId,
-        signals: [
+        signal_groups: [{ id: 0, signals: [
           { duration: 30, color: 'GREEN' },
           { duration: 20, color: 'RED' }
-        ]
+        ]}]
       }
     ];
   }
@@ -68,18 +68,19 @@
   }
 
   function addSignal(phaseIndex) {
-    editedJunction.cycle[phaseIndex].signals = [
-      ...editedJunction.cycle[phaseIndex].signals,
-      { duration: 10, color: 'GREEN' }
-    ];
+    const sg = editedJunction.cycle[phaseIndex].signal_groups[0];
+    sg.signals = [...sg.signals, { duration: 10, color: 'GREEN' }];
+    editedJunction.cycle = [...editedJunction.cycle]; // trigger reactivity
   }
 
   function removeSignal(phaseIndex, signalIndex) {
-    if (editedJunction.cycle[phaseIndex].signals.length <= 1) {
+    const sg = editedJunction.cycle[phaseIndex].signal_groups[0];
+    if (sg.signals.length <= 1) {
       alert('Phase must have at least one signal');
       return;
     }
-    editedJunction.cycle[phaseIndex].signals = editedJunction.cycle[phaseIndex].signals.filter((_, i) => i !== signalIndex);
+    sg.signals = sg.signals.filter((_, i) => i !== signalIndex);
+    editedJunction.cycle = [...editedJunction.cycle]; // trigger reactivity
   }
 </script>
 
@@ -153,7 +154,7 @@
               </div>
 
               <div class="space-y-2">
-                {#each phase.signals as signal, signalIndex}
+                {#each phase.signal_groups[0].signals as signal, signalIndex}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-gray-500 w-16">Signal {signalIndex + 1}</span>
                     <select

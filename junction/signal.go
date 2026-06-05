@@ -1,4 +1,4 @@
-package signal
+package junction
 
 import "github.com/LdDl/greenwave/color"
 

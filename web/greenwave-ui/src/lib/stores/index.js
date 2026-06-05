@@ -15,17 +15,17 @@ export const DEMO_DATA = {
       cycle: [
         {
           id: 0,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 30, color: "GREEN" },
             { duration: 20, color: "RED" }
-          ]
+          ]}]
         },
         {
           id: 1,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 20, color: "GREEN" },
             { duration: 15, color: "RED" }
-          ]
+          ]}]
         }
       ],
       offset: 0,
@@ -37,19 +37,19 @@ export const DEMO_DATA = {
       cycle: [
         {
           id: 10,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 20, color: "RED" },
             { duration: 35, color: "GREEN" },
             { duration: 5, color: "YELLOW" }
-          ]
+          ]}]
         },
         {
           id: 11,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 10, color: "RED" },
             { duration: 10, color: "GREEN" },
             { duration: 5, color: "YELLOW" }
-          ]
+          ]}]
         }
       ],
       offset: 0,
@@ -61,18 +61,18 @@ export const DEMO_DATA = {
       cycle: [
         {
           id: 20,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 45, color: "RED" },
             { duration: 10, color: "GREEN" }
-          ]
+          ]}]
         },
         {
           id: 21,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 7, color: "RED" },
             { duration: 18, color: "GREEN" },
             { duration: 5, color: "YELLOW" }
-          ]
+          ]}]
         }
       ],
       offset: 0,
@@ -84,17 +84,17 @@ export const DEMO_DATA = {
       cycle: [
         {
           id: 20,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 40, color: "RED" },
             { duration: 15, color: "GREEN" }
-          ]
+          ]}]
         },
         {
           id: 21,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 10, color: "RED" },
             { duration: 20, color: "GREEN" }
-          ]
+          ]}]
         }
       ],
       offset: 0,
