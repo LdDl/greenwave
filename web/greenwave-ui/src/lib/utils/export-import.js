@@ -72,8 +72,8 @@ export function validateImportedConfig(data) {
         errors.push(`Junction ${i}: missing or empty "cycle"`);
       } else {
         j.cycle.forEach((phase, pi) => {
-          if (!Array.isArray(phase.signals) || phase.signals.length === 0) {
-            errors.push(`Junction ${i}, Phase ${pi}: missing or empty "signals"`);
+          if (!Array.isArray(phase.signal_groups) || phase.signal_groups.length === 0) {
+            errors.push(`Junction ${i}, Phase ${pi}: missing or empty "signal_groups"`);
           }
         });
       }
@@ -114,9 +114,12 @@ export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, di
       point: { x: j.point.x, y: j.point.y },
       cycle: j.cycle.map(phase => ({
         id: phase.id,
-        signals: phase.signals.map(s => ({
-          duration: s.duration,
-          color: s.color
+        signal_groups: phase.signal_groups.map(sg => ({
+          id: sg.id,
+          signals: sg.signals.map(s => ({
+            duration: s.duration,
+            color: s.color
+          }))
         }))
       }))
     }))
@@ -146,9 +149,12 @@ export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredInt
       point: { x: j.point.x, y: j.point.y },
       cycle: j.cycle.map(phase => ({
         id: phase.id,
-        signals: phase.signals.map(s => ({
-          duration: s.duration,
-          color: s.color
+        signal_groups: phase.signal_groups.map(sg => ({
+          id: sg.id,
+          signals: sg.signals.map(s => ({
+            duration: s.duration,
+            color: s.color
+          }))
         }))
       }))
     }))

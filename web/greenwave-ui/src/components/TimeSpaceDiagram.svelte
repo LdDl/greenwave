@@ -27,10 +27,12 @@
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
-  // Helper function to calculate total duration for a junction
+  // Helper function to calculate total duration for a junction.
+  // Uses the first signal group as the reference (all groups are synchronized).
   function calculateTotalDuration(junction) {
     return junction.cycle.reduce((total, phase) => {
-      return total + phase.signals.reduce((phaseTotal, signal) => {
+      const signals = phase.signal_groups[0].signals;
+      return total + signals.reduce((phaseTotal, signal) => {
         return phaseTotal + signal.duration;
       }, 0);
     }, 0);
@@ -228,11 +230,11 @@
     let currentTime = junction.offset;
     
     junction.cycle.forEach(phase => {
-      phase.signals.forEach(signal => {
+      phase.signal_groups[0].signals.forEach(signal => {
         if (signal.duration > 0) {
           const startTime = positiveModulo(currentTime, junction.total_duration);
           const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
-          
+
           if (endTime < startTime) {
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
@@ -242,7 +244,7 @@
               .attr("y2", newY)
               .attr("stroke", getSignalColor(signal.color))
               .attr("stroke-width", 4);
-            
+
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
               .attr("x1", xScale(0))
@@ -274,7 +276,7 @@
       const y = yScale(junction.point.y);
       
       junction.cycle.forEach(phase => {
-        phase.signals.forEach(signal => {
+        phase.signal_groups[0].signals.forEach(signal => {
           if (signal.duration > 0) {
             const startTime = positiveModulo(currentTime, junction.total_duration);
             const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
@@ -363,8 +365,8 @@
       const y = yScale(junction.point.y);
 
       junction.cycle.forEach((phase, phaseIdx) => {
-        // Calculate phase duration
-        const phaseDuration = phase.signals.reduce((sum, signal) => sum + signal.duration, 0);
+        // Calculate phase duration from the first signal group (all groups are synchronized)
+        const phaseDuration = phase.signal_groups[0].signals.reduce((sum, signal) => sum + signal.duration, 0);
 
         // Calculate phase start and end times
         const phaseStart = positiveModulo(currentTime, junction.total_duration);
