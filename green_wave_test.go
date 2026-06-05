@@ -118,7 +118,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 func TestFindGreenWaves(t *testing.T) {
 	junctions := junction.BasicTestJunctions()
 	desiredSpeedKmh := 40.0
-	greenWaves := FindGreenWaves(junctions, desiredSpeedKmh)
+	// Pick group for each junction (in this case, we know that all junctions have group #0)
+	groupIDs := map[int]junction.GroupID{
+		100500: 0,
+		42:     0,
+		78:     0,
+		256:    0,
+	}
+	greenWaves := FindGreenWaves(junctions, groupIDs, desiredSpeedKmh)
 	correctGreenWaves := [][]*GreenWave{
 		// Segment 0
 		{

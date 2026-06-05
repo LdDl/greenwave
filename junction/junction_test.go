@@ -24,8 +24,15 @@ func TestGetGreenIntervals(t *testing.T) {
 		{greeninterval.New(0, 45, 55), greeninterval.New(1, 62, 80)},
 		{greeninterval.New(0, 40, 55), greeninterval.New(1, 65, 85)},
 	}
+	// Pick group for each junction (in this case, we know that all junctions have group #0)
+	groups := map[int]GroupID{
+		100500: 0,
+		42:     0,
+		78:     0,
+		256:    0,
+	}
 	for i, jun := range junctions {
-		intervals := jun.GetGreenIntervals()
+		intervals := jun.GetGreenIntervals(groups[jun.ID])
 		assert.Equalf(t, len(correctGreenIntervals[i]), len(intervals),
 			"Mismatch in green intervals length for junction %d", i)
 		for j, gi := range intervals {

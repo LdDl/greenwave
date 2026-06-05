@@ -22,11 +22,20 @@ type Junction struct {
 	point geom.Point
 }
 
-// NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases)
+// NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases).
+// totalDuration is derived from the first group met in the first phase.
+// All groups in a junction should share the same cycle length (they are synchronized),
+// so the first group serves as reference.
 func NewJunction(cycle []*Phase, options ...func(*Junction)) *Junction {
+	var refGroupID GroupID
+	if len(cycle) > 0 && len(cycle[0].SignalGroups) > 0 {
+		refGroupID = cycle[0].SignalGroups[0].ID
+	}
 	totalDuration := 0
 	for _, phase := range cycle {
-		totalDuration += phase.GetTotalSeconds()
+		if dur, ok := phase.GetTotalSeconds(refGroupID); ok {
+			totalDuration += dur
+		}
 	}
 	junction := &Junction{
 		ID:            -1,
@@ -87,8 +96,8 @@ func (jun *Junction) GetPoint() geom.Point {
 	return jun.point
 }
 
-// GetGreenIntervals extracts green intervals from the junction's cycle.
-func (jun *Junction) GetGreenIntervals() []*greeninterval.GreenInterval {
+// GetGreenIntervals extracts green intervals from the junction's cycle for the given signal group.
+func (jun *Junction) GetGreenIntervals(gid GroupID) []*greeninterval.GreenInterval {
 	intervals := make([]*greeninterval.GreenInterval, 0)
 
 	cycleDuration := jun.totalDuration
@@ -98,9 +107,19 @@ func (jun *Junction) GetGreenIntervals() []*greeninterval.GreenInterval {
 
 	currentTime := 0
 	for phaseIdx, phase := range jun.Cycle {
-		phaseEnd := currentTime + phase.GetTotalSeconds()
+		phaseDuration, ok := phase.GetTotalSeconds(gid)
+		if !ok {
+			continue
+		}
 		signalStart := currentTime
-		for _, signal := range phase.Signals {
+		var groupSignals []*Signal
+		for _, sg := range phase.SignalGroups {
+			if sg.ID == gid {
+				groupSignals = sg.Signals
+				break
+			}
+		}
+		for _, signal := range groupSignals {
 			if signal.Color == color.GREEN || signal.Color == color.GREENPRIORITY {
 				start := signalStart
 				end := signalStart + signal.Duration
@@ -112,7 +131,7 @@ func (jun *Junction) GetGreenIntervals() []*greeninterval.GreenInterval {
 			}
 			signalStart += signal.Duration
 		}
-		currentTime = phaseEnd
+		currentTime += phaseDuration
 	}
 	return intervals
 }

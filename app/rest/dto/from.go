@@ -28,11 +28,18 @@ func JunctionFromDTO(dto JunctionDTO) *junction.Junction {
 
 // PhaseFromDTO creates a Phase from a DTO
 func PhaseFromDTO(dto PhaseDTO) *junction.Phase {
-	signals := make([]*junction.Signal, len(dto.Signals))
-	for i, signalDTO := range dto.Signals {
-		signals[i] = SignalFromDTO(signalDTO)
+	signalGroups := make([]junction.SignalGroup, len(dto.SignalGroups))
+	for i, sgDTO := range dto.SignalGroups {
+		signals := make([]*junction.Signal, len(sgDTO.Signals))
+		for j, signalDTO := range sgDTO.Signals {
+			signals[j] = SignalFromDTO(signalDTO)
+		}
+		signalGroups[i] = junction.SignalGroup{
+			ID:      junction.GroupID(sgDTO.ID),
+			Signals: signals,
+		}
 	}
-	return junction.NewPhase(dto.ID, signals)
+	return junction.NewPhase(dto.ID, signalGroups)
 }
 
 // SignalFromDTO creates a Signal from a DTO

@@ -103,15 +103,18 @@ func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*gree
 }
 
 // FindGreenWaves finds green waves between a sequence of junctions based on their green intervals and desired speed.
+// groupIDs maps each junction ID to the signal group to use for green wave coordination in this corridor.
+// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
+// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
 // It returns a slice of slices, where each inner slice contains green waves for the segment between two junctions.
-func FindGreenWaves(junctions []*junction.Junction, desiredSpeedKmh float64) [][]*GreenWave {
+func FindGreenWaves(junctions []*junction.Junction, groupIDs map[int]junction.GroupID, desiredSpeedKmh float64) [][]*GreenWave {
 	speedMs := desiredSpeedKmh / 3.6
 	waves := make([][]*GreenWave, 0, len(junctions)-1)
 	for i := 0; i < len(junctions)-1; i++ {
 		junctionOne := junctions[i]
 		junctionTwo := junctions[i+1]
-		greenIntervalsOne := junctionOne.GetGreenIntervals()
-		greenIntervalsTwo := junctionTwo.GetGreenIntervals()
+		greenIntervalsOne := junctionOne.GetGreenIntervals(groupIDs[junctionOne.ID])
+		greenIntervalsTwo := junctionTwo.GetGreenIntervals(groupIDs[junctionTwo.ID])
 
 		offsetJunctionOne := junctionOne.GetOffset()
 		offsetJunctionTwo := junctionTwo.GetOffset()

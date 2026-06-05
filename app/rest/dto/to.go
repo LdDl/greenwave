@@ -26,15 +26,22 @@ func JunctionToDTO(jun *junction.Junction) JunctionDTO {
 
 // PhaseToDTO converts a Phase to a DTO
 func PhaseToDTO(phase *junction.Phase) PhaseDTO {
-	signalsDTO := make([]SignalDTO, len(phase.Signals))
-	for i, sig := range phase.Signals {
-		signalsDTO[i] = SignalToDTO(sig)
+	signalGroupsDTO := make([]SignalGroupDTO, len(phase.SignalGroups))
+	for i, sg := range phase.SignalGroups {
+		totalSeconds, _ := phase.GetTotalSeconds(sg.ID)
+		signalsDTO := make([]SignalDTO, len(sg.Signals))
+		for j, sig := range sg.Signals {
+			signalsDTO[j] = SignalToDTO(sig)
+		}
+		signalGroupsDTO[i] = SignalGroupDTO{
+			ID:           int(sg.ID),
+			Signals:      signalsDTO,
+			TotalSeconds: totalSeconds,
+		}
 	}
-
 	return PhaseDTO{
 		ID:           phase.ID,
-		Signals:      signalsDTO,
-		TotalSeconds: phase.GetTotalSeconds(),
+		SignalGroups: signalGroupsDTO,
 	}
 }
 
