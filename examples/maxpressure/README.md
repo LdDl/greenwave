@@ -90,6 +90,97 @@ Initial queues represent residual congestion: link1=15, link2=8, link3=5, link4=
 
 Both scenarios (Standard MP and Smoothing-MP) run on identical input data.
 
+## Realistic 4-phase scenario
+
+The `runRealisticScenario` function extends the basic 2-stage model to a realistic
+4-phase, 4-group signal plan derived from a `junction.Junction` via `StagesFromJunction`.
+
+### Signal plan
+
+Each intersection has 4 signal groups:
+
+| Group | Movement |
+|:---:|:---|
+| 0 | EW through |
+| 1 | EW left turn |
+| 2 | NS through |
+| 3 | NS left turn |
+
+4 phases per cycle (total cycle = 95s). Each active group follows GREEN->YELLOW->RED;
+inactive groups stay RED throughout the phase.
+
+| Phase | Duration | Group 0 | Group 1 | Group 2 | Group 3 |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0 | 35s | G(30)->Y(3)->R(2) | R(35) | R(35) | R(35) |
+| 1 | 20s | R(20) | G(15)->Y(3)->R(2) | R(20) | R(20) |
+| 2 | 28s | R(28) | R(28) | G(23)->Y(3)->R(2) | R(28) |
+| 3 | 12s | R(12) | R(12) | R(12) | G(8)->Y(2)->R(2) |
+
+**Signal transition rule**: for each group, consecutive phases must end with the same
+signal meaning -> prohibition (R, Y) or permission (G). All phases here end with R,
+so all transitions are prohibition->prohibition ✓. This prevents e.g. a phase ending
+GREEN immediately followed by a phase starting GREEN for the same group.
+
+### Network extension
+
+Links 9, 10 (at A) and 18, 19 (at B) are added as left-turn departure links (boundary
+drains). Four new connectors map left-turn groups to these links:
+
+| ID | Movement | Upstream -> Downstream | S (veh/h) | Group | Stage |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 104 | EBL | [1] WA->A -> [9] A-left | 600 | 1 | sg1 |
+| 105 | SBL | [2] NA->A -> [10] A-left | 600 | 3 | sg3 |
+| 204 | EBL | [3] A->B -> [18] B-left | 600 | 1 | sg1 |
+| 205 | NBL | [4] NB->B -> [19] B-left | 600 | 3 | sg3 |
+
+### Stages derived via StagesFromJunction
+
+Instead of listing connector IDs manually, stages are built from the junction config.
+`StagesFromJunction` inspects each phase's signal groups and collects connectors for
+every group with at least one GREEN signal:
+
+```
+Junction A: 4 phases -> 4 stages (cycle ~95s)
+  stage 0: connectors [100 101]   (Group 0 GREEN in phase 0)
+  stage 1: connectors [104]       (Group 1 GREEN in phase 1)
+  stage 2: connectors [102 103]   (Group 2 GREEN in phase 2)
+  stage 3: connectors [105]       (Group 3 GREEN in phase 3)
+```
+
+### Realistic scenario output
+
+```
+=== Realistic 4-phase junctions, Smoothing-MP (alpha=0.5) ===
+  t=  30s | total  40.3 | link3   0.7 | int50=>sg2 int60=>sg0
+  t=  60s | total  53.1 | link3   0.4 | int50=>sg0 int60=>sg0
+  ...
+  t= 600s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg2
+  ---
+  avg total queue: 161.6 veh | max: 211.0 veh
+  avg link3 queue:  27.0 veh | max:  42.6 veh
+  B stage selection: sg0(EW-thr)=49  sg1(EW-left)=0  sg2(NS-thr)=71  sg3(NS-left)=0  (total=120)
+```
+
+### Interpreting the realistic results
+
+**sg1 and sg3 are never selected.** This is expected and correct. Left-turn departure
+links (9, 10, 18, 19) are boundary drains -> always flushed to zero. With $x_d = 0$,
+the movement weight simplifies to $w = S \cdot x_u / K_u$. However, the competing
+through stages (sg0, sg2) have higher combined satflow (900+700=1600 vs 600 for sg1),
+so through movements always outweigh left turns under the same upstream queue.
+
+**Left turns would activate when:** the downstream through-link (e.g. link 3) becomes
+heavily congested, reducing sg0's pressure via the $-x_d/K_d$ term. In a full network
+without boundary drains, left-turn departure links accumulate queue and create genuine
+competition. The current example uses isolated departures intentionally to keep the
+corridor dynamics clean.
+
+**The 49/71 split (sg0 vs sg2 at B) is identical to the 2-stage Smoothing-MP scenario.**
+Adding left-turn stages does not disturb coordination -> MP correctly ignores empty stages
+and focuses on competing through movements. This confirms that `StagesFromJunction`
+produces stages that are behaviorally equivalent to the manually built 2-stage case
+when left-turn demand is absent.
+
 ## Algorithm step-by-step
 
 ### Step 1: Inject demand
