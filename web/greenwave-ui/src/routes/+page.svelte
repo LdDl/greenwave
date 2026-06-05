@@ -675,13 +675,9 @@
           {/if}
         </div>
 
-        {#if $optimizedJunctions.length > 0}
+        {#if $optimizedJunctions.length > 0 && !$optimizedResultsAreOutdated.isOutdated}
           <div class="mb-3 text-xs text-gray-500 leading-relaxed">
-            {#if $optimizedResultsAreOutdated.isOutdated}
-              <span class="text-orange-600">⚠️ {$optimizedResultsAreOutdated.reason}</span>
-            {:else}
-              Press Optimize to recalculate with current settings
-            {/if}
+            Press Optimize to recalculate with current settings
           </div>
         {/if}
 
