@@ -1,9 +1,11 @@
 // lib/utils/junction-helpers.js
 
-// Calculate total duration for a junction
+// Calculate total duration for a junction.
+// Uses the first signal group as the reference (all groups are synchronized).
 export function calculateTotalDuration(junction) {
   return junction.cycle.reduce((total, phase) => {
-    return total + phase.signals.reduce((phaseTotal, signal) => {
+    const signals = phase.signal_groups[0].signals;
+    return total + signals.reduce((phaseTotal, signal) => {
       return phaseTotal + signal.duration;
     }, 0);
   }, 0);

@@ -1,9 +1,11 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
+  import RoadView from '../components/RoadView.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
   import EditJunctionModal from '../components/EditJunctionModal.svelte';
   import DropdownMenu from '../components/DropdownMenu.svelte';
+  import { slide } from 'svelte/transition';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
@@ -17,7 +19,6 @@
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
   onMount(() => {
-    // Mark stores as initialized after the first render
     isDesiredSpeedInitialized = true;
     previousDesiredSpeed = $desiredSpeed;
     isDirectionInitialized = true;
@@ -29,7 +30,14 @@
   let showDemoModal = false;
   let showImportModal = false;
   let pendingImportData = null;
-  
+
+  // Per-operation loading flags (global $isLoading stays for disabling buttons)
+  let isExtracting = false;
+  let isOptimizing = false;
+
+  // View mode: 'diagram' | 'road'
+  let viewMode = 'diagram';
+
   // Signal modal state
   let selectedSignal = null;
   let selectedSignalContext = null;
@@ -52,18 +60,17 @@
     : '';
 
   $: isExtractDisabled = $isLoading || $junctions.length < 2 || hasValidationError;
-  
-  // Helper: Check if we're in "clean" state (no data loss risk)
+
   $: isCleanState = $junctions.length === 0 && !hasGreenWaveData;
-  
+
   // Extract green waves from API
   async function handleExtractWaves() {
     if (isExtractDisabled) return;
-    
     try {
+      isExtracting = true;
       isLoading.set(true);
       error.set(null);
-      
+
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
       const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection);
       originalGreenWaves.set(response.green_waves || []);
@@ -72,41 +79,37 @@
       originalReverseThroughWaves.set(response.reverse_through_green_waves || []);
       showGreenWaves.set(true);
       storeWaveCalculationPositions($junctions, $desiredSpeed);
-
       validateInput();
     } catch (apiError) {
       error.set(apiError.message || 'Failed to extract green waves');
       console.error('API Error:', apiError);
     } finally {
+      isExtracting = false;
       isLoading.set(false);
     }
   }
-  
+
   // Smart modal handlers
   function handleResetClick() {
     if (isCleanState) {
-      // Already clean - no need to confirm
       resetToEmpty();
     } else {
-      // Has data - show confirmation
       showResetModal = true;
     }
   }
-  
+
   function handleDemoDataClick() {
     if (isCleanState) {
-      // No data to lose - load directly
       resetToDemo();
     } else {
-      // Has data - show confirmation
       showDemoModal = true;
     }
   }
-  
+
   function confirmReset() {
     resetToEmpty();
   }
-  
+
   function confirmDemoData() {
     resetToDemo();
   }
@@ -146,14 +149,12 @@
     }, 100);
   }
 
-
   let debounceTimeout;
-  // Update the store with new distance
   function updateJunction(event) {
     const { id, newDistance } = event.detail;
     clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => {
-    junctions.update(junctionList => {
+      junctions.update(junctionList => {
         return junctionList.map(junction => {
           if (junction.id === id) {
             return { ...junction, point: { ...junction.point, y: newDistance } };
@@ -167,20 +168,18 @@
 
   // Handle optimization
   async function handleOptimize() {
+    if (isExtractDisabled) return;
     try {
+      isOptimizing = true;
       isLoading.set(true);
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
       const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection);
 
-      // Update the store with optimized offsets
       optimizedOffsets.set(optimizeResponse.best_offsets || []);
-
-      // Handle the optimization response
       optimizedJunctions.set(applyOffsetsToJunctions($junctions, optimizeResponse.best_offsets));
 
-      // Extract the optimized green waves
       const optimizedJunctionsForAPI = prepareJunctionsForAPI($optimizedJunctions);
       const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection);
       optimizedGreenWaves.set(response.green_waves || []);
@@ -188,15 +187,14 @@
       optimizedReverseGreenWaves.set(response.reverse_green_waves || []);
       optimizedReverseThroughWaves.set(response.reverse_through_green_waves || []);
 
-      // Store the current state for validation
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
       optimizedLastCalculatedSpeed.set($desiredSpeed);
-
-      validateResults()
+      validateResults();
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
       console.error('Optimize Error:', optimizeError);
     } finally {
+      isOptimizing = false;
       isLoading.set(false);
     }
   }
@@ -214,16 +212,11 @@
   function saveSignal(e) {
     const updatedSignal = e.detail.signal;
 
-    console.log("Saving signal:", updatedSignal);
-    console.log("Selected signal context:", selectedSignalContext);
-
-    // Ensure selectedSignalContext has the full context
     if (!selectedSignalContext || !selectedSignalContext.junction || !selectedSignalContext.phase) {
       console.error("Invalid selectedSignalContext:", selectedSignalContext);
       return;
     }
 
-    // Update the signal in the corresponding junction
     junctions.update((junctionList) => {
       const updatedJunctions = junctionList.map((junction) => {
         if (junction.id === selectedSignalContext.junction.id) {
@@ -233,12 +226,15 @@
               if (phase === selectedSignalContext.phase) {
                 return {
                   ...phase,
-                  signals: phase.signals.map((signal) => {
-                    if (signal === selectedSignal) {
-                      return { ...signal, ...updatedSignal }; // Update the signal
-                    }
-                    return signal;
-                  }),
+                  signal_groups: phase.signal_groups.map((sg) => ({
+                    ...sg,
+                    signals: sg.signals.map((signal) => {
+                      if (signal === selectedSignal) {
+                        return { ...signal, ...updatedSignal };
+                      }
+                      return signal;
+                    }),
+                  })),
                 };
               }
               return phase;
@@ -247,21 +243,16 @@
         }
         return junction;
       });
-
-      return updatedJunctions; // Reassign the store to trigger reactivity
+      return updatedJunctions;
     });
 
     invalidateAll('signal changes');
-
-    // Close the modal
     closeSignalModal();
   }
 
   function openSignalModal(event) {
     const { junction, phase, signal } = event.detail;
-    // Store the context for saving
     selectedSignalContext = { junction, phase };
-    // Pass only the signal to the modal
     selectedSignal = signal;
     isSignalModalOpen = true;
   }
@@ -271,10 +262,8 @@
     isSignalModalOpen = false;
   }
 
-  // Junction modal handlers
   function openJunctionModal(event) {
     const { junction } = event.detail;
-    // Find the original junction from the store (not the one with calculated total_duration)
     const originalJunction = $junctions.find(j => j.id === junction.id);
     selectedJunction = originalJunction || junction;
     isNewJunction = false;
@@ -282,7 +271,6 @@
   }
 
   function openNewJunctionModal() {
-    // Create a new junction with default values
     const maxId = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.id)) : -1;
     const maxY = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.point.y)) : -100;
 
@@ -292,10 +280,10 @@
       cycle: [
         {
           id: (maxId + 1) * 10,
-          signals: [
+          signal_groups: [{ id: 0, signals: [
             { duration: 30, color: 'GREEN' },
             { duration: 20, color: 'RED' }
-          ]
+          ]}]
         }
       ],
       offset: 0,
@@ -307,17 +295,13 @@
 
   function saveJunction(event) {
     const { junction, isNew } = event.detail;
-
     if (isNew) {
-      // Add new junction
       junctions.update(junctionList => [...junctionList, junction]);
     } else {
-      // Update existing junction
       junctions.update(junctionList =>
         junctionList.map(j => j.id === junction.id ? junction : j)
       );
     }
-
     invalidateAll('junction configuration changed');
     closeJunctionModal();
   }
@@ -333,11 +317,6 @@
     selectedJunction = null;
     isJunctionModalOpen = false;
     isNewJunction = false;
-  }
-
-  function startDiagram() {
-    console.log("Starting diagram with empty junctions");
-    junctions.set([]);
   }
 
   // File menu items
@@ -370,14 +349,12 @@
           }
 
           if (isCleanState) {
-            // No data to lose - import directly
             junctions.set(imported.junctions);
             if (imported.desiredSpeed) desiredSpeed.set(imported.desiredSpeed);
             if (imported.desiredIntensity) desiredIntensity.set(imported.desiredIntensity);
             if (imported.direction) optimizationDirection.set(imported.direction);
             invalidateAll('configuration imported');
           } else {
-            // Has data - show confirmation
             pendingImportData = imported;
             showImportModal = true;
           }
@@ -402,11 +379,10 @@
         break;
     }
   }
-
 </script>
 
-<!-- Reset Confirmation Modal -->
-<ConfirmModal 
+<!-- Confirmation Modals -->
+<ConfirmModal
   bind:show={showResetModal}
   title="Reset All Data"
   message="This will clear all junctions, reset the desired speed, and remove all calculated results. This action cannot be undone."
@@ -416,7 +392,6 @@
   danger={true}
 />
 
-<!-- Demo Data Confirmation Modal -->
 <ConfirmModal
   bind:show={showDemoModal}
   title="Load Demo Data"
@@ -427,7 +402,6 @@
   danger={false}
 />
 
-<!-- Import Confirmation Modal -->
 <ConfirmModal
   bind:show={showImportModal}
   title="Import Configuration"
@@ -458,234 +432,138 @@
 
 <div class="min-h-screen bg-gray-50 flex flex-col">
   <div class="container mx-auto p-4 flex-1 flex flex-col">
+
     <!-- Header -->
     <div class="mb-6">
-      <h1 class="text-3xl font-bold text-center mb-4">Green Wave Traffic Light Optimizer</h1>
-      
-      <!-- Error Message -->
-      {#if $error}
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          <strong>Error:</strong> {$error}
-        </div>
-      {/if}
-    </div>
-    
-    <!-- Main content grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-      <!-- Left side - optimized results -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col flex-1 min-h-0">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-semibold">Optimized results</h2>
-          <button
-            on:click={clearResults}
-            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm w-24 text-center"
-            >
-            Clear results
-          </button>
-        </div>
-        
-        <!-- Results chart container -->
-        <div class="flex-1 border border-gray-300 rounded-lg mb-4 min-h-0 overflow-hidden">
-          {#if $optimizedJunctions.length > 0}
-            <TimeSpaceDiagram
-              junctions={$optimizedJunctions}
-              greenWaves={$optimizedGreenWaves}
-              throughWaves={$optimizedThroughWaves}
-              reverseGreenWaves={$optimizedReverseGreenWaves}
-              reverseThroughWaves={$optimizedReverseThroughWaves}
-              showWaves={true}
-              interactive={false}
-              resultsAreOutdated={$optimizedResultsAreOutdated}
-              isResults={true}
-            />
-          {:else}
-            <div class="flex items-center border-2 border-dashed border-gray-300 rounded-lg justify-center h-full text-gray-500">
-              <p>No optimized results to display. Run optimization to see results.</p>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Controls for results -->
-        <div class="border-t pt-4 mt-auto">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Desired intensity -->
-            <div>
-              <label for="opt-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
-              <input
-                id="opt-desired-intensity"
-                type="number"
-                bind:value={$desiredIntensity}
-                class="w-full px-3 py-2 border rounded-md"
-                min="0"
-                class:border-orange-500={hasResults && $optimizedResultsAreOutdated.isOutdated}
-                class:border-black-300={!hasResults || !$optimizedResultsAreOutdated.isOutdated}
-                disabled={hasResults && $optimizedResultsAreOutdated.isOutdated}
-              />
-            </div>
-
-            <!-- Desired Flow -->
-            <div>
-              <label for="opt-desired-flow" class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
-              <input
-                id="opt-desired-flow"
-                type="number"
-                value={$desiredFlow}
-                class="w-full px-3 py-2 border rounded-md"
-                min="0"
-                step="0.5"
-                class:border-orange-500={hasResults && $optimizedResultsAreOutdated.isOutdated}
-                class:border-black-300={!hasResults || !$optimizedResultsAreOutdated.isOutdated}
-                on:input={(e) => desiredIntensity.set(e.target.value * 3600)}
-                disabled={hasResults && $optimizedResultsAreOutdated.isOutdated}
-              />
-            </div>
-
-            <!-- Actual Intensity (Forward) -->
-            <div>
-              <span class="block text-sm font-medium mb-2">
-                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
-              </span>
-              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensityOptimized || 0).toFixed(2)} veh/h
-                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
-                  <span class="text-orange-500">(Outdated)</span>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Actual Flow (Forward) -->
-            <div>
-              <span class="block text-sm font-medium mb-2">
-                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
-              </span>
-              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {$actualFlowOptimized.toFixed(6)} veh/s
-                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
-                  <span class="text-orange-500">(Outdated)</span>
-                {/if}
-              </div>
-            </div>
-
-            {#if $optimizationDirection === 'bidirectional'}
-              <!-- Actual Intensity (Reverse) -->
-              <div>
-                <span class="block text-sm font-medium mb-2">
-                  Actual intensity <span class="text-blue-600">(rev)</span>
-                </span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                  {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
-                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
-                    <span class="text-orange-500">(Outdated)</span>
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Actual Flow (Reverse) -->
-              <div>
-                <span class="block text-sm font-medium mb-2">
-                  Actual flow <span class="text-blue-600">(rev)</span>
-                </span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                  {$actualReverseFlowOptimized.toFixed(6)} veh/s
-                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}
-                    <span class="text-orange-500">(Outdated)</span>
-                  {/if}
-                </div>
-              </div>
-            {/if}
+      <div class="flex items-center justify-between mb-4">
+        <div class="w-32"></div>
+        <h1 class="text-3xl font-bold text-center">Green Wave Traffic Light Optimizer</h1>
+        <div class="w-32 flex justify-end">
+          <div class="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5 text-sm">
+            <button
+              on:click={() => viewMode = 'diagram'}
+              class="px-3 py-1.5 rounded-md font-medium transition-all"
+              class:bg-white={viewMode === 'diagram'}
+              class:text-gray-900={viewMode === 'diagram'}
+              class:shadow-sm={viewMode === 'diagram'}
+              class:text-gray-500={viewMode !== 'diagram'}
+            >Diagram</button>
+            <button
+              on:click={() => viewMode = 'road'}
+              class="px-3 py-1.5 rounded-md font-medium transition-all"
+              class:bg-white={viewMode === 'road'}
+              class:text-gray-900={viewMode === 'road'}
+              class:shadow-sm={viewMode === 'road'}
+              class:text-gray-500={viewMode !== 'road'}
+            >Road</button>
           </div>
         </div>
       </div>
-      
-      <!-- Right side - Input Data -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col flex-1 min-h-0">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-semibold">Input configuration</h2>
-          <div class="flex gap-4 items-center">
-            <div class="flex gap-2">
-              <DropdownMenu
-                label="File"
-                items={fileMenuItems}
-                on:select={handleFileMenuSelect}
-              />
 
-              <button
-                on:click={openNewJunctionModal}
-                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm w-32 text-center"
-                title="Add a new junction"
-              >
-                + Add Junction
-              </button>
+      <!-- Error banner -->
+      {#if $error}
+        <div
+          transition:slide={{ duration: 200 }}
+          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-4 flex justify-between items-start gap-3"
+        >
+          <span><strong>Error:</strong> {$error}</span>
+          <button
+            on:click={() => error.set(null)}
+            class="text-red-500 hover:text-red-700 leading-none shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
+            aria-label="Dismiss error"
+          >✕</button>
+        </div>
+      {/if}
+    </div>
 
-              <button
-                on:click={handleExtractWaves}
-                disabled={isExtractDisabled}
-                class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-32"
-              >
-                {#if $isLoading}
-                  <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Loading...
-                {:else}
-                  Extract waves
-                {/if}
-              </button>
+    <!-- Main content grid  Input LEFT, Results RIGHT -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
 
-              <button
-                on:click={handleOptimize}
-                disabled={isExtractDisabled}
-                class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm w-24 text-center disabled:bg-gray-400 disabled:cursor-not-allowed"
-                title="Recalculate waves and optimize offsets"
-              >
+      <!-- LEFT: Input Configuration -->
+      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col min-h-0">
+
+        <!-- Panel header: title + wrapping toolbar -->
+        <div class="mb-4">
+          <div class="flex justify-between items-center mb-3">
+            <h2 class="text-xl font-semibold">Input configuration</h2>
+          </div>
+          <!-- Toolbar wraps on narrow panels instead of clipping -->
+          <div class="flex flex-wrap gap-2 items-center">
+            <DropdownMenu
+              label="File"
+              items={fileMenuItems}
+              on:select={handleFileMenuSelect}
+            />
+
+            <button
+              on:click={openNewJunctionModal}
+              class="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+              title="Add a new junction"
+            >
+              + Add Junction
+            </button>
+
+            <button
+              on:click={handleExtractWaves}
+              disabled={isExtractDisabled}
+              class="px-3 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-1"
+            >
+              {#if isExtracting}
+                <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Extracting...
+              {:else}
+                Extract waves
+              {/if}
+            </button>
+
+            <button
+              on:click={handleOptimize}
+              disabled={isExtractDisabled}
+              class="px-3 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1"
+              title="Recalculate waves and optimize offsets"
+            >
+              {#if isOptimizing}
+                <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Optimizing...
+              {:else}
                 Optimize
-              </button>
-            </div>
-            
-            <!-- Toggle Group - Separate -->
-            <label class="flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
+              {/if}
+            </button>
+
+            <!-- Show waves toggle  padded for 44px touch target -->
+            <label class="flex items-center gap-2 cursor-pointer select-none py-2 px-1">
+              <input
+                type="checkbox"
                 bind:checked={$showGreenWaves}
                 disabled={!hasGreenWaveData}
-                class="mr-2"
-                class:opacity-50={!hasGreenWaveData}
-                class:cursor-not-allowed={!hasGreenWaveData}
+                class="w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
               />
-              <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>
-                Show waves
-              </span>
+              <span class="text-sm" class:text-gray-400={!hasGreenWaveData}>Show waves</span>
             </label>
           </div>
         </div>
-        
-        <!-- Chart container -->
-        <div class="flex-1 border border-gray-300 rounded mb-4 min-h-0 overflow-hidden">
+
+        <!-- Chart (flex-1 fills available space, controls sit below) -->
+        <div class="flex-1 border border-gray-300 rounded-md mb-1 min-h-[280px] overflow-hidden">
           {#if $junctions.length === 0}
-            <!-- Empty State -->
             <div class="flex items-center justify-center h-full text-gray-500">
-              <div class="text-center">
+              <div class="text-center p-6">
                 <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
                 <h3 class="text-lg font-medium mb-2">No junctions configured</h3>
                 <p class="text-sm mb-4">Add junctions to start visualizing traffic light coordination</p>
-                <div class="flex gap-2 justify-center">
-                  <button
-                    on:click={openNewJunctionModal}
-                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                  >
+                <div class="flex gap-2 justify-center flex-wrap">
+                  <button on:click={openNewJunctionModal} class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
                     + Add First Junction
                   </button>
-                  <button
-                    on:click={handleDemoDataClick}
-                    class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
-                  >
+                  <button on:click={handleDemoDataClick} class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
                     Load Demo Data
                   </button>
                 </div>
               </div>
             </div>
-          {:else}
-            <!-- Regular Chart -->
+          {:else if viewMode === 'diagram'}
             <TimeSpaceDiagram
               junctions={$junctions}
               wavesAreOutdated={$wavesAreOutdated}
@@ -696,150 +574,212 @@
               reverseThroughWaves={$originalReverseThroughWaves}
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
-              isResults={false}
               on:editSignal={openSignalModal}
               on:editJunction={openJunctionModal}
             />
+          {:else}
+            <RoadView junctions={$junctions} />
           {/if}
         </div>
-        
-        <!-- Controls -->
-        <div class="border-t pt-4 mt-auto">
-          <!-- Optimization direction -->
-          <div class="mb-4">
-            <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
-            <select
-              id="input-direction"
-              bind:value={$optimizationDirection}
-              class="w-full px-3 py-2 border rounded-md"
-            >
-              <option value="forward">Forward only</option>
-              <option value="bidirectional">Bidirectional</option>
-            </select>
-          </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <!-- Desired speed -->
-            <div>
-              <label for="input-desired-speed" class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
-              <input
-                id="input-desired-speed"
-                type="number"
-                bind:value={$desiredSpeed}
-                class="w-full px-3 py-2 border rounded-md"
-                min="10"
-                max="100"
-              />
-            </div>
-
-            <!-- Junctions -->
-            <div>
-              <span class="block text-sm font-medium mb-2">Junctions</span>
-              <p class="text-sm text-gray-600">{$junctions.length} junctions configured</p>
-
-              {#if $junctions.length === 0}
-                <p class="text-sm text-blue-600 mt-1">📍 Use File menu or add junctions manually</p>
-              {:else if $junctions.length === 1}
-                <p class="text-sm text-orange-600 mt-1">⚠️ Add at least 1 more junction to extract waves</p>
-              {:else if hasValidationError}
-                <p class="text-sm text-red-600 mt-1">⚠️ {validationErrorMessage}</p>
-              {:else if hasGreenWaveData}
-                <p class="text-sm text-green-600 mt-1">✓ Green waves calculated</p>
-              {:else}
-                <p class="text-sm text-orange-600 mt-1">Press "Extract waves" to calculate green waves</p>
-              {/if}
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <!-- Desired intensity -->
-            <div>
-              <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (vehicles/hour)</label>
-              <input
-                id="input-desired-intensity"
-                type="number"
-                bind:value={$desiredIntensity}
-                class="w-full px-3 py-2 border rounded-md"
-                min="0"
-                class:border-orange-500={$wavesAreOutdated.isOutdated}
-                class:border-black-300={!$wavesAreOutdated.isOutdated}
-                disabled={$wavesAreOutdated.isOutdated}
-              />
-            </div>
-
-            <!-- Desired flow -->
-            <div>
-              <label for="input-desired-flow" class="block text-sm font-medium mb-2">Desired flow (vehicles/second)</label>
-              <input
-                id="input-desired-flow"
-                type="number"
-                value={$desiredFlow}
-                class="w-full px-3 py-2 border rounded-md"
-                min="0"
-                step="0.5"
-                class:border-orange-500={$wavesAreOutdated.isOutdated}
-                class:border-black-300={!$wavesAreOutdated.isOutdated}
-                on:input={(e) => desiredIntensity.set(e.target.value * 3600)}
-                disabled={$wavesAreOutdated.isOutdated}
-              />
-            </div>
-
-            <!-- Actual intensity (Forward) -->
-            <div>
-              <span class="block text-sm font-medium mb-2">
-                Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
-              </span>
-              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualIntensity || 0).toFixed(2)} veh/h
-                {#if $wavesAreOutdated.isOutdated}
-                  <span class="text-orange-500">(Outdated)</span>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Actual flow (Forward) -->
-            <div>
-              <span class="block text-sm font-medium mb-2">
-                Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}
-              </span>
-              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                {($actualFlow || 0).toFixed(6)} veh/s
-                {#if $wavesAreOutdated.isOutdated}
-                  <span class="text-orange-500">(Outdated)</span>
-                {/if}
-              </div>
-            </div>
-
-            {#if $optimizationDirection === 'bidirectional'}
-              <!-- Actual intensity (Reverse) -->
-              <div>
-                <span class="block text-sm font-medium mb-2">
-                  Actual intensity <span class="text-blue-600">(rev)</span>
-                </span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                  {($actualReverseIntensity || 0).toFixed(2)} veh/h
-                  {#if $wavesAreOutdated.isOutdated}
-                    <span class="text-orange-500">(Outdated)</span>
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Actual flow (Reverse) -->
-              <div>
-                <span class="block text-sm font-medium mb-2">
-                  Actual flow <span class="text-blue-600">(rev)</span>
-                </span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700">
-                  {($actualReverseFlow || 0).toFixed(6)} veh/s
-                  {#if $wavesAreOutdated.isOutdated}
-                    <span class="text-orange-500">(Outdated)</span>
-                  {/if}
-                </div>
-              </div>
+        {#if $junctions.length > 0}
+          <div class="mb-3 text-xs text-gray-500 leading-relaxed">
+            {#if $wavesAreOutdated.isOutdated}
+              <span class="text-orange-600">⚠️ {$wavesAreOutdated.reason}</span>
+            {:else}
+              Drag junctions to reposition · Click junction label or circle to edit · Click signal line to change
             {/if}
           </div>
+        {/if}
+
+        <!-- Controls below chart -> space-y-4 for stable spacing, no mt-auto needed -->
+        <div class="border-t pt-4 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
+              <select id="input-direction" bind:value={$optimizationDirection} class="w-full px-3 py-2 border rounded-md">
+                <option value="forward">Forward only</option>
+                <option value="bidirectional">Bidirectional</option>
+              </select>
+            </div>
+            <div>
+              <label for="input-desired-speed" class="block text-sm font-medium mb-2">Desired speed (km/h)</label>
+              <input id="input-desired-speed" type="number" bind:value={$desiredSpeed} class="w-full px-3 py-2 border rounded-md" min="10" max="100" />
+            </div>
+          </div>
+
+          <!-- Junction status -> own line so it never shifts the grid above -->
+          <div class="text-sm leading-snug">
+            <span class="font-medium text-gray-700">{$junctions.length} junctions</span>
+            {#if $junctions.length === 0}
+              <span class="text-blue-600"> -> use File menu or add manually</span>
+            {:else if $junctions.length === 1}
+              <span class="text-orange-600"> -> add at least 1 more to extract waves</span>
+            {:else if hasValidationError}
+              <span class="block text-red-600 mt-0.5">⚠ {validationErrorMessage}</span>
+            {:else if hasGreenWaveData}
+              <span class="text-green-600"> -> green waves calculated</span>
+            {:else}
+              <span class="text-orange-600"> -> press "Extract waves" to calculate</span>
+            {/if}
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (veh/h)</label>
+              <input id="input-desired-intensity" type="number" bind:value={$desiredIntensity} class="w-full px-3 py-2 border rounded-md" min="0" />
+            </div>
+            <div>
+              <label for="input-desired-flow" class="block text-sm font-medium mb-2">Desired flow (veh/s)</label>
+              <input id="input-desired-flow" type="number" value={$desiredFlow} class="w-full px-3 py-2 border rounded-md" min="0" step="0.5" on:input={(e) => desiredIntensity.set(e.target.value * 3600)} />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                {($actualIntensity || 0).toFixed(2)} veh/h
+                {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+              </div>
+            </div>
+            <div>
+              <span class="block text-sm font-medium mb-2">Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                {($actualFlow || 0).toFixed(6)} veh/s
+                {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+              </div>
+            </div>
+          </div>
+
+          {#if $optimizationDirection === 'bidirectional'}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                  {($actualReverseIntensity || 0).toFixed(2)} veh/h
+                  {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                </div>
+              </div>
+              <div>
+                <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                  {($actualReverseFlow || 0).toFixed(6)} veh/s
+                  {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                </div>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
+
+      <!-- RIGHT: Optimized Results -->
+      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col min-h-0">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-semibold">Optimized results</h2>
+          <button
+            on:click={clearResults}
+            class="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
+          >
+            Clear results
+          </button>
+        </div>
+
+        <!-- Chart (flex-1 fills available space, controls sit below) -->
+        <div class="flex-1 border border-gray-300 rounded-md mb-1 min-h-[280px] overflow-hidden">
+          {#if $optimizedJunctions.length > 0}
+            {#if viewMode === 'diagram'}
+              <TimeSpaceDiagram
+                junctions={$optimizedJunctions}
+                greenWaves={$optimizedGreenWaves}
+                throughWaves={$optimizedThroughWaves}
+                reverseGreenWaves={$optimizedReverseGreenWaves}
+                reverseThroughWaves={$optimizedReverseThroughWaves}
+                showWaves={true}
+                showOffsets={true}
+                interactive={false}
+              />
+            {:else}
+              <RoadView junctions={$optimizedJunctions} showOffsets={true} />
+            {/if}
+          {:else}
+            <div class="flex items-center border-2 border-dashed border-gray-300 rounded-md justify-center h-full text-gray-500 p-6">
+              <p class="text-center text-sm">No optimized results yet. Configure input and press Optimize.</p>
+            </div>
+          {/if}
+        </div>
+
+        {#if $optimizedJunctions.length > 0 && !$optimizedResultsAreOutdated.isOutdated}
+          <div class="mb-3 text-xs text-gray-500 leading-relaxed">
+            Press Optimize to recalculate with current settings
+          </div>
+        {/if}
+
+        <!-- Controls below chart -> space-y-4 for stable spacing, no mt-auto needed -->
+        <div class="border-t pt-4 space-y-4">
+          <!-- Optimization status -> own line, wraps freely -->
+          <div class="text-sm leading-snug">
+            {#if $optimizedJunctions.length > 0}
+              <span class="font-medium text-gray-700">{$optimizedJunctions.length} junctions optimized</span>
+              {#if $optimizedResultsAreOutdated.isOutdated}
+                <span class="block text-orange-600 mt-0.5">⚠ {$optimizedResultsAreOutdated.reason}</span>
+              {:else}
+                <span class="text-green-600"> -> offsets applied</span>
+              {/if}
+            {:else}
+              <span class="text-gray-400">No results yet -> press Optimize</span>
+            {/if}
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="opt-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (veh/h)</label>
+              <input id="opt-desired-intensity" type="number" bind:value={$desiredIntensity} class="w-full px-3 py-2 border rounded-md" min="0" />
+            </div>
+            <div>
+              <label for="opt-desired-flow" class="block text-sm font-medium mb-2">Desired flow (veh/s)</label>
+              <input id="opt-desired-flow" type="number" value={$desiredFlow} class="w-full px-3 py-2 border rounded-md" min="0" step="0.5" on:input={(e) => desiredIntensity.set(e.target.value * 3600)} />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                {($actualIntensityOptimized || 0).toFixed(2)} veh/h
+                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+              </div>
+            </div>
+            <div>
+              <span class="block text-sm font-medium mb-2">Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                {$actualFlowOptimized.toFixed(6)} veh/s
+                {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+              </div>
+            </div>
+          </div>
+
+          {#if $optimizationDirection === 'bidirectional'}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                  {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                </div>
+              </div>
+              <div>
+                <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
+                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                  {$actualReverseFlowOptimized.toFixed(6)} veh/s
+                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                </div>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+
     </div>
   </div>
 </div>

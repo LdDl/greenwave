@@ -58,6 +58,11 @@ func MainAPI(app *echo.Echo, appCfg *configuration.Configuration) {
 		routerGroup.POST("/optimize", RequestOptimize())
 	}
 
+	mpGroup := mainGroup.Group("/maxpressure")
+	{
+		mpGroup.POST("/run", RequestMPRun())
+	}
+
 	// Serve static files from the UI build folder if configured
 	if appCfg.StaticFolder != "" {
 		// Serve static assets
