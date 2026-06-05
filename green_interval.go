@@ -1,8 +1,9 @@
-package greeninterval
+package greenwave
 
 import "math"
 
 const (
+	// @todo: consider making eps configurable (e.g. via function parameter or global config)
 	// Minimum overlap in seconds to consider intervals as connected
 	EPS_INTERVAL = 0.01
 )
@@ -17,8 +18,8 @@ type GreenInterval struct {
 	End float64
 }
 
-// New creates a new GreenInterval instance with the specified phase index, start time, and end time.
-func New(phaseIdx int, start, end float64) *GreenInterval {
+// NewGreenInterval creates a new GreenInterval instance with the specified phase index, start time, and end time.
+func NewGreenInterval(phaseIdx int, start, end float64) *GreenInterval {
 	return &GreenInterval{
 		PhaseIdx: phaseIdx,
 		Start:    start,
@@ -31,7 +32,7 @@ func (interval *GreenInterval) CanConnect(otherInterval *GreenInterval) *GreenIn
 	overlapStart := math.Max(interval.Start, otherInterval.Start)
 	overlapEnd := math.Min(interval.End, otherInterval.End)
 	if overlapEnd-overlapStart > EPS_INTERVAL {
-		return New(interval.PhaseIdx, overlapStart, overlapEnd)
+		return NewGreenInterval(interval.PhaseIdx, overlapStart, overlapEnd)
 	}
 	return nil
 }

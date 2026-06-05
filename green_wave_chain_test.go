@@ -3,39 +3,30 @@ package greenwave
 import (
 	"testing"
 
-	"github.com/LdDl/greenwave/greeninterval"
-	"github.com/LdDl/greenwave/junction"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMergeGreenWaves(t *testing.T) {
-	junctions := junction.BasicTestJunctions()
+	junctions := basicTestJuntions()
 	desiredSpeedKmh := 40.0
-	// Pick group for each junction (in this case, we know that all junctions have group #0)
-	groupIDs := map[int]junction.GroupID{
-		100500: 0,
-		42:     0,
-		78:     0,
-		256:    0,
-	}
-	greenWaves := FindGreenWaves(junctions, groupIDs, desiredSpeedKmh)
+	greenWaves := FindGreenWaves(junctions, desiredSpeedKmh)
 	throughGreenWaves := MergeGreenWaves(greenWaves)
 
 	correctThroughGreenWaves := []*ThroughGreenWave{
 		NewThroughGreenWave(
-			[]*greeninterval.GreenInterval{
-				greeninterval.New(0, 11, 14.5),
-				greeninterval.New(0, 29, 32.5),
-				greeninterval.New(0, 51.5, 55),
-				greeninterval.New(1, 65, 68.5),
+			[]*GreenInterval{
+				NewGreenInterval(0, 11, 14.5),
+				NewGreenInterval(0, 29, 32.5),
+				NewGreenInterval(0, 51.5, 55),
+				NewGreenInterval(1, 65, 68.5),
 			},
 		),
 		NewThroughGreenWave(
-			[]*greeninterval.GreenInterval{
-				greeninterval.New(0, 21.5, 30),
-				greeninterval.New(0, 39.5, 48),
-				greeninterval.New(1, 62, 70.5),
-				greeninterval.New(1, 75.5, 84),
+			[]*GreenInterval{
+				NewGreenInterval(0, 21.5, 30),
+				NewGreenInterval(0, 39.5, 48),
+				NewGreenInterval(1, 62, 70.5),
+				NewGreenInterval(1, 75.5, 84),
 			},
 		),
 	}

@@ -18,26 +18,16 @@ type JunctionDTO struct {
 	Point PointDTO `json:"point"`
 }
 
-// SignalGroupDTO represents a signal group for API communication.
-// Represents a named group of signals within a phase (e.g. northbound, eastbound, pedestrian).
-// swagger:model
-type SignalGroupDTO struct {
-	// Signal group identifier
-	ID int `json:"id"`
-	// List of signals that define the group's state sequence within the phase
-	Signals []SignalDTO `json:"signals"`
-	// Total duration of the group in seconds, calculated from the signals
-	TotalSeconds int `json:"total_seconds"`
-}
-
 // PhaseDTO represents a phase for API communication.
-// Represents a traffic light phase with an ID and a list of signal groups.
+// Represents a traffic light phase with an ID and a list of signals.
 // swagger:model
 type PhaseDTO struct {
 	// Indentifier for the phase
 	ID int `json:"id"`
-	// List of signal groups that define the phase (one entry per group)
-	SignalGroups []SignalGroupDTO `json:"signal_groups"`
+	// List of signals that define the phase
+	Signals []SignalDTO `json:"signals"`
+	// Total duration of the phase in seconds, calculated from the signals
+	TotalSeconds int `json:"total_seconds"`
 }
 
 // SignalDTO represents a signal for API communication.

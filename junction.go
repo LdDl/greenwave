@@ -1,10 +1,6 @@
-package junction
+package greenwave
 
-import (
-	"github.com/LdDl/greenwave/color"
-	"github.com/LdDl/greenwave/geom"
-	"github.com/LdDl/greenwave/greeninterval"
-)
+import "github.com/LdDl/greenwave/color"
 
 // Junction represents a traffic light junction
 type Junction struct {
@@ -19,30 +15,21 @@ type Junction struct {
 	// Offset of the cycle
 	offset int
 	// Location of the junction
-	point geom.Point
+	point Point
 }
 
-// NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases).
-// totalDuration is derived from the first group met in the first phase.
-// All groups in a junction should share the same cycle length (they are synchronized),
-// so the first group serves as reference.
+// NewJunction creates a new Junction instance with the specified ID, label, cycle (list of phases)
 func NewJunction(cycle []*Phase, options ...func(*Junction)) *Junction {
-	var refGroupID GroupID
-	if len(cycle) > 0 && len(cycle[0].SignalGroups) > 0 {
-		refGroupID = cycle[0].SignalGroups[0].ID
-	}
 	totalDuration := 0
 	for _, phase := range cycle {
-		if dur, ok := phase.GetTotalSeconds(refGroupID); ok {
-			totalDuration += dur
-		}
+		totalDuration += phase.totalSeconds
 	}
 	junction := &Junction{
 		ID:            -1,
 		Label:         "-1",
 		Cycle:         cycle,
 		totalDuration: totalDuration,
-		offset:        0,
+		offset:        0, // Default offset is 0, can be set later if needed
 	}
 	for _, option := range options {
 		option(junction)
@@ -62,6 +49,7 @@ func (jun *Junction) SetOffset(offset int) {
 		jun.offset = 0
 		return
 	}
+	// Normalize offset to [0, totalDuration) - handles negative values correctly
 	jun.offset = ((offset % jun.totalDuration) + jun.totalDuration) % jun.totalDuration
 }
 
@@ -80,7 +68,7 @@ func WithLabel(label string) func(*Junction) {
 }
 
 // WithPoint is an option function that sets the point (location) for the junction.
-func WithPoint(point geom.Point) func(*Junction) {
+func WithPoint(point Point) func(*Junction) {
 	return func(j *Junction) {
 		j.point = point
 	}
@@ -92,46 +80,35 @@ func (jun *Junction) GetTotalDuration() int {
 }
 
 // GetPoint returns the point (location) of the junction.
-func (jun *Junction) GetPoint() geom.Point {
+func (jun *Junction) GetPoint() Point {
 	return jun.point
 }
 
-// GetGreenIntervals extracts green intervals from the junction's cycle for the given signal group.
-func (jun *Junction) GetGreenIntervals(gid GroupID) []*greeninterval.GreenInterval {
-	intervals := make([]*greeninterval.GreenInterval, 0)
+func (jun *Junction) GetGreenIntervals() []*GreenInterval {
+	intervals := make([]*GreenInterval, 0)
 
 	cycleDuration := jun.totalDuration
 	if cycleDuration <= 0 {
-		return intervals
+		return intervals // No valid cycle duration, return empty intervals
 	}
 
 	currentTime := 0
 	for phaseIdx, phase := range jun.Cycle {
-		phaseDuration, ok := phase.GetTotalSeconds(gid)
-		if !ok {
-			continue
-		}
+		phaseEnd := currentTime + phase.totalSeconds
 		signalStart := currentTime
-		var groupSignals []*Signal
-		for _, sg := range phase.SignalGroups {
-			if sg.ID == gid {
-				groupSignals = sg.Signals
-				break
-			}
-		}
-		for _, signal := range groupSignals {
+		for _, signal := range phase.Signals {
 			if signal.Color == color.GREEN || signal.Color == color.GREENPRIORITY {
 				start := signalStart
 				end := signalStart + signal.Duration
 				if end == cycleDuration {
-					intervals = append(intervals, greeninterval.New(phaseIdx, float64(start%cycleDuration), float64(end)))
+					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end)))
 				} else {
-					intervals = append(intervals, greeninterval.New(phaseIdx, float64(start%cycleDuration), float64(end%cycleDuration)))
+					intervals = append(intervals, NewGreenInterval(phaseIdx, float64(start%cycleDuration), float64(end%cycleDuration)))
 				}
 			}
 			signalStart += signal.Duration
 		}
-		currentTime += phaseDuration
+		currentTime = phaseEnd
 	}
 	return intervals
 }

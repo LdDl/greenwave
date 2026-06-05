@@ -1,62 +1,51 @@
 package dto
 
-import (
-	"github.com/LdDl/greenwave"
-	"github.com/LdDl/greenwave/greeninterval"
-	"github.com/LdDl/greenwave/junction"
-)
+import "github.com/LdDl/greenwave"
 
 // JunctionToDTO converts a Junction to a DTO
-func JunctionToDTO(jun *junction.Junction) JunctionDTO {
-	cycleDTO := make([]PhaseDTO, len(jun.Cycle))
-	for i, phase := range jun.Cycle {
+func JunctionToDTO(junction *greenwave.Junction) JunctionDTO {
+	cycleDTO := make([]PhaseDTO, len(junction.Cycle))
+	for i, phase := range junction.Cycle {
 		cycleDTO[i] = PhaseToDTO(phase)
 	}
 
-	point := jun.GetPoint()
+	point := junction.GetPoint()
 	return JunctionDTO{
-		ID:            jun.ID,
-		Label:         jun.Label,
+		ID:            junction.ID,
+		Label:         junction.Label,
 		Cycle:         cycleDTO,
-		TotalDuration: jun.GetTotalDuration(),
-		Offset:        jun.GetOffset(),
+		TotalDuration: junction.GetTotalDuration(),
+		Offset:        junction.GetOffset(),
 		Point:         PointDTO{X: point.X, Y: point.Y},
 	}
 }
 
 // PhaseToDTO converts a Phase to a DTO
-func PhaseToDTO(phase *junction.Phase) PhaseDTO {
-	signalGroupsDTO := make([]SignalGroupDTO, len(phase.SignalGroups))
-	for i, sg := range phase.SignalGroups {
-		totalSeconds, _ := phase.GetTotalSeconds(sg.ID)
-		signalsDTO := make([]SignalDTO, len(sg.Signals))
-		for j, sig := range sg.Signals {
-			signalsDTO[j] = SignalToDTO(sig)
-		}
-		signalGroupsDTO[i] = SignalGroupDTO{
-			ID:           int(sg.ID),
-			Signals:      signalsDTO,
-			TotalSeconds: totalSeconds,
-		}
+func PhaseToDTO(phase *greenwave.Phase) PhaseDTO {
+	signalsDTO := make([]SignalDTO, len(phase.Signals))
+	for i, signal := range phase.Signals {
+		signalsDTO[i] = SignalToDTO(signal)
 	}
+
 	return PhaseDTO{
 		ID:           phase.ID,
-		SignalGroups: signalGroupsDTO,
+		Signals:      signalsDTO,
+		TotalSeconds: phase.GetTotalSeconds(),
 	}
 }
 
 // SignalToDTO converts a Signal to a DTO
-func SignalToDTO(sig *junction.Signal) SignalDTO {
+func SignalToDTO(signal *greenwave.Signal) SignalDTO {
 	return SignalDTO{
-		Duration:    sig.Duration,
-		MinDuration: &sig.MinDuration,
-		MaxDuration: &sig.MaxDuration,
-		Color:       sig.Color.String(),
+		Duration:    signal.Duration,
+		MinDuration: &signal.MinDuration,
+		MaxDuration: &signal.MaxDuration,
+		Color:       signal.Color.String(),
 	}
 }
 
 // GreenIntervalToDTO converts a GreenInterval to a DTO
-func GreenIntervalToDTO(interval *greeninterval.GreenInterval) *GreenIntervalDTO {
+func GreenIntervalToDTO(interval *greenwave.GreenInterval) *GreenIntervalDTO {
 	if interval == nil {
 		return nil
 	}

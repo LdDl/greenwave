@@ -1,7 +1,5 @@
 package greenwave
 
-import "github.com/LdDl/greenwave/greeninterval"
-
 // GreenWaveChain represents a chain of green waves. Wraps a slice of GreenWave basically
 type GreenWaveChain struct {
 	greenWaves []*GreenWave
@@ -57,7 +55,7 @@ func BuildChainFunctional(waveID WaveID, connections map[WaveID][]WaveID, curren
 }
 
 // AdjustWaveByConnection adjusts a wave based on the connection with another wave and an overlap interval.
-func AdjustWaveByConnection(waveFrom *GreenWave, waveTo *GreenWave, overlap *greeninterval.GreenInterval) *GreenWave {
+func AdjustWaveByConnection(waveFrom *GreenWave, waveTo *GreenWave, overlap *GreenInterval) *GreenWave {
 	// Create a new adjusted wave based on waveTo
 	adjustedWave := waveTo.Clone()
 	// Calculate deltas for start and end
@@ -159,7 +157,7 @@ func MergeGreenWaves(segmentsWaves [][]*GreenWave) []*ThroughGreenWave {
 				previous.bandwidth = previous.intervalJunTwo.End - previous.intervalJunTwo.Start
 			}
 		}
-		var intervals []*greeninterval.GreenInterval
+		var intervals []*GreenInterval
 		intervals = append(intervals, adjustedWaves[0].intervalJunOne)
 		for _, wave := range adjustedWaves {
 			intervals = append(intervals, wave.intervalJunTwo)

@@ -1,13 +1,12 @@
-package main
+package greenwave
 
 import (
-	"fmt"
+	"testing"
 
-	. "github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/color"
 )
 
-func main() {
+func basicTestJuntions() []*Junction {
 	junctions := []*Junction{
 		NewJunction(
 			[]*Phase{
@@ -66,25 +65,15 @@ func main() {
 		),
 	}
 
-	desiredSpeedKhm := 50.0
-	optimizer := NewOptimizerGenetic(
-		junctions,
-		desiredSpeedKhm,
-		50,
-		100,
-		0.1,
-		3,
-		CROSSOVER_BLEND,
-		OPTIMIZATION_FORWARD,
-	)
-	newOffsets := optimizer.Optimize()
-	fmt.Println("Best fitness history:")
-	fitnessHistory := optimizer.(*OptimizerGenetic).BestFitnessHistory()
-	for i, fitness := range fitnessHistory {
-		fmt.Printf("Generation %d: %f\n", i, fitness)
-	}
-	fmt.Println("Optimized offsets:")
-	for i := range junctions {
-		fmt.Printf("Junction at position %d has new offset %f\n", i, newOffsets[i])
+	return junctions
+}
+
+func TestCycleDurationCorrectness(t *testing.T) {
+	junctions := basicTestJuntions()
+	correctDuration := 85
+	for i, junction := range junctions {
+		if junction.totalDuration != correctDuration {
+			t.Errorf("Junction at position %d has incorrect total duration: got %d, want %d", i, junction.totalDuration, correctDuration)
+		}
 	}
 }
