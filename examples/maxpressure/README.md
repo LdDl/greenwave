@@ -118,7 +118,7 @@ inactive groups stay RED throughout the phase.
 
 **Signal transition rule**: for each group, consecutive phases must end with the same
 signal meaning -> prohibition (R, Y) or permission (G). All phases here end with R,
-so all transitions are prohibition->prohibition ✓. This prevents e.g. a phase ending
+so all transitions are prohibition->prohibition. This prevents e.g. a phase ending
 GREEN immediately followed by a phase starting GREEN for the same group.
 
 ### Network extension

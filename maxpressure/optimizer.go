@@ -14,12 +14,102 @@ func ConstantDemand(rates map[gmns.LinkID]float64) DemandFunc {
 	}
 }
 
+// PeakDemandConfig parameterises a time-varying peak demand profile.
+type PeakDemandConfig struct {
+	// BaseRates maps each link ID to its base demand intensity (veh/h).
+	BaseRates map[gmns.LinkID]float64
+	// RampUpS is the ramp-up phase duration (seconds). During this window the
+	// multiplier rises linearly from 0.5 to 1.0. Zero disables the ramp-up.
+	RampUpS float64
+	// PeakFactor is the demand multiplier during the peak phase. Defaults to 1.3.
+	PeakFactor float64
+	// PeakDurationS is the duration (seconds) of the peak phase. Zero skips peak.
+	PeakDurationS float64
+	// RampDownS is the ramp-down phase duration (seconds). During this window the
+	// multiplier drops linearly from PeakFactor to 1.0. Zero disables ramp-down.
+	RampDownS float64
+}
+
+// PeakDemand returns a time-varying DemandFunc with a ramp-up -> peak -> ramp-down -> steady profile.
+//
+// Timeline (all durations in seconds, starting from t=0):
+//
+//	[0, RampUpS)                        multiplier: 0.5 -> 1.0  (linear)
+//	[RampUpS, RampUpS+PeakDurationS)    multiplier: PeakFactor
+//	[…, …+RampDownS)                    multiplier: PeakFactor -> 1.0  (linear)
+//	[…, ∞)                              multiplier: 1.0
+func PeakDemand(cfg PeakDemandConfig) DemandFunc {
+	peakFactor := cfg.PeakFactor
+	if peakFactor <= 0 {
+		peakFactor = 1.3
+	}
+	peakStart := cfg.RampUpS
+	peakEnd := peakStart + cfg.PeakDurationS
+	rampDownEnd := peakEnd + cfg.RampDownS
+
+	return func(linkID gmns.LinkID, timeSec float64) float64 {
+		rate := cfg.BaseRates[linkID]
+		if rate == 0 {
+			return 0
+		}
+		var multiplier float64
+		switch {
+		case timeSec < peakStart:
+			if peakStart > 0 {
+				multiplier = 0.5 + 0.5*(timeSec/peakStart)
+			} else {
+				multiplier = 1.0
+			}
+		case timeSec < peakEnd:
+			multiplier = peakFactor
+		case timeSec < rampDownEnd:
+			if cfg.RampDownS > 0 {
+				multiplier = peakFactor - (peakFactor-1.0)*((timeSec-peakEnd)/cfg.RampDownS)
+			} else {
+				multiplier = 1.0
+			}
+		default:
+			multiplier = 1.0
+		}
+		return rate * multiplier
+	}
+}
+
+// DrainFunc computes the amount of vehicles (veh) to remove from a boundary
+// departure link in one simulation step.
+// The return value is capped at the current queue length before subtraction.
+// If nil, the optimizer zeros boundary queues each step (auto drain).
+type DrainFunc func(linkID gmns.LinkID, queue float64, deltaT float64) float64
+
+// NoDrain returns a DrainFunc that removes nothing. Use it to model a closed
+// network where vehicles accumulate at exits rather than leaving.
+func NoDrain() DrainFunc {
+	return func(_ gmns.LinkID, _ float64, _ float64) float64 {
+		return 0
+	}
+}
+
+// RateDrain returns a DrainFunc that removes vehicles at the given rate (veh/h)
+// per link. Links not present in rates are drained fully (auto behaviour).
+func RateDrain(rates map[gmns.LinkID]float64) DrainFunc {
+	return func(linkID gmns.LinkID, queue float64, deltaT float64) float64 {
+		rate, ok := rates[linkID]
+		if !ok || rate <= 0 {
+			return queue // drain all for unspecified links
+		}
+		return rate * deltaT / 3600.0
+	}
+}
+
 // MPConfig holds configuration for the MP optimizer.
 type MPConfig struct {
 	DeltaT    float64         // simulation step duration (seconds)
 	SimTime   float64         // total simulation time (seconds), 0 = unlimited
 	Smoothing SmoothingConfig // Smoothing-MP parameters
-	Demand    DemandFunc      // demand provider
+	Demand    DemandFunc      // demand provider; nil = no demand
+	// Drain controls how boundary departure links are drained each step.
+	// nil = zero the queue (auto drain); use NoDrain() or RateDrain() for other behaviours.
+	Drain DrainFunc
 }
 
 // MPOptimizer runs max-pressure simulation on a Network.
@@ -117,7 +207,18 @@ func (opt *MPOptimizer) Step() []StepResult {
 
 	// 2. Drain boundary departures
 	for _, lid := range opt.boundaryDepartures {
-		net.Queues[lid] = 0
+		if opt.Config.Drain == nil {
+			net.Queues[lid] = 0
+			continue
+		}
+		remove := opt.Config.Drain(lid, net.Queues[lid], dt)
+		if remove > net.Queues[lid] {
+			remove = net.Queues[lid]
+		}
+		if remove < 0 {
+			remove = 0
+		}
+		net.Queues[lid] -= remove
 	}
 
 	// 3. Select signal groups
