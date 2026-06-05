@@ -1,5 +1,6 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
+  import RoadView from '../components/RoadView.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
   import EditJunctionModal from '../components/EditJunctionModal.svelte';
@@ -33,6 +34,9 @@
   // Per-operation loading flags (global $isLoading stays for disabling buttons)
   let isExtracting = false;
   let isOptimizing = false;
+
+  // View mode: 'diagram' | 'road'
+  let viewMode = 'diagram';
 
   // Signal modal state
   let selectedSignal = null;
@@ -431,7 +435,30 @@
 
     <!-- Header -->
     <div class="mb-6">
-      <h1 class="text-3xl font-bold text-center mb-4">Green Wave Traffic Light Optimizer</h1>
+      <div class="flex items-center justify-between mb-4">
+        <div class="w-32"></div>
+        <h1 class="text-3xl font-bold text-center">Green Wave Traffic Light Optimizer</h1>
+        <div class="w-32 flex justify-end">
+          <div class="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5 text-sm">
+            <button
+              on:click={() => viewMode = 'diagram'}
+              class="px-3 py-1.5 rounded-md font-medium transition-all"
+              class:bg-white={viewMode === 'diagram'}
+              class:text-gray-900={viewMode === 'diagram'}
+              class:shadow-sm={viewMode === 'diagram'}
+              class:text-gray-500={viewMode !== 'diagram'}
+            >Diagram</button>
+            <button
+              on:click={() => viewMode = 'road'}
+              class="px-3 py-1.5 rounded-md font-medium transition-all"
+              class:bg-white={viewMode === 'road'}
+              class:text-gray-900={viewMode === 'road'}
+              class:shadow-sm={viewMode === 'road'}
+              class:text-gray-500={viewMode !== 'road'}
+            >Road</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Error banner -->
       {#if $error}
@@ -536,7 +563,7 @@
                 </div>
               </div>
             </div>
-          {:else}
+          {:else if viewMode === 'diagram'}
             <TimeSpaceDiagram
               junctions={$junctions}
               wavesAreOutdated={$wavesAreOutdated}
@@ -550,6 +577,8 @@
               on:editSignal={openSignalModal}
               on:editJunction={openJunctionModal}
             />
+          {:else}
+            <RoadView junctions={$junctions} />
           {/if}
         </div>
 
@@ -659,16 +688,20 @@
         <!-- Chart (flex-1 fills available space, controls sit below) -->
         <div class="flex-1 border border-gray-300 rounded-md mb-1 min-h-[280px] overflow-hidden">
           {#if $optimizedJunctions.length > 0}
-            <TimeSpaceDiagram
-              junctions={$optimizedJunctions}
-              greenWaves={$optimizedGreenWaves}
-              throughWaves={$optimizedThroughWaves}
-              reverseGreenWaves={$optimizedReverseGreenWaves}
-              reverseThroughWaves={$optimizedReverseThroughWaves}
-              showWaves={true}
-              showOffsets={true}
-              interactive={false}
-            />
+            {#if viewMode === 'diagram'}
+              <TimeSpaceDiagram
+                junctions={$optimizedJunctions}
+                greenWaves={$optimizedGreenWaves}
+                throughWaves={$optimizedThroughWaves}
+                reverseGreenWaves={$optimizedReverseGreenWaves}
+                reverseThroughWaves={$optimizedReverseThroughWaves}
+                showWaves={true}
+                showOffsets={true}
+                interactive={false}
+              />
+            {:else}
+              <RoadView junctions={$optimizedJunctions} showOffsets={true} />
+            {/if}
           {:else}
             <div class="flex items-center border-2 border-dashed border-gray-300 rounded-md justify-center h-full text-gray-500 p-6">
               <p class="text-center text-sm">No optimized results yet. Configure input and press Optimize.</p>
