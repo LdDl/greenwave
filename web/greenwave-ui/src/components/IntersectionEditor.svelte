@@ -10,8 +10,8 @@
   // Visual constants
   // px per lane
   const LANE_WIDTH = 13;
-  // junction circle radius (where stubs meet)
-  const JUNCTION_RADIUS = 56;
+  // minimum junction circle radius
+  const MIN_JUNCTION_RADIUS = 56;
   // road stub length beyond junction edge
   const STUB_LENGTH = 90;
   // control point pull toward center
@@ -213,36 +213,95 @@
   /** Format number to 1 decimal for SVG attributes */
   function f(v) { return (+v).toFixed(1); }
 
-  // Precomputed stub geometry
-  $: stubGeo = stubs.map(s => {
+  // Minimum angular gap between two stubs at given radius
+  const STUB_GAP_PX = 6;
+  function minAngularGap(stubA, stubB, R) {
+    const need = halfWidth(stubA) + halfWidth(stubB) + STUB_GAP_PX;
+    return 2 * Math.asin(Math.min(1, need / (2 * R)));
+  }
+
+  // Step 1: adaptive junction radius (grow R so stubs fit, capped by viewport)
+  $: maxJunctionRadius = SVG_SIZE / 2 - STUB_LENGTH - LABEL_OFFSET - 10;
+  $: junctionRadius = (() => {
+    if (stubs.length < 2) return MIN_JUNCTION_RADIUS;
+    const sorted = [...stubs].sort((a, b) => a.angle - b.angle);
+    let bestR = MIN_JUNCTION_RADIUS;
+    for (let i = 0; i < sorted.length; i++) {
+      const a = sorted[i];
+      const b = sorted[(i + 1) % sorted.length];
+      let delta = b.angle - a.angle;
+      if (delta <= 0) delta += Math.PI * 2;
+      const sinHalf = Math.sin(delta / 2);
+      if (sinHalf < 0.01) continue;
+      const needed = (halfWidth(a) + halfWidth(b) + STUB_GAP_PX) / (2 * sinHalf);
+      if (needed > bestR) bestR = needed;
+    }
+    return Math.min(bestR, maxJunctionRadius);
+  })();
+
+  // Step 2: spread stub angles so no pair overlaps at junctionRadius.
+  // Preserves angular order; pushes apart only where needed.
+  $: displayStubs = (() => {
+    if (stubs.length < 2) return stubs.map(s => ({ ...s, displayAngle: s.angle }));
+    const R = junctionRadius;
+    const sorted = [...stubs]
+      .map(s => ({ ...s, displayAngle: s.angle }))
+      .sort((a, b) => a.angle - b.angle);
+
+    // Iterative relaxation: push overlapping neighbours apart (few passes suffice)
+    for (let pass = 0; pass < 5; pass++) {
+      let changed = false;
+      for (let i = 0; i < sorted.length; i++) {
+        const a = sorted[i];
+        const b = sorted[(i + 1) % sorted.length];
+        let gap = b.displayAngle - a.displayAngle;
+        if (gap <= 0) gap += Math.PI * 2;
+        const minGap = minAngularGap(a, b, R);
+        if (gap < minGap) {
+          const push = (minGap - gap) / 2;
+          a.displayAngle -= push;
+          b.displayAngle += push;
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    // Normalize angles to [-PI, PI]
+    for (const s of sorted) {
+      while (s.displayAngle > Math.PI) s.displayAngle -= Math.PI * 2;
+      while (s.displayAngle < -Math.PI) s.displayAngle += Math.PI * 2;
+    }
+    return sorted;
+  })();
+
+  // Precomputed stub geometry (uses displayAngle for layout, keeps original angle for data)
+  $: stubGeo = displayStubs.map(s => {
+    const a = s.displayAngle;
     const hw = halfWidth(s);
-    const { nx, ny } = perp(s.angle);
-    const inner = radialPt(s.angle, JUNCTION_RADIUS);
-    const outer = radialPt(s.angle, JUNCTION_RADIUS + STUB_LENGTH);
+    const inner = radialPt(a, junctionRadius);
+    const outer = radialPt(a, junctionRadius + STUB_LENGTH);
 
     // Four corners of the road rectangle
     const corners = [
-      offsetPt(inner, s.angle, +hw),  // inner-left (perp+)
-      offsetPt(inner, s.angle, -hw),  // inner-right (perp-)
-      offsetPt(outer, s.angle, -hw),  // outer-right
-      offsetPt(outer, s.angle, +hw),  // outer-left
+      offsetPt(inner, a, +hw),
+      offsetPt(inner, a, -hw),
+      offsetPt(outer, a, -hw),
+      offsetPt(outer, a, +hw),
     ];
     const roadPath = corners.map((c, i) =>
       `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
     ).join(' ') + ' Z';
 
-    // Inbound band (perp+ side): from centerline to +hw
     const lanesI = Math.max(1, s.lanesIn);
     const lanesO = Math.max(1, s.lanesOut);
-    const inWidth  = lanesI * LANE_WIDTH;
-    const outWidth = lanesO * LANE_WIDTH;
 
     // Inbound band rectangle (perp+ half)
     const inBand = [
-      offsetPt(inner, s.angle, 0),         // inner at centerline
-      offsetPt(inner, s.angle, +hw),       // inner at perp+ edge
-      offsetPt(outer, s.angle, +hw),       // outer at perp+ edge
-      offsetPt(outer, s.angle, 0),         // outer at centerline
+      offsetPt(inner, a, 0),
+      offsetPt(inner, a, +hw),
+      offsetPt(outer, a, +hw),
+      offsetPt(outer, a, 0),
     ];
     const inBandPath = inBand.map((c, i) =>
       `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
@@ -250,10 +309,10 @@
 
     // Outbound band rectangle (perp- half)
     const outBand = [
-      offsetPt(inner, s.angle, 0),
-      offsetPt(inner, s.angle, -hw),
-      offsetPt(outer, s.angle, -hw),
-      offsetPt(outer, s.angle, 0),
+      offsetPt(inner, a, 0),
+      offsetPt(inner, a, -hw),
+      offsetPt(outer, a, -hw),
+      offsetPt(outer, a, 0),
     ];
     const outBandPath = outBand.map((c, i) =>
       `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
@@ -261,40 +320,38 @@
 
     // Lane divider lines (white dashed, between lanes of same direction)
     const laneDividers = [];
-    // Inbound lane dividers (perp+ side)
     for (let i = 1; i < lanesI; i++) {
       const off = i * LANE_WIDTH;
-      const p1 = offsetPt(inner, s.angle, off);
-      const p2 = offsetPt(outer, s.angle, off);
+      const p1 = offsetPt(inner, a, off);
+      const p2 = offsetPt(outer, a, off);
       laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
     }
-    // Outbound lane dividers (perp- side)
     for (let i = 1; i < lanesO; i++) {
       const off = -(i * LANE_WIDTH);
-      const p1 = offsetPt(inner, s.angle, off);
-      const p2 = offsetPt(outer, s.angle, off);
+      const p1 = offsetPt(inner, a, off);
+      const p2 = offsetPt(outer, a, off);
       laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
     }
 
-    // Center divider (yellow) — along the stub centerline
+    // Center divider (yellow)
     const divider = {
       x1: f(inner.x), y1: f(inner.y),
       x2: f(outer.x), y2: f(outer.y),
     };
 
-    // Stop line at junction edge (perpendicular across full road width)
-    const stopL = offsetPt(inner, s.angle, +hw);
-    const stopR = offsetPt(inner, s.angle, -hw);
+    // Stop line at junction edge
+    const stopL = offsetPt(inner, a, +hw);
+    const stopR = offsetPt(inner, a, -hw);
     const stopLine = {
       x1: f(stopL.x), y1: f(stopL.y),
       x2: f(stopR.x), y2: f(stopR.y),
     };
 
     // Badge position (midway along stub)
-    const badge = radialPt(s.angle, JUNCTION_RADIUS + STUB_LENGTH * 0.55);
+    const badge = radialPt(a, junctionRadius + STUB_LENGTH * 0.55);
 
     // Label position (beyond outer end)
-    const labelPos = radialPt(s.angle, JUNCTION_RADIUS + STUB_LENGTH + LABEL_OFFSET);
+    const labelPos = radialPt(a, junctionRadius + STUB_LENGTH + LABEL_OFFSET);
 
     return {
       ...s, hw, roadPath, inBandPath, outBandPath,
@@ -308,20 +365,19 @@
    *  Inbound port: center of the inbound lanes band at junction edge.
    *  Outbound port: center of the outbound lanes band at junction edge. */
   function portPt(stub, inbound) {
-    const inner = radialPt(stub.angle, JUNCTION_RADIUS);
+    const da = stub.displayAngle ?? stub.angle;
+    const inner = radialPt(da, junctionRadius);
     const lanesI = Math.max(1, stub.lanesIn);
     const lanesO = Math.max(1, stub.lanesOut);
-    // Inbound center at +halfInWidth/2 from centerline
-    // Outbound center at -halfOutWidth/2 from centerline
-    const halfIn  = lanesI * LANE_WIDTH / 2;
+    const halfIn = lanesI * LANE_WIDTH / 2;
     const halfOut = lanesO * LANE_WIDTH / 2;
     const offset = inbound ? halfIn / 2 : -(halfOut / 2);
-    return offsetPt(inner, stub.angle, offset);
+    return offsetPt(inner, da, offset);
   }
 
   $: movGeo = movements.map(mov => {
-    const si = stubs.find(s => s.edgeId === mov.inEdgeId);
-    const so = stubs.find(s => s.edgeId === mov.outEdgeId);
+    const si = displayStubs.find(s => s.edgeId === mov.inEdgeId);
+    const so = displayStubs.find(s => s.edgeId === mov.outEdgeId);
     if (!si || !so) return null;
 
     // Arc: inbound port (traffic arriving) -> outbound port (traffic leaving)
@@ -346,7 +402,7 @@
     const path = `M ${f(p0.x)},${f(p0.y)} C ${f(cp0.x)},${f(cp0.y)} ${f(cp1.x)},${f(cp1.y)} ${f(p1.x)},${f(p1.y)}`;
 
     // Arrowhead at outbound port, pointing along stub direction (away from junction)
-    const { dx, dy } = dir(so.angle);
+    const { dx, dy } = dir(so.displayAngle ?? so.angle);
     const tip  = { x: p1.x + dx * ARROW_SIZE, y: p1.y + dy * ARROW_SIZE };
     const left = { x: p1.x - dy * ARROW_SIZE * 0.5, y: p1.y + dx * ARROW_SIZE * 0.5 };
     const right= { x: p1.x + dy * ARROW_SIZE * 0.5, y: p1.y - dx * ARROW_SIZE * 0.5 };
@@ -505,7 +561,7 @@
           >
 
             <!-- Junction box (circle, seamless with road stubs) -->
-            <circle cx={CENTER} cy={CENTER} r={JUNCTION_RADIUS + 2} fill={ROAD_COLOR}/>
+            <circle cx={CENTER} cy={CENTER} r={junctionRadius + 2} fill={ROAD_COLOR}/>
 
             <!-- Road stubs -->
             {#each stubGeo as sg}

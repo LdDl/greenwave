@@ -88,7 +88,7 @@
   }
 
   function handleKeydown(e) {
-    if (pendingEdge || intersectionNodeId != null) return; // modal is open — block shortcuts
+    if (pendingEdge || intersectionNodeId != null) return; // modal is open  block shortcuts
     if (e.target.matches('input, textarea, select')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
     if (e.key === 'Escape') { handleDeselect(); mode = 'select'; }

@@ -268,7 +268,7 @@
             {@const ux  = dx/len}
             {@const uy  = dy/len}
             {@const two = edge.lanes_back > 0}
-            <!-- Bend amount in canvas units — curves bow apart for two-way roads -->
+            <!-- Bend amount in canvas units - curves bow apart for two-way roads -->
             {@const bend = two ? 22 : 0}
             {@const mx = (ep.x1 + ep.x2) / 2}
             {@const my = (ep.y1 + ep.y2) / 2}
