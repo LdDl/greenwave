@@ -436,6 +436,8 @@
 
   // Actions
 
+  let hovMovId = null;
+
   function selectArc(movId) {
     selMovId = selMovId === movId ? null : movId;
   }
@@ -464,13 +466,13 @@
   }
 
   function save() {
-    intersectionConfigs.update(c => ({
-      ...c,
-      [nodeId]: {
-        groups: JSON.parse(JSON.stringify(groups)),
-        movState: JSON.parse(JSON.stringify(movState)),
-      }
-    }));
+    const config = {
+      macro_node_id: nodeId,
+      groups: groups.map(g => ({ id: g.id, greenDuration: g.greenDuration })),
+      movState: { ...movState },
+    };
+    intersectionConfigs.update(c => ({ ...c, [nodeId]: config }));
+    console.log(`[IntersectionEditor] ${node.label} config:`, JSON.stringify(config, null, 2));
     dispatch('close');
   }
 
@@ -630,19 +632,22 @@
               >{sg.label}</text>
             {/each}
 
-            <!-- Movement arcs: invisible hit areas -->
+            <!-- Movement arcs: hit areas + hover glow -->
             {#each movGeo as mg}
               <path d={mg.path} fill="none" stroke="transparent" stroke-width="16"
                 style="cursor:pointer"
-                on:click={() => selectArc(mg.id)}/>
+                on:click={() => selectArc(mg.id)}
+                on:pointerenter={() => hovMovId = mg.id}
+                on:pointerleave={() => { if (hovMovId === mg.id) hovMovId = null; }}/>
             {/each}
 
             <!-- Movement arcs: visible -->
             {#each movGeo as mg}
-              <!-- Selection glow -->
-              {#if selMovId === mg.id}
+              <!-- Selection or hover glow -->
+              {#if selMovId === mg.id || hovMovId === mg.id}
                 <path d={mg.path} fill="none"
-                  stroke={mg.color} stroke-width="12" opacity="0.18"
+                  stroke={mg.color} stroke-width="12"
+                  opacity={selMovId === mg.id ? 0.18 : 0.1}
                   pointer-events="none"/>
               {/if}
               <!-- Arc line -->
