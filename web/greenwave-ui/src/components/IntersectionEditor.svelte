@@ -93,20 +93,43 @@
     return (SVG_SIZE / zoom) / rect.width;
   }
 
+  const DRAG_THRESHOLD = 4;
+  let pointerDown = false;
+  let pointerMoved = false;
+
   function onPointerDown(e) {
     if (e.button !== 0) return;
-    dragging = true;
+    pointerDown = true;
+    pointerMoved = false;
     dragStart = { x: e.clientX, y: e.clientY };
-    panStart  = { x: panX, y: panY };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    panStart = { x: panX, y: panY };
   }
   function onPointerMove(e) {
-    if (!dragging) return;
-    const s = screenToSvgScale();
-    panX = panStart.x + (e.clientX - dragStart.x) * s;
-    panY = panStart.y + (e.clientY - dragStart.y) * s;
+    if (!pointerDown) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    if (!pointerMoved && Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+      pointerMoved = true;
+      dragging = true;
+    }
+    if (dragging) {
+      const s = screenToSvgScale();
+      panX = panStart.x + dx * s;
+      panY = panStart.y + dy * s;
+    }
   }
-  function onPointerUp() { dragging = false; }
+  function onPointerUp() {
+    pointerDown = false;
+    dragging = false;
+  }
+
+  function onSvgClick(e) {
+    if (pointerMoved) return;
+    // Only deselect if click was on SVG background (not on an arc hit area)
+    if (e.target === svgEl || e.target.tagName === 'rect' || e.target.tagName === 'circle') {
+      selMovId = null;
+    }
+  }
 
   // Reactive viewBox: zoom shrinks the visible area, pan shifts it
   $: vbSize = SVG_SIZE / zoom;
@@ -117,7 +140,12 @@
   // Re-init when nodeId changes OR when edge data changes (e.g. lanes, reverse)
   $: if (nodeId != null && $networkEdges) {
     node = $networkNodes.find(n => n.id === nodeId) ?? null;
-    if (node) init();
+    if (node) {
+      init();
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+    }
   }
 
   // Build stubs & movements from graph
@@ -371,9 +399,29 @@
     // Label position (beyond outer end)
     const labelPos = radialPt(a, junctionRadius + STUB_LENGTH + LABEL_OFFSET);
 
+    // One-way direction arrow (chevron at mid-stub)
+    let dirArrow = null;
+    if (!twoWay) {
+      const midR = junctionRadius + STUB_LENGTH * 0.35;
+      const mid = radialPt(a, midR);
+      const { dx, dy } = dir(a);
+      // Inbound = toward junction (opposite of stub direction)
+      const sign = s.lanesIn > 0 ? -1 : 1;
+      const aLen = 8;
+      const aW = 5;
+      dirArrow = {
+        x1: f(mid.x - sign * dx * aLen + aW * (-dy)),
+        y1: f(mid.y - sign * dy * aLen + aW * dx),
+        x2: f(mid.x + sign * dx * aLen),
+        y2: f(mid.y + sign * dy * aLen),
+        x3: f(mid.x - sign * dx * aLen - aW * (-dy)),
+        y3: f(mid.y - sign * dy * aLen - aW * dx),
+      };
+    }
+
     return {
       ...s, hw, twoWay, roadPath, inBandPath, outBandPath,
-      laneDividers, divider, stopLine, badge, labelPos,
+      laneDividers, divider, stopLine, badge, labelPos, dirArrow,
     };
   });
 
@@ -394,7 +442,9 @@
     return offsetPt(inner, da, offset);
   }
 
+  $: _ms = movState;
   $: movGeo = movements.map(mov => {
+    const ms = _ms;
     const si = displayStubs.find(s => s.edgeId === mov.inEdgeId);
     const so = displayStubs.find(s => s.edgeId === mov.outEdgeId);
     if (!si || !so) return null;
@@ -427,7 +477,7 @@
     const right= { x: p1.x + dy * ARROW_SIZE * 0.5, y: p1.y - dx * ARROW_SIZE * 0.5 };
     const arrow = `${f(tip.x)},${f(tip.y)} ${f(left.x)},${f(left.y)} ${f(right.x)},${f(right.y)}`;
 
-    const gid = movState[mov.id]?.groupId ?? null;
+    const gid = ms[mov.id]?.groupId ?? null;
     const color = gid !== null ? gColor(gid) : '#94a3b8';
     const forbidden = gid === null;
 
@@ -437,6 +487,7 @@
   // Actions
 
   let hovMovId = null;
+  let hovGroupId = null;
 
   function selectArc(movId) {
     selMovId = selMovId === movId ? null : movId;
@@ -483,8 +534,84 @@
   $: selMov = selMovId ? movements.find(m => m.id === selMovId) : null;
 
   function gColor(id) { return GROUP_COLORS[id % GROUP_COLORS.length]; }
-  function gBg(id)    { return GROUP_BG[id % GROUP_BG.length]; }
-  function movsByGroup(gid) { return movements.filter(m => movState[m.id]?.groupId === gid); }
+  function gBg(id) { return GROUP_BG[id % GROUP_BG.length]; }
+
+  // Reactive map: groupId → assigned movements
+  $: assignedByGroup = (() => {
+    const ms = _ms;
+    const result = {};
+    for (const g of groups) {
+      result[g.id] = movements.filter(m => ms[m.id]?.groupId === g.id);
+    }
+    return result;
+  })();
+
+  // Determine turn type from angle difference between inbound and outbound stubs
+  function turnType(mov) {
+    const si = displayStubs.find(s => s.edgeId === mov.inEdgeId);
+    const so = displayStubs.find(s => s.edgeId === mov.outEdgeId);
+    if (!si || !so) return '';
+    // Angle from inbound direction (toward junction) to outbound direction (away from junction)
+    // Inbound arrives from si.displayAngle direction, so it "faces" si.displayAngle + PI
+    const inFacing = (si.displayAngle ?? si.angle) + Math.PI;
+    const outDir = so.displayAngle ?? so.angle;
+    let diff = outDir - inFacing;
+    // Normalize to (-PI, PI]
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff <= -Math.PI) diff += 2 * Math.PI;
+    const deg = Math.abs(diff * 180 / Math.PI);
+    if (deg < 30) return 'straight';
+    if (diff > 0) return 'right';
+    return 'left';
+  }
+
+  const TURN_ICONS = { left: '\u2B9C', straight: '\u2B9D', right: '\u2B9E' };
+
+  // Check if two movements potentially conflict (cross paths).
+  // Simplified heuristic: movements conflict if they come from different approaches
+  // and their outbound approaches are "crossed" in angular order.
+  function movementsConflict(m1, m2) {
+    if (m1.inEdgeId === m2.inEdgeId && m1.outEdgeId === m2.outEdgeId) return false;
+    if (m1.inEdgeId === m2.inEdgeId) return false; // same approach, no crossing
+    if (m1.outEdgeId === m2.outEdgeId) return true; // merging into same exit = conflict
+    // Check if paths cross: in1→out1 crosses in2→out2
+    const si1 = displayStubs.find(s => s.edgeId === m1.inEdgeId);
+    const so1 = displayStubs.find(s => s.edgeId === m1.outEdgeId);
+    const si2 = displayStubs.find(s => s.edgeId === m2.inEdgeId);
+    const so2 = displayStubs.find(s => s.edgeId === m2.outEdgeId);
+    if (!si1 || !so1 || !si2 || !so2) return false;
+    const a1 = si1.displayAngle ?? si1.angle;
+    const b1 = so1.displayAngle ?? so1.angle;
+    const a2 = si2.displayAngle ?? si2.angle;
+    const b2 = so2.displayAngle ?? so2.angle;
+    // Normalize angles and check if arcs (a1→b1) and (a2→b2) cross on the circle
+    function normAngle(a) { return ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); }
+    const na1 = normAngle(a1), nb1 = normAngle(b1);
+    const na2 = normAngle(a2), nb2 = normAngle(b2);
+    // Two chords cross if their endpoints alternate on the circle
+    function between(x, lo, hi) {
+      if (lo < hi) return x > lo && x < hi;
+      return x > lo || x < hi;
+    }
+    const b1_between = between(nb1, na1, na2) !== between(nb1, na1, nb2);
+    return between(na2, na1, nb1) !== between(nb2, na1, nb1);
+  }
+
+  // Per-group conflict warnings
+  $: groupConflicts = (() => {
+    const result = {};
+    for (const g of groups) {
+      const gMovs = assignedByGroup[g.id] || [];
+      let hasConflict = false;
+      for (let i = 0; i < gMovs.length && !hasConflict; i++) {
+        for (let j = i + 1; j < gMovs.length && !hasConflict; j++) {
+          if (movementsConflict(gMovs[i], gMovs[j])) hasConflict = true;
+        }
+      }
+      result[g.id] = hasConflict;
+    }
+    return result;
+  })();
 </script>
 
 {#if nodeId != null && node}
@@ -579,6 +706,7 @@
             on:pointermove={onPointerMove}
             on:pointerup={onPointerUp}
             on:pointercancel={onPointerUp}
+            on:click={onSvgClick}
           >
 
             <!-- Junction box (circle, seamless with road stubs) -->
@@ -611,6 +739,14 @@
                   pointer-events="none"/>
               {/if}
 
+              <!-- One-way direction arrow -->
+              {#if sg.dirArrow}
+                <polyline
+                  points="{sg.dirArrow.x1},{sg.dirArrow.y1} {sg.dirArrow.x2},{sg.dirArrow.y2} {sg.dirArrow.x3},{sg.dirArrow.y3}"
+                  fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  opacity="0.7" pointer-events="none"/>
+              {/if}
+
               <!-- Stop line at junction edge -->
               <line x1={sg.stopLine.x1} y1={sg.stopLine.y1}
                     x2={sg.stopLine.x2} y2={sg.stopLine.y2}
@@ -636,15 +772,15 @@
             {#each movGeo as mg}
               <path d={mg.path} fill="none" stroke="transparent" stroke-width="16"
                 style="cursor:pointer"
-                on:click={() => selectArc(mg.id)}
+                on:click|stopPropagation={() => selectArc(mg.id)}
                 on:pointerenter={() => hovMovId = mg.id}
                 on:pointerleave={() => { if (hovMovId === mg.id) hovMovId = null; }}/>
             {/each}
 
             <!-- Movement arcs: visible -->
             {#each movGeo as mg}
-              <!-- Selection or hover glow -->
-              {#if selMovId === mg.id || hovMovId === mg.id}
+              <!-- Selection / hover / group-hover glow -->
+              {#if selMovId === mg.id || hovMovId === mg.id || (hovGroupId !== null && mg.gid === hovGroupId)}
                 <path d={mg.path} fill="none"
                   stroke={mg.color} stroke-width="12"
                   opacity={selMovId === mg.id ? 0.18 : 0.1}
@@ -671,46 +807,69 @@
       </div>
 
       <!-- Right panel -->
-      <div class="w-72 shrink-0 border-l border-gray-200 overflow-y-auto p-4 bg-gray-50/40 flex flex-col gap-4">
+      <div class="w-72 shrink-0 border-l border-gray-200 bg-gray-50/40 flex flex-col">
 
-        <!-- Selected movement -->
-        {#if selMov}
-          {@const gid = movState[selMov.id]?.groupId ?? null}
-          <div class="rounded-lg border border-gray-200 bg-white p-3 space-y-2.5">
-            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Selected movement</p>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                {selMov.inLabel}
-              </span>
-              <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-              </svg>
-              <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200">
-                {selMov.outLabel}
-              </span>
+        <!-- Fixed top section -->
+        <div class="p-4 pb-0 space-y-4 shrink-0">
+        <!-- Selected movement (fixed height to avoid layout jumps) -->
+        <div class="rounded-lg border border-gray-200 bg-white p-3 shrink-0 h-[106px] flex flex-col justify-center overflow-hidden">
+          {#if selMov}
+            {@const gid = movState[selMov.id]?.groupId ?? null}
+            {@const turn = turnType(selMov)}
+            <div class="space-y-2.5">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Selected movement</p>
+                {#if turn}
+                  <span class="text-xs text-gray-400 capitalize">{TURN_ICONS[turn]} {turn}</span>
+                {/if}
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                  {selMov.inLabel}
+                </span>
+                <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+                  {selMov.outLabel}
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <select
+                  value={gid !== null ? String(gid) : ''}
+                  on:change={e => setGroup(selMov.id, e.target.value)}
+                  class="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white
+                         focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
+                >
+                  <option value="">Forbidden</option>
+                  {#each groups as g}
+                    <option value={String(g.id)}>Group {g.id}</option>
+                  {/each}
+                </select>
+                {#if gid !== null}
+                  <button
+                    on:click={() => setGroup(selMov.id, '')}
+                    class="px-2 py-1.5 text-xs rounded-md border border-red-200 text-red-500 hover:bg-red-50
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                    title="Forbid this movement"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                    </svg>
+                  </button>
+                {/if}
+              </div>
             </div>
-            <select
-              value={gid !== null ? String(gid) : ''}
-              on:change={e => setGroup(selMov.id, e.target.value)}
-              class="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white
-                     focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-700"
-            >
-              <option value="">Forbidden (no connector)</option>
-              {#each groups as g}
-                <option value={String(g.id)}>Group {g.id}</option>
-              {/each}
-            </select>
-          </div>
-        {:else}
-          <p class="text-xs text-gray-400 italic leading-snug">
-            Click any arc to select it,<br/>
-            then assign a signal group or mark forbidden.
-          </p>
-        {/if}
+          {:else}
+            <p class="text-xs text-gray-400 italic leading-snug text-center">
+              Click any arc to select it,<br/>
+              then assign a signal group or mark forbidden.
+            </p>
+          {/if}
+        </div>
 
-        <!-- Signal groups -->
-        <div class="flex-1">
-          <div class="flex items-center justify-between mb-3">
+        <!-- Signal groups header -->
+          <div class="flex items-center justify-between">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Signal Groups</p>
             {#if groups.length < GROUP_COLORS.length}
               <button
@@ -721,7 +880,10 @@
               >+ Add</button>
             {/if}
           </div>
+        </div>
 
+        <!-- Scrollable groups list -->
+        <div class="flex-1 min-h-0 overflow-y-auto px-4 py-2">
           {#if groups.length === 0}
             <p class="text-xs text-gray-400 text-center py-6 leading-snug">
               Add a group to assign movements
@@ -729,26 +891,39 @@
           {:else}
             <div class="space-y-3">
               {#each groups as g (g.id)}
-                {@const assigned = movsByGroup(g.id)}
+                {@const assigned = assignedByGroup[g.id] || []}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="rounded-lg border bg-white p-3 space-y-2.5"
                   style="border-color: {gColor(g.id)}55"
+                  class:ring-2={selMovId && movState[selMovId]?.groupId === g.id}
+                  class:ring-blue-400={selMovId && movState[selMovId]?.groupId === g.id}
+                  on:pointerenter={() => hovGroupId = g.id}
+                  on:pointerleave={() => { if (hovGroupId === g.id) hovGroupId = null; }}
                 >
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 h-6">
                     <div class="w-3 h-3 rounded-full shrink-0" style="background:{gColor(g.id)}"></div>
                     <span class="text-sm font-semibold text-gray-700">Group {g.id}</span>
-                    {#if groups.length > 1}
-                      <button
-                        on:click={() => removeGroup(g.id)}
-                        class="ml-auto p-0.5 text-gray-400 hover:text-red-500 rounded
-                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                        title="Remove group"
-                      >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                      </button>
-                    {/if}
+                    <div class="ml-auto">
+                      {#if selMovId && movState[selMovId]?.groupId !== g.id}
+                        <button
+                          on:click={() => setGroup(selMovId, String(g.id))}
+                          class="px-2 py-0.5 text-xs rounded-md font-medium border"
+                          style="color:{gColor(g.id)}; border-color:{gColor(g.id)}55"
+                        >Assign</button>
+                      {:else if groups.length > 1 && !selMovId}
+                        <button
+                          on:click={() => removeGroup(g.id)}
+                          class="p-0.5 text-gray-400 hover:text-red-500 rounded
+                                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                          title="Remove group"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M6 18L18 6M6 6l12 12"/>
+                          </svg>
+                        </button>
+                      {/if}
+                    </div>
                   </div>
 
                   <div class="flex items-center gap-2">
@@ -767,22 +942,34 @@
                     {#if assigned.length === 0}
                       <span class="italic text-gray-400">No movements assigned</span>
                     {:else}
-                      {assigned.slice(0, 3).map(m => `${m.inLabel}\u2192${m.outLabel}`).join(', ')}
+                      {assigned.slice(0, 3).map(m => `${TURN_ICONS[turnType(m)] || ''} ${m.inLabel}\u2192${m.outLabel}`).join(', ')}
                       {#if assigned.length > 3}
                         <span class="text-gray-400"> +{assigned.length - 3} more</span>
                       {/if}
                     {/if}
                   </div>
+                  {#if groupConflicts[g.id]}
+                    <p class="text-xs text-amber-600 flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                      </svg>
+                      Possible conflict: crossing paths
+                    </p>
+                  {/if}
                 </div>
               {/each}
             </div>
           {/if}
         </div>
 
-        <p class="text-xs text-gray-400 leading-snug">
-          Each group = one stage (green phase).<br/>
-          Dashed arc = no meso connector generated.
-        </p>
+        <!-- Fixed bottom hint -->
+        <div class="p-4 pt-2 shrink-0 border-t border-gray-100">
+          <p class="text-xs text-gray-400 leading-snug">
+            Each group = one stage (green phase).<br/>
+            Dashed arc = no meso connector generated.
+          </p>
+        </div>
       </div>
     </div>
 
