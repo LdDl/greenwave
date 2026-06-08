@@ -114,7 +114,8 @@
   $: vbY = (SVG_SIZE - vbSize) / 2 - panY;
   $: viewBox = `${f(vbX)} ${f(vbY)} ${f(vbSize)} ${f(vbSize)}`;
 
-  $: if (nodeId != null) {
+  // Re-init when nodeId changes OR when edge data changes (e.g. lanes, reverse)
+  $: if (nodeId != null && $networkEdges) {
     node = $networkNodes.find(n => n.id === nodeId) ?? null;
     if (node) init();
   }
@@ -148,7 +149,7 @@
       if (e.from === nodeId && e.lanes_fwd  > 0) { s.hasOutbound = true; s.outDir = 'fwd';  s.lanesOut = e.lanes_fwd;  }
       if (e.from === nodeId && e.lanes_back > 0) { s.hasInbound  = true; s.inDir  = 'back'; s.lanesIn  = e.lanes_back; }
     }
-    stubs = Object.values(sm);
+    stubs = Object.values(sm).filter(s => s.lanesIn > 0 || s.lanesOut > 0);
 
     const inStubs  = stubs.filter(s => s.hasInbound);
     const outStubs = stubs.filter(s => s.hasOutbound);
@@ -293,53 +294,68 @@
       `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
     ).join(' ') + ' Z';
 
+    const twoWay = s.lanesIn > 0 && s.lanesOut > 0;
     const lanesI = Math.max(1, s.lanesIn);
     const lanesO = Math.max(1, s.lanesOut);
 
-    // Inbound band rectangle (perp- half, right-hand traffic)
-    const inBand = [
-      offsetPt(inner, a, 0),
-      offsetPt(inner, a, -hw),
-      offsetPt(outer, a, -hw),
-      offsetPt(outer, a, 0),
-    ];
-    const inBandPath = inBand.map((c, i) =>
-      `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
-    ).join(' ') + ' Z';
+    // For one-way roads, the single band covers full width
+    // For two-way, split into inbound (perp-) and outbound (perp+) halves
+    let inBandPath = null;
+    let outBandPath = null;
 
-    // Outbound band rectangle (perp+ half, right-hand traffic)
-    const outBand = [
-      offsetPt(inner, a, 0),
-      offsetPt(inner, a, +hw),
-      offsetPt(outer, a, +hw),
-      offsetPt(outer, a, 0),
-    ];
-    const outBandPath = outBand.map((c, i) =>
-      `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
-    ).join(' ') + ' Z';
+    if (twoWay) {
+      const inBand = [
+        offsetPt(inner, a, 0),
+        offsetPt(inner, a, -hw),
+        offsetPt(outer, a, -hw),
+        offsetPt(outer, a, 0),
+      ];
+      inBandPath = inBand.map((c, i) =>
+        `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
+      ).join(' ') + ' Z';
+
+      const outBand = [
+        offsetPt(inner, a, 0),
+        offsetPt(inner, a, +hw),
+        offsetPt(outer, a, +hw),
+        offsetPt(outer, a, 0),
+      ];
+      outBandPath = outBand.map((c, i) =>
+        `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
+      ).join(' ') + ' Z';
+    }
 
     // Lane divider lines (white dashed, between lanes of same direction)
     const laneDividers = [];
-    // Inbound lane dividers (perp- side)
-    for (let i = 1; i < lanesI; i++) {
-      const off = -(i * LANE_WIDTH);
-      const p1 = offsetPt(inner, a, off);
-      const p2 = offsetPt(outer, a, off);
-      laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
-    }
-    // Outbound lane dividers (perp+ side)
-    for (let i = 1; i < lanesO; i++) {
-      const off = i * LANE_WIDTH;
-      const p1 = offsetPt(inner, a, off);
-      const p2 = offsetPt(outer, a, off);
-      laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
+    if (twoWay) {
+      for (let i = 1; i < lanesI; i++) {
+        const off = -(i * LANE_WIDTH);
+        const p1 = offsetPt(inner, a, off);
+        const p2 = offsetPt(outer, a, off);
+        laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
+      }
+      for (let i = 1; i < lanesO; i++) {
+        const off = i * LANE_WIDTH;
+        const p1 = offsetPt(inner, a, off);
+        const p2 = offsetPt(outer, a, off);
+        laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
+      }
+    } else {
+      // One-way: dividers span full road width from edge
+      const totalLanes = Math.max(lanesI, lanesO);
+      for (let i = 1; i < totalLanes; i++) {
+        const off = -hw + i * LANE_WIDTH;
+        const p1 = offsetPt(inner, a, off);
+        const p2 = offsetPt(outer, a, off);
+        laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
+      }
     }
 
-    // Center divider (yellow)
-    const divider = {
+    // Center divider (yellow, only for two-way roads)
+    const divider = twoWay ? {
       x1: f(inner.x), y1: f(inner.y),
       x2: f(outer.x), y2: f(outer.y),
-    };
+    } : null;
 
     // Stop line at junction edge
     const stopL = offsetPt(inner, a, +hw);
@@ -356,7 +372,7 @@
     const labelPos = radialPt(a, junctionRadius + STUB_LENGTH + LABEL_OFFSET);
 
     return {
-      ...s, hw, roadPath, inBandPath, outBandPath,
+      ...s, hw, twoWay, roadPath, inBandPath, outBandPath,
       laneDividers, divider, stopLine, badge, labelPos,
     };
   });
@@ -568,12 +584,15 @@
 
             <!-- Road stubs -->
             {#each stubGeo as sg}
-              <!-- Inbound band (arriving traffic, perp+ side) -->
-              <path d={sg.inBandPath} fill={IN_TINT}/>
-              <!-- Outbound band (departing traffic, perp- side) -->
-              <path d={sg.outBandPath} fill={OUT_TINT}/>
+              {#if sg.twoWay}
+                <!-- Two-way: separate in/out bands -->
+                <path d={sg.inBandPath} fill={IN_TINT}/>
+                <path d={sg.outBandPath} fill={OUT_TINT}/>
+              {:else}
+                <!-- One-way: single band, full width -->
+                <path d={sg.roadPath} fill={sg.lanesIn > 0 ? IN_TINT : OUT_TINT}/>
+              {/if}
 
-              <!-- Lane dividers (white dashed, between lanes of same direction) -->
               {#each sg.laneDividers as ld}
                 <line x1={ld.x1} y1={ld.y1} x2={ld.x2} y2={ld.y2}
                   stroke="white" stroke-width="0.8"
@@ -581,12 +600,14 @@
                   pointer-events="none"/>
               {/each}
 
-              <!-- Center divider (yellow dashed, between in/out) -->
-              <line x1={sg.divider.x1} y1={sg.divider.y1}
-                    x2={sg.divider.x2} y2={sg.divider.y2}
-                stroke="#fbbf24" stroke-width="1.5"
-                stroke-dasharray="7,5" opacity="0.7"
-                pointer-events="none"/>
+              <!-- Center divider (yellow dashed, only two-way) -->
+              {#if sg.divider}
+                <line x1={sg.divider.x1} y1={sg.divider.y1}
+                      x2={sg.divider.x2} y2={sg.divider.y2}
+                  stroke="#fbbf24" stroke-width="1.5"
+                  stroke-dasharray="7,5" opacity="0.7"
+                  pointer-events="none"/>
+              {/if}
 
               <!-- Stop line at junction edge -->
               <line x1={sg.stopLine.x1} y1={sg.stopLine.y1}
@@ -600,7 +621,7 @@
               <text x={sg.badge.x} y={sg.badge.y}
                 text-anchor="middle" dominant-baseline="central"
                 font-size="9" font-weight="700" fill="#334155"
-              >{sg.lanesIn + sg.lanesOut}</text>
+              >{#if sg.twoWay}{sg.lanesIn}+{sg.lanesOut}{:else}{sg.lanesIn || sg.lanesOut}{/if}</text>
 
               <!-- Node label beyond stub -->
               <text x={sg.labelPos.x} y={sg.labelPos.y}

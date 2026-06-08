@@ -116,6 +116,15 @@
     );
   }
 
+  function reverseEdge() {
+    networkEdges.update(es =>
+      es.map(e => e.id === selectedEdgeId
+        ? { ...e, from: e.to, to: e.from }
+        : e
+      )
+    );
+  }
+
   // Stats
   $: nodeCount = $networkNodes.length;
   $: edgeCount = $networkEdges.length;
@@ -244,6 +253,20 @@
               on:click={() => { if (!isTwoWay) updateEdgeLanesBack(1); }}
             >Two-way ↔</button>
           </div>
+
+          {#if !isTwoWay}
+            <button
+              on:click={reverseEdge}
+              class="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium
+                     text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+              </svg>
+              Reverse direction
+            </button>
+          {/if}
 
           <div>
             <label for="lanes-fwd" class="text-xs text-gray-500 block mb-1">
