@@ -188,8 +188,8 @@
     return { dx: Math.cos(angle), dy: Math.sin(angle) };
   }
 
-  /** Unit perpendicular vector (left-hand normal in SVG coords).
-   *  In right-hand traffic: +perp = inbound side, -perp = outbound side */
+  // Unit perpendicular (left normal in SVG y-down coords).
+  // Right-hand traffic: +perp = outbound side, -perp = inbound side.
   function perp(angle) {
     return { nx: -Math.sin(angle), ny: Math.cos(angle) };
   }
@@ -296,22 +296,22 @@
     const lanesI = Math.max(1, s.lanesIn);
     const lanesO = Math.max(1, s.lanesOut);
 
-    // Inbound band rectangle (perp+ half)
+    // Inbound band rectangle (perp- half, right-hand traffic)
     const inBand = [
       offsetPt(inner, a, 0),
-      offsetPt(inner, a, +hw),
-      offsetPt(outer, a, +hw),
+      offsetPt(inner, a, -hw),
+      offsetPt(outer, a, -hw),
       offsetPt(outer, a, 0),
     ];
     const inBandPath = inBand.map((c, i) =>
       `${i === 0 ? 'M' : 'L'} ${f(c.x)},${f(c.y)}`
     ).join(' ') + ' Z';
 
-    // Outbound band rectangle (perp- half)
+    // Outbound band rectangle (perp+ half, right-hand traffic)
     const outBand = [
       offsetPt(inner, a, 0),
-      offsetPt(inner, a, -hw),
-      offsetPt(outer, a, -hw),
+      offsetPt(inner, a, +hw),
+      offsetPt(outer, a, +hw),
       offsetPt(outer, a, 0),
     ];
     const outBandPath = outBand.map((c, i) =>
@@ -320,14 +320,16 @@
 
     // Lane divider lines (white dashed, between lanes of same direction)
     const laneDividers = [];
+    // Inbound lane dividers (perp- side)
     for (let i = 1; i < lanesI; i++) {
-      const off = i * LANE_WIDTH;
+      const off = -(i * LANE_WIDTH);
       const p1 = offsetPt(inner, a, off);
       const p2 = offsetPt(outer, a, off);
       laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
     }
+    // Outbound lane dividers (perp+ side)
     for (let i = 1; i < lanesO; i++) {
-      const off = -(i * LANE_WIDTH);
+      const off = i * LANE_WIDTH;
       const p1 = offsetPt(inner, a, off);
       const p2 = offsetPt(outer, a, off);
       laneDividers.push({ x1: f(p1.x), y1: f(p1.y), x2: f(p2.x), y2: f(p2.y) });
@@ -371,7 +373,8 @@
     const lanesO = Math.max(1, stub.lanesOut);
     const halfIn = lanesI * LANE_WIDTH / 2;
     const halfOut = lanesO * LANE_WIDTH / 2;
-    const offset = inbound ? halfIn / 2 : -(halfOut / 2);
+    // Right-hand traffic: inbound on -perp side, outbound on +perp side
+    const offset = inbound ? -(halfIn / 2) : halfOut / 2;
     return offsetPt(inner, da, offset);
   }
 
