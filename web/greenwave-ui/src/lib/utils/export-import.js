@@ -107,22 +107,7 @@ export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, di
     desiredSpeed,
     desiredIntensity,
     direction,
-    junctions: junctions.map(j => ({
-      id: j.id,
-      label: j.label,
-      offset: j.offset || 0,
-      point: { x: j.point.x, y: j.point.y },
-      cycle: j.cycle.map(phase => ({
-        id: phase.id,
-        signal_groups: phase.signal_groups.map(sg => ({
-          id: sg.id,
-          signals: sg.signals.map(s => ({
-            duration: s.duration,
-            color: s.color
-          }))
-        }))
-      }))
-    }))
+    junctions: copyJunctionsForExport(junctions)
   };
 }
 
@@ -142,21 +127,11 @@ export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredInt
     desiredSpeed,
     desiredIntensity,
     direction,
-    junctions: optimizedJunctions.map(j => ({
-      id: j.id,
-      label: j.label,
-      offset: j.offset || 0,
-      point: { x: j.point.x, y: j.point.y },
-      cycle: j.cycle.map(phase => ({
-        id: phase.id,
-        signal_groups: phase.signal_groups.map(sg => ({
-          id: sg.id,
-          signals: sg.signals.map(s => ({
-            duration: s.duration,
-            color: s.color
-          }))
-        }))
-      }))
-    }))
+    junctions: copyJunctionsForExport(optimizedJunctions)
   };
+}
+
+function copyJunctionsForExport(junctions) {
+  // Keep every group and signal property, including optional duration constraints.
+  return structuredClone(junctions).map(junction => ({ ...junction, offset: junction.offset ?? 0 }));
 }
