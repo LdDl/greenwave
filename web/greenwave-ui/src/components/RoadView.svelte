@@ -1,7 +1,10 @@
 <script>
   import { onMount } from 'svelte';
+  import { corridorGroupId } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
+  export let groupIds = {};
+  $: viewJunctions = junctions.map(junction => ({ ...junction, group_id: corridorGroupId(junction, groupIds) }));
   export let showOffsets = false;
 
   let container;
@@ -39,12 +42,12 @@
 
   function getTotalDuration(junction) {
     return junction.cycle.reduce((sum, phase) => {
-      return sum + (phase.signal_groups?.[0]?.signals ?? []).reduce((s, sig) => s + sig.duration, 0);
+      return sum + (phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []).reduce((s, sig) => s + sig.duration, 0);
     }, 0);
   }
 
   function getSignals(junction) {
-    return junction.cycle.flatMap(phase => phase.signal_groups?.[0]?.signals ?? []);
+    return junction.cycle.flatMap(phase => phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []);
   }
 
   function positiveModulo(v, m) {
@@ -79,10 +82,9 @@
     });
   }
 
-  // Layout constants (reactive so showOffsets can affect right margin)
-  $: ml = 110; // left margin (room for label + distance)
-  $: mr = showOffsets ? 64 : 16;
-  $: mt = 24;
+  // Leave room for the junction label and distance.
+  const ml = 110;
+  const mt = 24;
   $: mb = showOffsets ? 36 : 24;
   $: chartH = height - mt - mb;
 
@@ -96,7 +98,7 @@
   }
 
   // X of road center line
-  $: roadX = ml;
+  const roadX = ml;
 </script>
 
 <div bind:this={container} class="w-full h-full relative">
@@ -128,7 +130,7 @@
         stroke-dasharray="8,6"
       />
 
-      {#each junctions as junction}
+      {#each viewJunctions as junction (junction.id)}
         {@const y = yPos(junction.point.y)}
         {@const segments = getSegments(junction)}
         {@const activeIdx = getActiveIdx(junction)}
@@ -162,7 +164,7 @@
 
         <!-- Signal bar -->
         <g transform={`translate(${roadX + ROAD_W / 2 + 8}, ${y - 6})`}>
-          {#each segments as seg}
+          {#each segments as seg (seg.i)}
             <rect
               x={seg.x} y={0}
               width={seg.w} height={12}

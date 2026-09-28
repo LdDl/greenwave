@@ -1,3 +1,5 @@
+import { readProgram, corridorGroupId } from './junction-program.js';
+
 // This in-memory model is the first step towards shared editor data.
 // It does not read or migrate saved greenwave-network version 1 projects.
 
@@ -16,28 +18,18 @@ function readSettings({ desiredSpeed, desiredIntensity = 1800, direction = 'forw
   return { desiredSpeed, desiredIntensity, direction };
 }
 
-function readGroupId(cycle, nodeId) {
+function readGroups(cycle, nodeId) {
   const context = `Junction ${nodeId}`;
   requireValue(Array.isArray(cycle) && cycle.length > 0, `${context}: a program needs at least one phase.`);
-  const phaseIds = new Set();
-  let groupId;
+  indexById(cycle, `${context} phase`);
   for (const phase of cycle) {
-    requireId(phase?.id, `${context} phase ID`);
-    requireValue(!phaseIds.has(phase.id), `${context}: duplicate phase ID ${phase.id}.`);
-    phaseIds.add(phase.id);
-    requireValue(Array.isArray(phase.signal_groups) && phase.signal_groups.length === 1,
-      `${context}: this adapter supports exactly one signal group per phase; multiple groups need explicit selection.`);
-    const group = phase.signal_groups[0];
-    requireId(group?.id, `${context} signal group ID`);
-    if (groupId === undefined) groupId = group.id;
-    requireValue(group.id === groupId, `${context}: every phase must refer to the same permanent signal group.`);
-    requireValue(Array.isArray(group.signals) && group.signals.length > 0, `${context}: a group needs signals in every phase.`);
-    for (const signal of group.signals) {
-      requireValue(Number.isFinite(signal?.duration) && signal.duration > 0, `${context}: signal duration must be positive.`);
-      requireValue(typeof signal.color === 'string' && signal.color.length > 0, `${context}: signal color is missing.`);
+    indexById(phase.signal_groups, `${context} signal groups`);
+    for (const group of phase.signal_groups) {
+      requireValue(Array.isArray(group.signals) && group.signals.length > 0, `${context}: a group needs signals in every phase.`);
+      for (const signal of group.signals) requireValue(typeof signal.color === 'string' && signal.color.length > 0, `${context}: signal color is missing.`);
     }
   }
-  return groupId;
+  return readProgram({ cycle }).groupIds;
 }
 
 function indexById(items, name) {
@@ -54,7 +46,7 @@ function indexById(items, name) {
 /**
  * Convert a linear Input configuration into nodes, roads, programs and one corridor.
  * Layout coordinates are arbitrary; road lengths and the corridor origin retain meters.
- * Existing cycle data is kept intact until the shared timeline editor is introduced.
+ * Every permanent group and its complete program are retained.
  */
 export function inputToSimpleCorridor(input) {
   requireValue(input && typeof input === 'object', 'Input configuration is missing.');
@@ -69,14 +61,16 @@ export function inputToSimpleCorridor(input) {
     requireValue(typeof junction.label === 'string' && junction.label.trim().length > 0, `Junction ${junction.id}: label is missing.`);
     requireValue(Number.isFinite(junction.point?.x) && Number.isFinite(junction.point?.y), `Junction ${junction.id}: coordinates must be finite.`);
     requireValue(junction.point.x === origin.x, 'Only a straight corridor with a common point.x is supported; coordinates were not changed.');
-    const groupId = readGroupId(junction.cycle, junction.id);
+    const ids = readGroups(junction.cycle, junction.id);
+    const groupId = corridorGroupId(junction, input.groupIds);
+    requireValue(groupId === null || ids.includes(groupId), `Junction ${junction.id}: selected group does not match its program.`);
     const offset = junction.offset ?? 0;
     requireValue(Number.isFinite(offset), `Junction ${junction.id}: offset must be finite.`);
     nodes.push({
       id: junction.id,
       label: junction.label,
       position: { x: 100 + index * 180, y: 100 },
-      signalGroups: [{ id: groupId, label: `G${groupId}` }],
+      signalGroups: ids.map(id => ({ id, label: `G${id}` })),
       program: { offset, cycle: structuredClone(junction.cycle) },
     });
     stops.push({ nodeId: junction.id, forwardGroupId: groupId, reverseGroupId: groupId });
@@ -98,6 +92,7 @@ export function inputToSimpleCorridor(input) {
 
   return {
     settings,
+    ...(input.groupIds === undefined ? {} : { groupIds: structuredClone(input.groupIds) }),
     nodes,
     roads,
     corridor: { origin, stops, roadIds: roads.map(road => road.id) },
@@ -117,6 +112,7 @@ export function simpleCorridorToInput(project) {
   requireValue(Array.isArray(corridor?.stops) && Array.isArray(corridor?.roadIds), 'Corridor stops and road IDs are required.');
   requireValue(Number.isFinite(corridor.origin?.x) && Number.isFinite(corridor.origin?.y), 'Corridor origin must be finite.');
   requireValue(corridor.roadIds.length === Math.max(0, corridor.stops.length - 1), 'Each pair of stops needs one road.');
+  const groupIds = {};
   const visited = new Set();
   let distance = corridor.origin.y;
   const junctions = corridor.stops.map((stop, index) => {
@@ -126,11 +122,12 @@ export function simpleCorridorToInput(project) {
     requireValue(!visited.has(node.id), `Corridor repeats junction ${node.id}.`);
     visited.add(node.id);
     requireValue(typeof node.label === 'string' && node.label.trim().length > 0, `Junction ${node.id}: label is missing.`);
-    const groupId = readGroupId(node.program?.cycle, node.id);
-    requireValue(node.signalGroups?.length === 1 && node.signalGroups[0]?.id === groupId,
-      `Junction ${node.id}: program must match its permanent signal group.`);
-    requireValue(stop.forwardGroupId === groupId && stop.reverseGroupId === groupId,
+    const ids = readGroups(node.program?.cycle, node.id);
+    requireValue(node.signalGroups?.length === ids.length && ids.every(id => node.signalGroups.some(group => group.id === id)),
+      `Junction ${node.id}: program must match its permanent signal groups.`);
+    requireValue(stop.forwardGroupId === stop.reverseGroupId && (stop.forwardGroupId === null || ids.includes(stop.forwardGroupId)),
       `Junction ${node.id}: selected group does not match its program.`);
+    if (stop.forwardGroupId !== null && (ids.length > 1 || Object.hasOwn(project.groupIds ?? {}, node.id))) groupIds[node.id] = stop.forwardGroupId;
     requireValue(Number.isFinite(node.program.offset), `Junction ${node.id}: offset must be finite.`);
 
     if (index > 0) {
@@ -160,5 +157,5 @@ export function simpleCorridorToInput(project) {
       cycle: structuredClone(node.program.cycle),
     };
   });
-  return { ...settings, junctions };
+  return { ...settings, junctions, ...(project.groupIds !== undefined || Object.keys(groupIds).length ? { groupIds } : {}) };
 }

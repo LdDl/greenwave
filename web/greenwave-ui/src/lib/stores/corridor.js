@@ -1,6 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
 import { inputToSimpleCorridor } from '../utils/simple-corridor.js';
 import { validateImportedConfig } from '../utils/export-import.js';
+import { readProgram } from '../utils/junction-program.js';
 
 export const CORRIDOR_STORAGE_KEY = 'greenwave.corridor.v1';
 
@@ -30,8 +31,8 @@ function parseDocument(text) {
 }
 
 function calculationData(document) {
-  const { junctions, desiredSpeed, direction } = document.input;
-  return JSON.stringify({ junctions, desiredSpeed, direction });
+  const { junctions, desiredSpeed, direction, groupIds } = document.input;
+  return JSON.stringify({ junctions, desiredSpeed, direction, groupIds });
 }
 
 export function createCorridorEditor() {
@@ -82,6 +83,7 @@ export function createCorridorEditor() {
     mutator(next);
     const ids = new Set(next.input.junctions.map(node => String(node.id)));
     next.positions = Object.fromEntries(Object.entries(next.positions).filter(([id]) => ids.has(id)));
+    if (next.input.groupIds) next.input.groupIds = Object.fromEntries(Object.entries(next.input.groupIds).filter(([id]) => ids.has(id)));
     if (JSON.stringify(next) === JSON.stringify(current)) return;
     initialized = true;
     preserveSaved = false;
@@ -125,9 +127,10 @@ export function createCorridorEditor() {
 
   function replaceInput(input) {
     const next = { ...current.input };
-    for (const key of ['junctions', 'desiredSpeed', 'desiredIntensity', 'direction']) {
+    for (const key of ['junctions', 'desiredSpeed', 'desiredIntensity', 'direction', 'groupIds']) {
       if (input[key] !== undefined) next[key] = structuredClone(input[key]);
     }
+    if (input.junctions !== undefined && input.groupIds === undefined) delete next.groupIds;
     checkInput(next);
     finish();
     initialized = true;
@@ -137,8 +140,8 @@ export function createCorridorEditor() {
   }
 
   // These fields are writable views of one document, not synchronized copies.
-  function field(name) {
-    const value = derived(project, document => document.input[name]);
+  function field(name, fallback) {
+    const value = derived(project, document => document.input[name] ?? fallback);
     return {
       subscribe: value.subscribe,
       set: next => change(document => { document.input[name] = structuredClone(next); }),
@@ -179,6 +182,7 @@ export function createCorridorEditor() {
   return {
     project: { subscribe: project.subscribe }, history, persistence, calculationRevision, graph,
     junctions: field('junctions'), desiredSpeed: field('desiredSpeed'), desiredIntensity: field('desiredIntensity'), direction: field('direction'),
+    groupIds: field('groupIds', {}),
     begin, finish, undo, redo, replaceInput, connectStorage,
     snapshot: () => structuredClone(current),
     canvas: {
@@ -192,10 +196,17 @@ export function createCorridorEditor() {
         });
       },
     },
-    saveJunction(junction, isNew = false) {
+    saveJunction(junction, isNew = false, groupId) {
       change(document => {
+        const program = readProgram(junction);
+        if (groupId !== undefined && groupId !== null && !program.groupIds.includes(groupId)) throw new Error('Selected corridor group does not exist.');
         if (isNew) document.input.junctions.push(structuredClone(junction));
         else document.input.junctions = document.input.junctions.map(node => node.id === junction.id ? structuredClone(junction) : node);
+        if (groupId !== undefined && (program.groupIds.length > 1 || document.input.groupIds)) {
+          document.input.groupIds = { ...document.input.groupIds };
+          if (groupId === null) delete document.input.groupIds[junction.id];
+          else document.input.groupIds[junction.id] = groupId;
+        }
         checkInput(document.input);
       });
     },
@@ -222,5 +233,6 @@ export const corridorProject = corridorEditor.project;
 export const corridorGraph = corridorEditor.graph;
 export const corridorHistory = corridorEditor.history;
 export const corridorPersistence = corridorEditor.persistence;
+export const corridorGroupIds = corridorEditor.groupIds;
 export const corridorNodes = derived(corridorGraph, graph => graph.nodes);
 export const corridorEdges = derived(corridorGraph, graph => graph.edges);

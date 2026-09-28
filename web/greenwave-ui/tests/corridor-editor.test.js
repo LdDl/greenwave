@@ -122,14 +122,15 @@ test('import is one atomic undo step and invalid import leaves input, history an
   assert.deepEqual(editor.snapshot(), loaded);
 });
 
-test('unsupported graph projection keeps all imported groups and shows no stale graph', () => {
+test('unsupported program timing keeps all imported groups and shows no stale graph', () => {
   const editor = createCorridorEditor();
   editor.replaceInput(DEMO_DATA);
   const input = structuredClone(DEMO_DATA);
   for (const phase of input.junctions[0].cycle) phase.signal_groups.push({ ...structuredClone(phase.signal_groups[0]), id: 5 });
+  input.junctions[0].cycle[0].signal_groups[1].signals[0].duration += 1;
   editor.replaceInput(input);
   assert.deepEqual(get(editor.junctions), input.junctions);
-  assert.match(get(editor.graph).error, /multiple groups/);
+  assert.match(get(editor.graph).error, /group durations must match/);
   assert.deepEqual(get(editor.graph).nodes, []);
   editor.undo();
   assert.equal(get(editor.graph).nodes.length, 4);

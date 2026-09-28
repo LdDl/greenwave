@@ -3,8 +3,10 @@
   import { createEventDispatcher } from 'svelte';
 
   import * as d3 from 'd3';
+  import { corridorGroupId } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
+  export let groupIds = {};
   export let wavesAreOutdated = { isOutdated: false, reason: null };
   export let interactive = false;
   export let greenWaves = [];
@@ -53,7 +55,8 @@
     // Calculate total durations for all junctions
     const junctionsWithDuration = junctions.map(junction => ({
       ...junction,
-      total_duration: calculateTotalDuration(junction)
+      total_duration: calculateTotalDuration(junction),
+      group_id: corridorGroupId(junction, groupIds)
     }));
     
     // Calculate max time domain
@@ -179,7 +182,7 @@
       .attr("font-size", "10px")
       .attr("font-weight", "bold")
       .attr("fill", "#333")
-      .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s`);
+      .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s${d.cycle[0].signal_groups.length > 1 ? (d.group_id === null ? ', choose group' : `, G${d.group_id}`) : ''}`);
 
     // Draw offset labels at the right end of X axis (results panel only)
     if (showOffsets) {
@@ -251,12 +254,12 @@
     let currentTime = junction.offset;
     
     junction.cycle.forEach(phase => {
-      phase.signal_groups[0].signals.forEach(signal => {
+      (phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []).forEach(signal => {
         if (signal.duration > 0) {
           const startTime = positiveModulo(currentTime, junction.total_duration);
           const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
 
-          if (endTime < startTime) {
+          if (endTime < startTime || signal.duration >= junction.total_duration) {
             chart.append("line")
               .attr("class", `signal-line-${junctionId}`)
               .attr("x1", xScale(startTime))
@@ -297,11 +300,11 @@
       const y = yScale(junction.point.y);
       
       junction.cycle.forEach(phase => {
-        phase.signal_groups[0].signals.forEach(signal => {
+        (phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []).forEach(signal => {
           if (signal.duration > 0) {
             const startTime = positiveModulo(currentTime, junction.total_duration);
             const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
-            if (endTime < startTime) {
+            if (endTime < startTime || signal.duration >= junction.total_duration) {
               const linePartOne = chart.append("line")
                 .attr("class", `signal-line-${junction.id}`)
                 .attr("x1", xScale(startTime))
@@ -397,7 +400,7 @@
         const phaseColor = phaseIdx % 2 === 0 ? "#4B0082" : "#18B7CC";
 
         // Handle wrapping (phase goes from end to start)
-        if (phaseEnd < phaseStart) {
+        if (phaseEnd < phaseStart || phaseDuration >= junction.total_duration) {
           // Draw first part (from phaseStart to the end of the timeline)
           chart.append("rect")
             .attr("x", xScale(phaseStart))
@@ -433,7 +436,7 @@
         }
 
         // Draw phase label (centered)
-        const labelX = phaseEnd < phaseStart
+        const labelX = phaseEnd < phaseStart || phaseDuration >= junction.total_duration
           ? xScale(positiveModulo((phaseStart + junction.total_duration + phaseEnd) / 2, junction.total_duration))
           : xScale((phaseStart + phaseEnd) / 2);
 
@@ -614,7 +617,7 @@
   }
   
   // Also reactive to all prop changes
-  $: greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
+  $: groupIds, greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
   
   function updateSize() {
     if (container) {

@@ -105,6 +105,18 @@ export function validateImportedConfig(data) {
 
   if (data.desiredIntensity !== undefined && (!Number.isFinite(data.desiredIntensity) || data.desiredIntensity < 0)) errors.push('Desired intensity must be non-negative');
   if (data.direction !== undefined && !['forward', 'bidirectional'].includes(data.direction)) errors.push('Invalid optimization direction');
+  if (data.groupIds !== undefined) {
+    if (!data.groupIds || typeof data.groupIds !== 'object' || Array.isArray(data.groupIds)) {
+      errors.push('Invalid corridor group selections');
+    } else {
+      for (const [id, groupId] of Object.entries(data.groupIds)) {
+        const junction = Array.isArray(data.junctions) ? data.junctions.find(junction => String(junction?.id) === id) : null;
+        if (!junction || !validId(groupId) || !Array.isArray(junction.cycle) || !junction.cycle.every(phase => Array.isArray(phase?.signal_groups) && phase.signal_groups.some(group => group?.id === groupId))) {
+          errors.push(`Junction ${id}: selected corridor group does not exist in every phase`);
+        }
+      }
+    }
+  }
 
   return {
     isValid: errors.length === 0,
@@ -120,7 +132,7 @@ export function validateImportedConfig(data) {
  * @param {string} direction - Optimization direction ('forward' or 'bidirectional')
  * @returns {Object} Export-ready configuration
  */
-export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, direction = 'forward') {
+export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, direction = 'forward', groupIds) {
   return {
     version: 1,
     type: 'input',
@@ -128,6 +140,7 @@ export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, di
     desiredSpeed,
     desiredIntensity,
     direction,
+    ...(groupIds === undefined ? {} : { groupIds: structuredClone(groupIds) }),
     junctions: copyJunctionsForExport(junctions)
   };
 }
@@ -140,7 +153,7 @@ export function prepareInputExport(junctions, desiredSpeed, desiredIntensity, di
  * @param {string} direction - Optimization direction ('forward' or 'bidirectional')
  * @returns {Object} Export-ready configuration
  */
-export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredIntensity, direction = 'forward') {
+export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredIntensity, direction = 'forward', groupIds) {
   return {
     version: 1,
     type: 'output',
@@ -148,6 +161,7 @@ export function prepareOutputExport(optimizedJunctions, desiredSpeed, desiredInt
     desiredSpeed,
     desiredIntensity,
     direction,
+    ...(groupIds === undefined ? {} : { groupIds: structuredClone(groupIds) }),
     junctions: copyJunctionsForExport(optimizedJunctions)
   };
 }
