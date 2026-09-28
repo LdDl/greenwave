@@ -4,6 +4,8 @@ import { get } from 'svelte/store';
 import { createCorridorEditor, CORRIDOR_STORAGE_KEY } from '../src/lib/stores/corridor.js';
 import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
 import { readFileSync } from 'node:fs';
+import { corridorProjection } from '../src/lib/utils/shared-project.js';
+import { readProgram } from '../src/lib/utils/junction-program.js';
 
 function memoryStorage(initial = []) {
   const values = new Map(initial);
@@ -19,7 +21,7 @@ test('loading the actual demo creates its graph without reading or overwriting t
   assert.deepEqual(get(editor.graph).nodes.map(node => node.id), [0, 1, 2, 3]);
   assert.deepEqual(get(editor.graph).edges.map(road => road.lengthMeters), [200, 250, 150]);
   assert.equal(storage.getItem('greenwave.network.v1'), '{legacy network untouched}');
-  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).input.junctions.length, 4);
+  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).junctions.length, 4);
 });
 
 test('diagram and graph commands update the same input, including node zero, with shared undo', () => {
@@ -53,11 +55,11 @@ test('layout drag is one undo action and does not invalidate calculation data', 
   const revision = get(editor.calculationRevision);
   editor.canvas.begin();
   for (let i = 0; i < 10; i++) editor.canvas.change(view => { view.nodes[0].x = 500 + i; });
-  assert.deepEqual(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).positions, {});
+  assert.deepEqual(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).positions, original.positions);
   editor.canvas.finish();
   assert.equal(get(editor.graph).nodes[0].x, 509);
   assert.equal(get(editor.calculationRevision), revision);
-  assert.deepEqual(get(editor.junctions), original.input.junctions);
+  assert.deepEqual(get(editor.junctions), corridorProjection(original).input.junctions);
   editor.undo();
   assert.deepEqual(editor.snapshot(), original);
   editor.redo();
@@ -123,7 +125,7 @@ test('import is one atomic undo step and invalid import leaves input, history an
   assert.deepEqual(editor.snapshot(), loaded);
 });
 
-test('unsupported program timing keeps all imported groups and shows no stale graph', () => {
+test('unsupported program timing keeps groups and the editable network available', () => {
   const editor = createCorridorEditor();
   editor.replaceInput(DEMO_DATA);
   const input = structuredClone(DEMO_DATA);
@@ -131,8 +133,8 @@ test('unsupported program timing keeps all imported groups and shows no stale gr
   input.junctions[0].cycle[0].signal_groups[1].signals[0].duration += 1;
   editor.replaceInput(input);
   assert.deepEqual(get(editor.junctions), input.junctions);
-  assert.match(get(editor.graph).error, /group durations must match/);
-  assert.deepEqual(get(editor.graph).nodes, []);
+  assert.throws(() => readProgram(get(editor.junctions)[0]), /group durations must match/);
+  assert.equal(get(editor.graph).nodes.length, 4);
   editor.undo();
   assert.equal(get(editor.graph).nodes.length, 4);
 });
@@ -146,7 +148,7 @@ test('corrupt storage is preserved through a visit until explicit replacement or
   editor.connectStorage(storage);
   assert.equal(storage.getItem(CORRIDOR_STORAGE_KEY), '{broken');
   editor.replaceInput({ junctions: [], desiredSpeed: 40 });
-  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).format, 'greenwave-corridor');
+  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).format, 'greenwave-project');
 });
 
 test('new input before storage initialization wins over an older saved corridor', () => {
@@ -177,7 +179,7 @@ test('storage failures and temporarily invalid settings do not destroy the last 
   assert.equal(get(second.persistence).state, 'error');
   second.desiredSpeed.set(50);
   assert.equal(get(second.persistence).state, 'saved');
-  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).input.desiredSpeed, 50);
+  assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).corridors[0].desiredSpeed, 50);
 });
 
 test('applying optimized offsets preserves shared programs, groups and layout in one persistent undo step', () => {
@@ -193,9 +195,9 @@ test('applying optimized offsets preserves shared programs, groups and layout in
   const result = input.junctions.map((node, index) => ({ id: node.id, offset: [0, 9, 19, 30][index] })).reverse();
   assert.equal(editor.applyOffsets(result, resultRevision), true);
   const applied = editor.snapshot();
-  assert.deepEqual(applied.input.junctions.map(node => node.offset), [0, 9, 19, 30]);
+  assert.deepEqual(applied.junctions.map(node => node.offset), [0, 9, 19, 30]);
   const expected = structuredClone(original);
-  expected.input.junctions.forEach((node, index) => { node.offset = [0, 9, 19, 30][index]; });
+  expected.junctions.forEach((node, index) => { node.offset = [0, 9, 19, 30][index]; });
   assert.deepEqual(applied, expected);
   assert.deepEqual(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)), applied);
   assert.equal(get(editor.calculationRevision), resultRevision + 1);

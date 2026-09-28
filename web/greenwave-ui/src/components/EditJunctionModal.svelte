@@ -3,6 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { modalFocus } from '$lib/utils/modal-focus.js';
   import { validateImportedConfig } from '$lib/utils/export-import.js';
+  import { programMovementConflicts } from '$lib/utils/shared-project.js';
   import { intersectionTopology } from '$lib/utils/network-project.js';
   import { programGroupIds, programTimeline, programStateAt, signalColor, readProgram, addProgramGroup, removeProgramGroup } from '$lib/utils/junction-program.js';
   import IntersectionDiagram from './IntersectionDiagram.svelte';
@@ -14,6 +15,10 @@
   export let reverseCorridorGroup = null;
   export let direction = 'forward';
   export let initialSignal = null;
+  export let saveError = '';
+  export let assignments = {};
+  export let corridorMovements = {};
+  export let inCorridor = true;
   export let graph = { nodes: [], edges: [], error: '' };
 
   const dispatch = createEventDispatcher();
@@ -36,24 +41,39 @@
   let selectedGroupId = null;
   let selectedReverseGroupId = null;
   let removingGroupId = null;
+  let editedAssignments = {};
+  let conflictSelection = [];
   let dialogElement;
   let discardButton;
   let returnFocus;
+  let draftPast = [];
+  let draftFuture = [];
+  let lastDraft = '';
+  $: draftSnapshot = editedJunction === null ? '' : JSON.stringify({junction:editedJunction,groupId:selectedGroupId,reverseGroupId:selectedReverseGroupId,assignments:editedAssignments});
+  $: if (draftSnapshot && lastDraft && draftSnapshot !== lastDraft) {
+    draftPast = [...draftPast.slice(-99),lastDraft]; draftFuture = []; lastDraft = draftSnapshot;
+  }
+  function restoreDraft(snapshot) {
+    const draft = JSON.parse(snapshot);
+    lastDraft = snapshot; editedJunction = draft.junction; selectedGroupId = draft.groupId; selectedReverseGroupId = draft.reverseGroupId; editedAssignments = draft.assignments;
+    if (!programGroupIds(editedJunction).includes(groupId)) groupId = programGroupIds(editedJunction)[0];
+    validationError = null;
+  }
+  function undoDraft() { if (draftPast.length) { draftFuture = [...draftFuture,lastDraft]; const previous = draftPast.at(-1); draftPast = draftPast.slice(0,-1); restoreDraft(previous); } }
+  function redoDraft() { if (draftFuture.length) { draftPast = [...draftPast,lastDraft]; const next = draftFuture.at(-1); draftFuture = draftFuture.slice(0,-1); restoreDraft(next); } }
 
   $: groupIds = programGroupIds(editedJunction);
   $: topology = graph.error || isNew ? { stubs: [], movements: [] } : intersectionTopology(editedJunction?.id, graph.nodes, graph.edges);
   $: effectiveReverseGroupId = selectedReverseGroupId ?? selectedGroupId;
-  $: movementState = Object.fromEntries(topology.movements.map(movement => {
-    const id = movement.inDir === 'back' ? effectiveReverseGroupId : selectedGroupId;
-    return [movement.id, { groupIds: id === null ? [] : [id] }];
-  }));
+  $: movementState = Object.fromEntries(topology.movements.map(movement => [movement.id, {groupIds: editedAssignments[movement.id] == null ? [] : [editedAssignments[movement.id]]}]));
+  $: conflictPairs = editedJunction ? programMovementConflicts(editedJunction, topology, editedAssignments) : [];
   $: previews = groupIds.map(id => ({ id, ...readTimeline(editedJunction, id) }));
   $: preview = previews.find(preview => preview.id === groupId) ?? { timeline: { duration: 0, segments: [] }, error: '' };
   $: programError = validateProgram(editedJunction);
   $: signalState = programStateAt(preview.timeline, previewTime, editedJunction?.offset ?? 0);
   $: colors = Object.fromEntries(previews.map(preview => [preview.id, signalColor(programStateAt(preview.timeline, previewTime, editedJunction?.offset ?? 0)?.segment.color)]));
   $: selectedMovement = topology.movements.find(movement => movement.id === selMovId);
-  $: dirty = editedJunction !== null && JSON.stringify({ junction: editedJunction, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId }) !== original;
+  $: dirty = editedJunction !== null && JSON.stringify({ junction: editedJunction, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId, assignments: editedAssignments }) !== original;
 
   function validateProgram(junction) {
     if (!junction) return '';
@@ -87,6 +107,11 @@
   }
 
   function dialogKeys(event) {
+    if ((event.ctrlKey || event.metaKey) && ['z','y'].includes(event.key.toLowerCase()) && !event.target.closest('input, textarea, select')) {
+      event.preventDefault(); event.stopPropagation();
+      if (event.shiftKey || event.key.toLowerCase() === 'y') redoDraft(); else undoDraft();
+      return;
+    }
     if (event.key !== 'Escape') return;
     event.stopPropagation();
     event.preventDefault();
@@ -110,15 +135,20 @@
   }
 
 
-  $: if (junction) {
+  let initializedJunction = null;
+  $: if (junction && junction !== initializedJunction) {
+    initializedJunction = junction;
     const draft = { ...structuredClone(junction), offset: junction.offset ?? 0 };
     editedJunction = draft;
+    editedAssignments = structuredClone(assignments);
+    conflictSelection = [];
     const ids = programGroupIds(draft);
     const selected = corridorGroup === undefined ? (ids.length === 1 ? ids[0] : null) : corridorGroup;
     selectedGroupId = selected;
     selectedReverseGroupId = reverseCorridorGroup;
     groupId = selected ?? ids[0];
-    original = JSON.stringify({ junction: draft, groupId: selected, reverseGroupId: reverseCorridorGroup });
+    original = JSON.stringify({ junction: draft, groupId: selected, reverseGroupId: reverseCorridorGroup, assignments: editedAssignments });
+    lastDraft = original; draftPast = []; draftFuture = [];
     removingGroupId = null;
     activeTab = isNew ? 'program' : 'movements';
     previewTime = 0;
@@ -165,7 +195,7 @@
     }
 
     if (programError) { validationError = programError; return; }
-    dispatch('save', { junction: editedJunction, isNew, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId });
+    dispatch('save', { junction: editedJunction, isNew, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId, assignments: editedAssignments });
   }
 
   function confirmDelete() {
@@ -223,13 +253,21 @@
 
   function removeGroup() {
     try {
-      editedJunction = removeProgramGroup(editedJunction, removingGroupId, selectedGroupId, effectiveReverseGroupId);
+      if (Object.values(editedAssignments).includes(removingGroupId)) throw new Error('Reassign movements before removing this group.');
+      editedJunction = removeProgramGroup(editedJunction, removingGroupId, inCorridor ? selectedGroupId : null, inCorridor ? effectiveReverseGroupId : null);
       if (groupId === removingGroupId) groupId = programGroupIds(editedJunction)[0];
       removingGroupId = null;
       validationError = null;
     } catch (cause) { validationError = cause.message; }
   }
 
+  function selectCorridorGroup(direction, event) {
+    const selected = event.target.selectedIndex === 0 ? null : groupIds[event.target.selectedIndex - 1];
+    if (direction === 'forward') selectedGroupId = selected; else selectedReverseGroupId = selected;
+    const movement = corridorMovements[direction];
+    if (movement) editedAssignments = {...editedAssignments, [movement]: direction === 'forward' ? selectedGroupId : selectedReverseGroupId ?? selectedGroupId};
+    if (direction === 'forward' && selectedReverseGroupId === null && corridorMovements.reverse) editedAssignments = {...editedAssignments, [corridorMovements.reverse]: selectedGroupId};
+  }
 </script>
 
 <svelte:window on:beforeunload={beforeUnload} />
@@ -258,16 +296,16 @@
       </h3>
 
       <!-- Inline validation error. So no native alert() -->
-      {#if validationError}
+      {#if validationError || saveError}
         <div class="mb-4 px-3 py-2 bg-red-50 border border-red-300 rounded-md text-sm text-red-700">
-          {validationError}
+          {validationError || saveError}
         </div>
       {/if}
 
       <div class="flex-1 min-h-0 overflow-y-auto lg:flex lg:overflow-hidden">
         <section class="flex min-w-0 flex-col lg:flex-1 lg:min-h-0" aria-label="Junction diagram and timeline">
           <div class="flex h-[300px] shrink-0 lg:h-auto lg:flex-1 lg:min-h-[240px]">
-            <IntersectionDiagram stubs={topology.stubs} movements={topology.movements} movState={movementState} bind:selMovId groupColors={colors}
+            <IntersectionDiagram stubs={topology.stubs} movements={topology.movements} movState={movementState} bind:selMovId {conflictSelection} groupColors={colors}
               emptyMessage={isNew ? 'Save the new junction to connect it to the corridor.' : graph.error || 'No roads connected to this junction.'}
               on:select={() => activeTab = 'movements'} />
           </div>
@@ -300,13 +338,25 @@
               {:else if !topology.movements.length}
                 <p class="text-sm text-gray-500">{topology.stubs.length === 1 ? 'This is an end of the corridor. The external approach is not drawn, so there is no complete through movement here.' : 'Connect roads to see through movements.'} The signal group and its program can still be edited.</p>
               {:else}
-                <p class="mb-3 text-sm text-gray-500">Select an arc or a movement below. Each through movement uses its direction's group. Choose forward and reverse groups in "Groups".</p>
+                <p class="mb-3 text-sm text-gray-500">Select an arc or a movement below. Assign a signal group to each movement. Unassigned movements are forbidden. The timeline controls the assigned group in every phase.</p>
                 <div class="space-y-2">
                   {#each topology.movements as movement (movement.id)}
-                    <button class="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-blue-50" class:border-blue-600={selMovId === movement.id} class:bg-blue-50={selMovId === movement.id} aria-pressed={selMovId === movement.id} on:click={() => selMovId = movement.id}>{movement.inLabel} → {movement.outLabel} · {movement.inDir === 'back' ? 'Reverse' : 'Forward'} · {movementState[movement.id].groupIds.length ? `G${movementState[movement.id].groupIds[0]}` : 'Choose group'}</button>
+                    <button class="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-blue-50" class:border-blue-600={selMovId === movement.id} class:bg-blue-50={selMovId === movement.id} aria-pressed={selMovId === movement.id} on:click={() => selMovId = movement.id}>{movement.inLabel} → {movement.outLabel}{corridorMovements.forward === movement.id ? ' · Forward corridor' : corridorMovements.reverse === movement.id ? ' · Reverse corridor' : ''} · {movementState[movement.id].groupIds.length ? `G${movementState[movement.id].groupIds[0]}` : 'Forbidden'}</button>
                   {/each}
                 </div>
-                {#if selectedMovement}<p class="mt-4 text-sm text-gray-600">Selected: {selectedMovement.inLabel} → {selectedMovement.outLabel}. Corridor group: {movementState[selectedMovement.id].groupIds.length ? `G${movementState[selectedMovement.id].groupIds[0]}` : 'Not selected'}.</p>{/if}
+                {#if selectedMovement}
+                  <label for="movement-group" class="mt-4 block text-sm font-medium">Group for {selectedMovement.inLabel} → {selectedMovement.outLabel}</label>
+                  <select id="movement-group" class="mt-1 w-full rounded border p-2" value={editedAssignments[selectedMovement.id] ?? ''} on:change={event => { editedAssignments = {...editedAssignments, [selectedMovement.id]: event.target.value === '' ? null : Number(event.target.value)}; conflictSelection = []; }}>
+                    <option value="">Forbidden</option>
+                    {#each groupIds as id (id)}<option value={id}>G{id}</option>{/each}
+                  </select>
+                {/if}
+                {#if conflictPairs.length}
+                  <p class="mt-4 text-sm text-amber-800">{conflictPairs.length} possible conflicts with overlapping green or yellow signals</p>
+                  {#each conflictPairs as pair (`${pair[0].id}:${pair[1].id}`)}
+                    <button class="mt-1 block w-full rounded bg-amber-50 p-2 text-left text-xs text-amber-900" on:click={() => conflictSelection = pair.map(movement => movement.id)}>{pair[0].inLabel} → {pair[0].outLabel} / {pair[1].inLabel} → {pair[1].outLabel}</button>
+                  {/each}
+                {/if}
               {/if}
               <button class="mt-4 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => activeTab = 'program'}>Edit G{groupId} program</button>
             {/if}
@@ -316,27 +366,29 @@
                 <button class="rounded bg-green-600 px-3 py-2 text-sm text-white" on:click={addGroup}>+ Add group</button>
               </div>
               <p class="text-sm text-gray-600">Groups persist across every phase and share its duration. A new group starts red for the full program.</p>
+              {#if inCorridor}
               <label for="corridor-group" class="mt-4 mb-1 block text-sm font-medium">Forward group</label>
-              <select id="corridor-group" bind:value={selectedGroupId} class="w-full rounded border p-2 pr-8">
+              <select id="corridor-group" bind:value={selectedGroupId} on:change={event => selectCorridorGroup('forward', event)} class="w-full rounded border p-2 pr-8">
                 <option value={null}>Choose a group</option>
                 {#each groupIds as id (id)}<option value={id}>G{id}</option>{/each}
               </select>
               <label for="reverse-corridor-group" class="mt-3 mb-1 block text-sm font-medium">Reverse group</label>
-              <select id="reverse-corridor-group" bind:value={selectedReverseGroupId} class="w-full rounded border p-2 pr-8">
+              <select id="reverse-corridor-group" bind:value={selectedReverseGroupId} on:change={event => selectCorridorGroup('reverse', event)} class="w-full rounded border p-2 pr-8">
                 <option value={null}>Same as forward</option>
                 {#each groupIds as id (id)}<option value={id}>G{id}</option>{/each}
               </select>
               <p class="mt-1 mb-4 text-xs text-gray-500">{direction === 'bidirectional' ? 'Both directions use the same program and offset, with the groups selected here.' : 'Reverse selection is saved and used when the corridor direction is Bidirectional.'}</p>
+              {/if}
               <div class="space-y-2">
                 {#each groupIds as id (id)}
                   <div class="rounded border p-3" class:border-blue-500={groupId === id}>
                     <div class="flex items-center justify-between gap-2">
                       <button class="font-semibold text-blue-700" on:click={() => { groupId = id; activeTab = 'program'; }}>Edit G{id} program</button>
-                      <button aria-label={`Remove group G${id}`} class="text-sm text-red-600 disabled:opacity-40" disabled={groupIds.length <= 1 || selectedGroupId === id || effectiveReverseGroupId === id} title={selectedGroupId === id || effectiveReverseGroupId === id ? 'Choose another corridor group before removing this group' : 'Remove this group from every phase'} on:click={() => removingGroupId = id}>Remove</button>
+                      <button aria-label={`Remove group G${id}`} class="text-sm text-red-600 disabled:opacity-40" disabled={groupIds.length <= 1 || (inCorridor && (selectedGroupId === id || effectiveReverseGroupId === id)) || Object.values(editedAssignments).includes(id)} title={selectedGroupId === id || effectiveReverseGroupId === id ? 'Choose another corridor group before removing this group' : 'Remove this group from every phase'} on:click={() => removingGroupId = id}>Remove</button>
                     </div>
                     {#if groupLabel(editedJunction, id)}<p class="mt-1 text-xs text-gray-600">{groupLabel(editedJunction, id)}</p>{/if}
-                    {#if selectedGroupId === id}<p class="mt-1 text-xs text-gray-500">Forward corridor group</p>{/if}
-                    {#if effectiveReverseGroupId === id}<p class="mt-1 text-xs text-gray-500">Reverse corridor group</p>{/if}
+                    {#if inCorridor && selectedGroupId === id}<p class="mt-1 text-xs text-gray-500">Forward corridor group</p>{/if}
+                    {#if inCorridor && effectiveReverseGroupId === id}<p class="mt-1 text-xs text-gray-500">Reverse corridor group</p>{/if}
                   </div>
                 {/each}
               </div>
@@ -365,6 +417,7 @@
                   />
                 </div>
 
+                {#if inCorridor}
                 <div class="flex items-center gap-4">
                   <label for="junction-distance" class="text-sm font-medium w-32 shrink-0">Distance (m):</label>
                   <input
@@ -377,6 +430,7 @@
                     placeholder="Distance from start"
                   />
                 </div>
+                {/if}
                 <div class="flex items-center gap-4">
                   <label for="junction-offset" class="text-sm font-medium w-32 shrink-0">Offset (s):</label>
                   <input id="junction-offset" type="number" bind:value={editedJunction.offset} class="flex-1 px-3 py-2 border rounded-md min-w-0" step="1" />
@@ -475,7 +529,7 @@
             {#if showDeleteConfirm}
               <!-- Inline delete confirmation. Just replaces native confirm() (same, as alert())-->
               <div class="flex items-center gap-2">
-                <span class="text-sm text-red-600">Delete "{editedJunction.label}"?</span>
+                <span class="text-sm text-red-600">Delete "{editedJunction.label}" from the network, including its roads and corridor references?</span>
                 <button
                   class="px-3 py-1.5 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                   on:click={confirmDelete}
@@ -494,12 +548,14 @@
                 class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                 on:click={() => showDeleteConfirm = true}
               >
-                Delete Junction
+                Delete junction from network
               </button>
             {/if}
           {/if}
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <button class="rounded border px-3 py-2 text-sm disabled:opacity-40" disabled={!draftPast.length} on:click={undoDraft}>Undo draft</button>
+          <button class="rounded border px-3 py-2 text-sm disabled:opacity-40" disabled={!draftFuture.length} on:click={redoDraft}>Redo draft</button>
           {#if dirty}<span class="text-xs text-gray-500">Unsaved changes</span>{/if}
           <button
             class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"

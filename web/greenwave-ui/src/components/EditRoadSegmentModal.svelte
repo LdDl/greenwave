@@ -7,6 +7,8 @@
 
   export let fromLabel = '';
   export let toLabel = '';
+  export let includeLength = false;
+  let lengthMeters = 150;
 
   const dispatch = createEventDispatcher();
 
@@ -14,12 +16,12 @@
   let lanesFwd = 1;
   let lanesBack = 1;
 
-  $: valid = Number.isInteger(lanesFwd) && lanesFwd >= 1 && lanesFwd <= MAX_LANES &&
+  $: valid = (!includeLength || (Number.isFinite(lengthMeters) && lengthMeters >= 0)) && Number.isInteger(lanesFwd) && lanesFwd >= 1 && lanesFwd <= MAX_LANES &&
     (!twoWay || (Number.isInteger(lanesBack) && lanesBack >= 1 && lanesBack <= MAX_LANES));
 
   function save() {
     if (!valid) return;
-    dispatch('save', { lanesFwd, lanesBack: twoWay ? lanesBack : 0 });
+    dispatch('save', { lanesFwd, lanesBack: twoWay ? lanesBack : 0, ...(includeLength ? {lengthMeters} : {}) });
   }
 
   function handleBackdrop(e) {
@@ -49,6 +51,11 @@
       <span class="text-gray-400 text-sm">→</span>
       <span class="px-2 py-0.5 rounded-md text-sm font-medium bg-red-50 text-red-600 border border-red-200">{toLabel}</span>
     </div>
+
+    {#if includeLength}
+      <label for="road-new-length" class="block text-xs text-gray-500">Length (m)</label>
+      <input id="road-new-length" type="number" min="0" step="any" bind:value={lengthMeters} class="mb-4 mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+    {/if}
 
     <!-- Direction toggle -->
     <p class="text-xs font-medium text-gray-500 mb-1.5">Direction</p>

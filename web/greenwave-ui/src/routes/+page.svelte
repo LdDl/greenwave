@@ -2,6 +2,7 @@
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import RoadView from '../components/RoadView.svelte';
   import WaveStatus from '../components/WaveStatus.svelte';
+  import { parseSharedProject } from '$lib/utils/shared-project.js';
   import { reverseGroupNotice } from '$lib/utils/wave-status.js';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
@@ -9,9 +10,9 @@
   import DropdownMenu from '../components/DropdownMenu.svelte';
   import { slide } from 'svelte/transition';
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
-  import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
+  import { exportToJSON, importFromJSON, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
-  import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
+  import { corridorEditor, corridorProject, selectedCorridor, corridorIssue, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, lastCalculatedSpeed, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
   import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedInputRevision, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
@@ -52,6 +53,7 @@
   let selectedJunctionSignal = null;
   let isJunctionModalOpen = false;
   let isNewJunction = false;
+  let junctionSaveError = '';
 
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
@@ -64,14 +66,14 @@
   // Validation: check if all junctions have the same cycle duration
   $: cycleValidation = $junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
   $: programError = corridorProgramError($junctions, $corridorGroupIds, $corridorReverseGroupIds, $optimizationDirection);
-  $: hasValidationError = !!programError || !cycleValidation.isValid;
-  $: validationErrorMessage = programError || (hasValidationError
+  $: hasValidationError = !!$corridorIssue || !!programError || !cycleValidation.isValid;
+  $: validationErrorMessage = $corridorIssue || programError || (hasValidationError
     ? `Different cycle durations: ${$junctions.map((j, i) => `${j.label}: ${cycleValidation.durations[i]}s`).join(', ')}`
     : '');
 
   $: isExtractDisabled = $isLoading || $junctions.length < 2 || hasValidationError || !Number.isFinite($desiredSpeed) || $desiredSpeed <= 0;
 
-  $: isCleanState = $junctions.length === 0 && !hasGreenWaveData;
+  $: isCleanState = $corridorProject.junctions.length === 0 && !hasGreenWaveData;
 
   // Extract green waves from API
   async function handleExtractWaves() {
@@ -128,7 +130,7 @@
 
   function confirmImport() {
     if (pendingImportData) {
-      corridorEditor.replaceInput(pendingImportData);
+      corridorEditor.replace(pendingImportData);
       invalidateAll('configuration imported');
       pendingImportData = null;
     }
@@ -278,6 +280,7 @@
   }
 
   function openJunctionModal(event) {
+    junctionSaveError = '';
     const { junction } = event.detail;
     const originalJunction = $junctions.find(j => j.id === junction.id);
     selectedJunction = originalJunction || junction;
@@ -287,7 +290,8 @@
   }
 
   function openNewJunctionModal() {
-    const maxId = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.id)) : -1;
+    junctionSaveError = '';
+    const maxId = Math.max(-1, ...$corridorProject.junctions.map(j => j.id));
     const maxY = $junctions.length > 0 ? Math.max(...$junctions.map(j => j.point.y)) : -100;
 
     selectedJunction = {
@@ -311,9 +315,13 @@
 
   function saveJunction(event) {
     const { junction, isNew } = event.detail;
-    corridorEditor.saveJunction(junction, isNew, event.detail.groupId, event.detail.reverseGroupId);
-    invalidateAll('junction configuration changed');
-    closeJunctionModal();
+    try {
+      corridorEditor.saveJunction(junction, isNew, event.detail.groupId, event.detail.reverseGroupId, event.detail.assignments);
+      invalidateAll('junction configuration changed');
+      closeJunctionModal();
+    } catch (cause) {
+      junctionSaveError = cause.message;
+    }
   }
 
   function deleteJunction(event) {
@@ -324,6 +332,7 @@
   }
 
   function closeJunctionModal() {
+    junctionSaveError = '';
     selectedJunction = null;
     selectedJunctionSignal = null;
     isJunctionModalOpen = false;
@@ -333,7 +342,8 @@
   // File menu items
   $: fileMenuItems = [
     { id: 'import-input', label: 'Import' },
-    { id: 'export-input', label: 'Export Input' },
+    { id: 'export-project', label: 'Export project' },
+    { id: 'export-input', label: 'Export Input', disabled: !!$corridorIssue },
     { id: 'export-output', label: 'Export Output', disabled: $optimizedJunctions.length === 0 },
     { separator: true },
     { id: 'demo-data', label: 'Load Demo Data' },
@@ -344,6 +354,9 @@
     const { id } = event.detail;
 
     switch (id) {
+      case 'export-project':
+        exportToJSON(corridorEditor.snapshot(), 'greenwave-project.json');
+        break;
       case 'export-input': {
         const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds);
         exportToJSON(inputData, 'greenwave-input.json');
@@ -353,18 +366,13 @@
       case 'import-input':
         try {
           const imported = await importFromJSON();
-          const validation = validateImportedConfig(imported);
-
-          if (!validation.isValid) {
-            error.set(`Invalid file: ${validation.errors.join(', ')}`);
-            return;
-          }
+          const project = parseSharedProject(imported);
 
           if (isCleanState) {
-            corridorEditor.replaceInput(imported);
+            corridorEditor.replace(project);
             invalidateAll('configuration imported');
           } else {
-            pendingImportData = imported;
+            pendingImportData = project;
             showImportModal = true;
           }
         } catch (err) {
@@ -375,7 +383,7 @@
         break;
 
       case 'export-output': {
-        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizedDirection, $optimizedGroupIds, $optimizedReverseGroupIds);
+        const outputData = prepareOutputExport($optimizedJunctions, $optimizedLastCalculatedSpeed ?? $desiredSpeed, $desiredIntensity, $optimizedDirection, $optimizedGroupIds, $optimizedReverseGroupIds);
         exportToJSON(outputData, 'greenwave-output.json');
         break;
 
@@ -395,7 +403,7 @@
 <ConfirmModal
   bind:show={showResetModal}
   title="Reset All Data"
-  message="This will clear the shared input corridor, reset the desired speed, and remove calculated results. Undo can restore the input configuration."
+  message="This will clear the shared network, its corridors and calculated results. Undo can restore the input configuration."
   confirmText="Reset"
   cancelText="Cancel"
   onConfirm={confirmReset}
@@ -405,7 +413,7 @@
 <ConfirmModal
   bind:show={showDemoModal}
   title="Load Demo Data"
-  message="This will replace your current configuration with sample data and clear all calculated results."
+  message="This will replace the current network and all its corridors with sample data and clear all calculated results."
   confirmText="Load Demo Data"
   cancelText="Cancel"
   onConfirm={confirmDemoData}
@@ -415,7 +423,7 @@
 <ConfirmModal
   bind:show={showImportModal}
   title="Import Configuration"
-  message="This will replace your current configuration with imported data and clear all calculated results."
+  message="This will replace the current network and all its corridors with the imported project and clear all calculated results."
   confirmText="Import"
   cancelText="Cancel"
   onConfirm={confirmImport}
@@ -438,6 +446,9 @@
     corridorGroup={corridorGroupId(selectedJunction, $corridorGroupIds)}
     reverseCorridorGroup={$corridorReverseGroupIds[selectedJunction.id] ?? null}
     direction={$optimizationDirection}
+    assignments={$corridorProject.movements[selectedJunction.id] ?? {}}
+    saveError={junctionSaveError}
+    corridorMovements={corridorEditor.routeMovements(selectedJunction.id)}
     initialSignal={selectedJunctionSignal}
     on:save={saveJunction}
     on:delete={deleteJunction}
@@ -451,7 +462,7 @@
     <!-- Header -->
     <div class="corridor-page-header mb-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="w-32">
+        <div class="flex items-center gap-2">
           <a href="/network"
             class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"
           >
@@ -461,6 +472,9 @@
             </svg>
             Network
           </a>
+          <select aria-label="Active corridor" class="max-w-40 rounded border border-gray-200 px-2 py-1 text-xs" value={$selectedCorridor.id} on:change={event => corridorEditor.selectCorridor(Number(event.target.value))}>
+            {#each $corridorProject.corridors as route (route.id)}<option value={route.id}>{route.name}</option>{/each}
+          </select>
         </div>
         <h1 class="order-first w-full text-xl sm:text-2xl lg:order-none lg:w-auto lg:text-3xl font-bold text-center">Green Wave Traffic Light Optimizer</h1>
         <div class="w-32 flex justify-end">
@@ -580,9 +594,10 @@
                 <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
-                <h3 class="text-lg font-medium mb-2">No junctions configured</h3>
-                <p class="text-sm mb-4">Add junctions to start visualizing traffic light coordination</p>
+                <h3 class="text-lg font-medium mb-2">{$corridorProject.junctions.length ? 'No junctions in this corridor' : 'No junctions configured'}</h3>
+                <p class="text-sm mb-4">{$corridorProject.junctions.length ? 'Choose existing junctions in the network or add a new junction.' : 'Add junctions to start visualizing traffic light coordination'}</p>
                 <div class="flex gap-2 justify-center flex-wrap">
+                  {#if $corridorProject.junctions.length}<a href="/network" class="rounded-md bg-teal-600 px-4 py-2 text-sm text-white">Choose route in network</a>{/if}
                   <button on:click={openNewJunctionModal} class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
                     + Add First Junction
                   </button>

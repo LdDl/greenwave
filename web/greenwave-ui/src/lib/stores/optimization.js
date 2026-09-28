@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { junctions, desiredFlow } from './core';
+import { desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 import { resultsInvalidationReasons, isResultsInvalidated } from './invalidation-state.js';
 
@@ -35,7 +35,7 @@ export const optimizedResultsAreOutdated = derived(
 
 // Actual flow (vehicles per second)
 export const actualFlowOptimized = derived(
-  [optimizedThroughWaves, junctions, desiredFlow],
+  [optimizedThroughWaves, optimizedJunctions, desiredFlow],
   ([$optimizedThroughWaves, $junctions, $desiredFlow]) => {
     if ($optimizedThroughWaves.length === 0 || $junctions.length === 0) return 0;
 
@@ -64,7 +64,7 @@ export const actualIntensityOptimized = derived(
 
 // Actual flow for reverse direction (vehicles per second)
 export const actualReverseFlowOptimized = derived(
-  [optimizedReverseThroughWaves, junctions, desiredFlow],
+  [optimizedReverseThroughWaves, optimizedJunctions, desiredFlow],
   ([$optimizedReverseThroughWaves, $junctions, $desiredFlow]) => {
     if ($optimizedReverseThroughWaves.length === 0 || $junctions.length === 0) return 0;
 

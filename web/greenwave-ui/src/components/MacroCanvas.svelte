@@ -1,10 +1,10 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
-  import { networkNodes as defaultNodes, networkEdges as defaultEdges, networkEditor as defaultEditor } from '$lib/stores/network.js';
+  import { corridorNodes as defaultNodes, corridorEdges as defaultEdges, corridorEditor } from '$lib/stores/corridor.js';
 
   export let networkNodes = defaultNodes;
   export let networkEdges = defaultEdges;
-  export let networkEditor = defaultEditor;
+  export let networkEditor = corridorEditor.canvas;
   export let interactionHint = 'Double-click a junction to configure its intersection';
 
   // 'select' | 'node' | 'edge'
@@ -12,6 +12,8 @@
   export let disabled = false;
   export let selectedNodeId = null;
   export let selectedEdgeId = null;
+  export let activeNodeIds = [];
+  export let activeRoadIds = [];
   // Highlight connected nodes when an edge is selected (node IDs or null)
   export let highlightFrom = null;
   export let highlightTo   = null;
@@ -342,7 +344,7 @@
             {@const bAP  = two ? bezierPt(ep.x2,ep.y2,cbx,cby,ep.x1,ep.y1,0.65)  : null}
             {@const bAD  = two ? bezierDir(ep.x2,ep.y2,cbx,cby,ep.x1,ep.y1,0.65) : null}
             {@const as = 6 / scale}
-            {@const edgeColor = selectedEdgeId === edge.id ? '#2563eb' : '#475569'}
+            {@const edgeColor = selectedEdgeId === edge.id ? '#2563eb' : activeRoadIds.includes(edge.id) ? '#0d9488' : '#475569'}
 
             <!-- Hit areas (both arcs select the same edge) -->
             <path d={fwdD} stroke="transparent" stroke-width={14/scale} fill="none"
@@ -414,7 +416,7 @@
           {@const isDstHover = mode === 'edge' && edgeFromId != null && hoverNodeId === node.id && node.id !== edgeFromId}
           {@const isHlFrom   = highlightFrom === node.id}
           {@const isHlTo     = highlightTo   === node.id}
-          {@const nodeFill   = selectedNodeId === node.id ? '#dbeafe' : isEdgeSrc || isHlFrom ? '#dcfce7' : isDstHover || isHlTo ? '#fee2e2' : '#ffffff'}
+          {@const nodeFill   = selectedNodeId === node.id ? '#dbeafe' : isEdgeSrc || isHlFrom ? '#dcfce7' : isDstHover || isHlTo ? '#fee2e2' : activeNodeIds.includes(node.id) ? '#ccfbf1' : '#ffffff'}
           {@const nodeStroke = selectedNodeId === node.id ? '#2563eb' : isEdgeSrc || isHlFrom ? '#16a34a' : isDstHover || isHlTo ? '#ef4444' : '#475569'}
           {@const labelColor = isEdgeSrc || isHlFrom ? '#15803d' : isDstHover || isHlTo ? '#dc2626' : '#1e293b'}
           <g
