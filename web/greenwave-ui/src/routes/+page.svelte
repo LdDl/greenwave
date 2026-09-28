@@ -421,7 +421,7 @@
 
     <!-- Header -->
     <div class="mb-6">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div class="w-32">
           <a href="/network"
             class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"
@@ -433,7 +433,7 @@
             Network
           </a>
         </div>
-        <h1 class="text-3xl font-bold text-center">Green Wave Traffic Light Optimizer</h1>
+        <h1 class="order-first w-full text-xl sm:text-2xl lg:order-none lg:w-auto lg:text-3xl font-bold text-center">Green Wave Traffic Light Optimizer</h1>
         <div class="w-32 flex justify-end">
           <div class="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5 text-sm">
             <button
