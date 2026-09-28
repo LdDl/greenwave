@@ -1,5 +1,5 @@
 import { derived, get } from 'svelte/store';
-import { originalGreenWaves } from './greenwave';
+import { lastCalculatedSpeed } from './greenwave';
 import { isResultsInvalidated, isInputInvalidated, resultsInvalidationReasons, inputInvalidationReasons } from './invalidation-state.js';
 export { isResultsInvalidated, isInputInvalidated, resultsInvalidationReasons, inputInvalidationReasons } from './invalidation-state.js';
 
@@ -7,8 +7,8 @@ export { isResultsInvalidated, isInputInvalidated, resultsInvalidationReasons, i
 export function invalidateAll(reason) {
   isResultsInvalidated.set(true);
 
-  // Only invalidate input data if green waves have been extracted
-  if (get(originalGreenWaves).length > 0) {
+  // An empty calculation is also outdated after an input change.
+  if (get(lastCalculatedSpeed) !== null) {
     isInputInvalidated.set(true);
 
     // Add reason to input invalidation reasons

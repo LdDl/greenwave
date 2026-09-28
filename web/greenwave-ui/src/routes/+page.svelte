@@ -1,6 +1,8 @@
 <script>
   import TimeSpaceDiagram from '../components/TimeSpaceDiagram.svelte';
   import RoadView from '../components/RoadView.svelte';
+  import WaveStatus from '../components/WaveStatus.svelte';
+  import { reverseGroupNotice } from '$lib/utils/wave-status.js';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import EditSignalModal from '../components/EditSignalModal.svelte';
   import EditJunctionModal from '../components/EditJunctionModal.svelte';
@@ -10,7 +12,7 @@
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
   import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
-  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
+  import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, lastCalculatedSpeed, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
   import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
@@ -21,6 +23,10 @@
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
   onDestroy(() => corridorEditor.finish());
+
+  function reveal(node) {
+    return slide(node, { duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180 });
+  }
 
   // Confirmation modal state
   let showResetModal = false;
@@ -48,7 +54,7 @@
 
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
-  $: hasResults = $optimizedGreenWaves.length > 0 || $optimizedThroughWaves.length > 0;
+  $: hasResults = $optimizedJunctions.length > 0;
 
   // Validation: check if all junctions have the same cycle duration
   $: cycleValidation = $junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
@@ -467,10 +473,10 @@
     </div>
 
     <!-- Main content grid  Input LEFT, Results RIGHT -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+    <div class="grid grid-cols-1 lg:grid-cols-2 items-start gap-4">
 
       <!-- LEFT: Input Configuration -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col min-h-0">
+      <div class="corridor-panel bg-white rounded-lg shadow-md p-4 sm:p-5 flex flex-col min-w-0">
 
         <!-- Panel header: title + wrapping toolbar -->
         <div class="mb-4">
@@ -478,8 +484,8 @@
             <h2 class="text-xl font-semibold">Input configuration</h2>
           </div>
           <p class="mb-3 text-xs" class:text-red-700={$corridorPersistence.state === 'error'} class:text-gray-500={$corridorPersistence.state !== 'error'} role="status">{$corridorPersistence.message}</p>
-          <!-- Toolbar wraps on narrow panels instead of clipping -->
-          <div class="flex flex-wrap gap-2 items-center">
+          <!-- Compact controls wrap when the panel is narrow. -->
+          <div class="corridor-toolbar flex flex-wrap gap-1.5 items-center">
             <DropdownMenu
               label="File"
               items={fileMenuItems}
@@ -524,8 +530,8 @@
               {/if}
             </button>
 
-            <!-- Show waves toggle  padded for 44px touch target -->
-            <label class="flex items-center gap-2 cursor-pointer select-none py-2 px-1">
+            <!-- Keep the toggle in the toolbar flow. -->
+            <label class="flex items-center gap-2 cursor-pointer select-none py-1 px-1">
               <input
                 type="checkbox"
                 bind:checked={$showGreenWaves}
@@ -537,8 +543,8 @@
           </div>
         </div>
 
-        <!-- Chart (flex-1 fills available space, controls sit below) -->
-        <div class="flex-1 border border-gray-300 rounded-md mb-1 min-h-[280px] overflow-hidden">
+        <!-- Chart height stays independent of the controls below it. -->
+        <div class="corridor-chart border border-gray-300 rounded-md mb-1 overflow-hidden">
           {#if $junctions.length === 0}
             <div class="flex items-center justify-center h-full text-gray-500">
               <div class="text-center p-6">
@@ -589,9 +595,9 @@
           </div>
         {/if}
 
-        <!-- Controls below chart -> space-y-4 for stable spacing, no mt-auto needed -->
-        <div class="border-t pt-4 space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Controls can grow without reducing the chart height. -->
+        <div class="corridor-controls border-t pt-3 space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
               <select id="input-direction" bind:value={$optimizationDirection} class="w-full px-3 py-2 border rounded-md">
@@ -614,14 +620,14 @@
               <span class="text-orange-600"> -> add at least 1 more to extract waves</span>
             {:else if hasValidationError}
               <span class="block text-red-600 mt-0.5">⚠ {validationErrorMessage}</span>
-            {:else if hasGreenWaveData}
-              <span class="text-green-600"> -> green waves calculated</span>
+            {:else if $lastCalculatedSpeed !== null && !$wavesAreOutdated.isOutdated}
+              <span class="text-gray-600"> · calculation complete</span>
             {:else}
               <span class="text-orange-600"> -> press "Extract waves" to calculate</span>
             {/if}
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label for="input-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (veh/h)</label>
               <input id="input-desired-intensity" type="number" bind:value={$desiredIntensity} class="w-full px-3 py-2 border rounded-md" min="0" />
@@ -632,7 +638,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
@@ -649,20 +655,25 @@
             </div>
           </div>
 
+          <WaveStatus junctionCount={$junctions.length} waves={$originalGreenWaves} throughWaves={$originalThroughWaves} calculated={$lastCalculatedSpeed !== null} outdated={$wavesAreOutdated.isOutdated} />
+
           {#if $optimizationDirection === 'bidirectional'}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
-                  {($actualReverseIntensity || 0).toFixed(2)} veh/h
-                  {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+            <div transition:reveal class="space-y-2" data-direction-panel="input-reverse">
+              <WaveStatus direction="Reverse" junctionCount={$junctions.length} waves={$originalReverseGreenWaves} throughWaves={$originalReverseThroughWaves} calculated={$lastCalculatedSpeed !== null} outdated={$wavesAreOutdated.isOutdated} notice={reverseGroupNotice($junctions, $corridorGroupIds, $corridorReverseGroupIds)} />
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
+                  <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                    {($actualReverseIntensity || 0).toFixed(2)} veh/h
+                    {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
-                  {($actualReverseFlow || 0).toFixed(6)} veh/s
-                  {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                <div>
+                  <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
+                  <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                    {($actualReverseFlow || 0).toFixed(6)} veh/s
+                    {#if $wavesAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                  </div>
                 </div>
               </div>
             </div>
@@ -671,7 +682,7 @@
       </div>
 
       <!-- RIGHT: Optimized Results -->
-      <div class="bg-white rounded-lg shadow-md p-6 flex flex-col min-h-0">
+      <div class="corridor-panel bg-white rounded-lg shadow-md p-4 sm:p-5 flex flex-col min-w-0">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-semibold">Optimized results</h2>
           <button
@@ -682,8 +693,8 @@
           </button>
         </div>
 
-        <!-- Chart (flex-1 fills available space, controls sit below) -->
-        <div class="flex-1 border border-gray-300 rounded-md mb-1 min-h-[280px] overflow-hidden">
+        <!-- Chart height stays independent of the controls below it. -->
+        <div class="corridor-chart border border-gray-300 rounded-md mb-1 overflow-hidden">
           {#if $optimizedJunctions.length > 0}
             {#if viewMode === 'diagram'}
               <TimeSpaceDiagram
@@ -713,8 +724,8 @@
           </div>
         {/if}
 
-        <!-- Controls below chart -> space-y-4 for stable spacing, no mt-auto needed -->
-        <div class="border-t pt-4 space-y-4">
+        <!-- Controls can grow without reducing the chart height. -->
+        <div class="corridor-controls border-t pt-3 space-y-3">
           <!-- Optimization status -> own line, wraps freely -->
           <div class="text-sm leading-snug">
             {#if $optimizedJunctions.length > 0}
@@ -729,7 +740,7 @@
             {/if}
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label for="opt-desired-intensity" class="block text-sm font-medium mb-2">Desired intensity (veh/h)</label>
               <input id="opt-desired-intensity" type="number" bind:value={$desiredIntensity} class="w-full px-3 py-2 border rounded-md" min="0" />
@@ -740,7 +751,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizedDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
@@ -757,20 +768,27 @@
             </div>
           </div>
 
+          {#if hasResults}
+            <WaveStatus junctionCount={$optimizedJunctions.length} waves={$optimizedGreenWaves} throughWaves={$optimizedThroughWaves} calculated={hasResults} outdated={$optimizedResultsAreOutdated.isOutdated} />
+          {/if}
+
           {#if $optimizedDirection === 'bidirectional'}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
-                  {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
-                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+            <div transition:reveal class="space-y-2" data-direction-panel="result-reverse">
+              <WaveStatus direction="Reverse" junctionCount={$optimizedJunctions.length} waves={$optimizedReverseGreenWaves} throughWaves={$optimizedReverseThroughWaves} calculated={hasResults} outdated={$optimizedResultsAreOutdated.isOutdated} notice={reverseGroupNotice($optimizedJunctions, $optimizedGroupIds, $optimizedReverseGroupIds)} />
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>
+                  <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                    {($actualReverseIntensityOptimized || 0).toFixed(2)} veh/h
+                    {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
-                <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
-                  {$actualReverseFlowOptimized.toFixed(6)} veh/s
-                  {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                <div>
+                  <span class="block text-sm font-medium mb-2">Actual flow <span class="text-blue-600">(rev)</span></span>
+                  <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
+                    {$actualReverseFlowOptimized.toFixed(6)} veh/s
+                    {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
+                  </div>
                 </div>
               </div>
             </div>
@@ -781,3 +799,35 @@
     </div>
   </div>
 </div>
+
+<style>
+  .corridor-chart {
+    height: clamp(320px, 42vh, 480px);
+    flex: none;
+  }
+
+  .corridor-toolbar :global(button) {
+    min-height: 32px;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .corridor-controls :global(label),
+  .corridor-controls :global(span.block) {
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .corridor-controls :global(input),
+  .corridor-controls :global(select),
+  .corridor-controls :global(.tabular-nums) {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+  }
+
+  @media (pointer: coarse) {
+    .corridor-toolbar :global(button) {
+      min-height: 40px;
+    }
+  }
+</style>
