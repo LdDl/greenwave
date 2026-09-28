@@ -26,10 +26,10 @@
 	import {
 		emptySharedProject,
 		parseSharedProject,
-		fromLegacyNetwork,
 		roadBetween
 	} from '$lib/utils/shared-project.js';
-	import { demoProject, MAX_LANES } from '$lib/utils/network-project.js';
+	import { MAX_LANES } from '$lib/utils/network-project.js';
+	import { rectangularDemoProject } from '$lib/utils/demo-network.js';
 	import { exportToJSON, prepareInputExport } from '$lib/utils/export-import.js';
 	import { corridorGroupId } from '$lib/utils/junction-program.js';
 	import { modalFocus } from '$lib/utils/modal-focus.js';
@@ -239,7 +239,7 @@
 			<button class={button} on:click={() => requestReplacement(emptySharedProject())}
 				>New project</button
 			>
-			<button class={button} on:click={() => requestReplacement(fromLegacyNetwork(demoProject()))}
+			<button class={button} on:click={() => requestReplacement(rectangularDemoProject())}
 				>Example network</button
 			>
 			<button class={button} on:click={() => importInput.click()}>Import project</button>
