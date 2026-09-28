@@ -9,9 +9,9 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
-  import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds } from '$lib/stores/corridor.js';
+  import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
-  import { optimizedGroupIds, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
+  import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions, validateJunctionCycles } from '$lib/utils/junction-helpers.js';
@@ -52,7 +52,7 @@
 
   // Validation: check if all junctions have the same cycle duration
   $: cycleValidation = $junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
-  $: programError = corridorProgramError($junctions, $corridorGroupIds);
+  $: programError = corridorProgramError($junctions, $corridorGroupIds, $corridorReverseGroupIds, $optimizationDirection);
   $: hasValidationError = !!programError || !cycleValidation.isValid;
   $: validationErrorMessage = programError || (hasValidationError
     ? `Different cycle durations: ${$junctions.map((j, i) => `${j.label}: ${cycleValidation.durations[i]}s`).join(', ')}`
@@ -72,7 +72,7 @@
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection, $corridorGroupIds);
+      const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds);
       if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during extraction. Extract waves again for the current corridor.');
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
@@ -140,17 +140,19 @@
       error.set(null);
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
-      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection, $corridorGroupIds);
+      const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds);
       if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during optimization. Optimize the current corridor again.');
       const nextOffsets = optimizeResponse.best_offsets || [];
       const nextJunctions = applyOffsetsToJunctions($junctions, nextOffsets);
       const optimizedJunctionsForAPI = prepareJunctionsForAPI(nextJunctions);
-      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection, $corridorGroupIds);
+      const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds);
       if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during optimization. Optimize the current corridor again.');
 
       optimizedOffsets.set(nextOffsets);
       optimizedJunctions.set(nextJunctions);
       optimizedGroupIds.set(structuredClone($corridorGroupIds));
+      optimizedReverseGroupIds.set(structuredClone($corridorReverseGroupIds));
+      optimizedDirection.set($optimizationDirection);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
       optimizedReverseGreenWaves.set(response.reverse_green_waves || []);
@@ -171,6 +173,8 @@
   function clearResults() {
     optimizedJunctions.set([]);
     optimizedGroupIds.set({});
+    optimizedReverseGroupIds.set({});
+    optimizedDirection.set('forward');
     optimizedOffsets.set([]);
     optimizedGreenWaves.set([]);
     optimizedThroughWaves.set([]);
@@ -272,7 +276,7 @@
 
   function saveJunction(event) {
     const { junction, isNew } = event.detail;
-    corridorEditor.saveJunction(junction, isNew, event.detail.groupId);
+    corridorEditor.saveJunction(junction, isNew, event.detail.groupId, event.detail.reverseGroupId);
     invalidateAll('junction configuration changed');
     closeJunctionModal();
   }
@@ -306,7 +310,7 @@
 
     switch (id) {
       case 'export-input': {
-        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $corridorGroupIds);
+        const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds);
         exportToJSON(inputData, 'greenwave-input.json');
         break;
 
@@ -336,7 +340,7 @@
         break;
 
       case 'export-output': {
-        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $optimizedGroupIds);
+        const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizedDirection, $optimizedGroupIds, $optimizedReverseGroupIds);
         exportToJSON(outputData, 'greenwave-output.json');
         break;
 
@@ -397,6 +401,8 @@
     isNew={isNewJunction}
     graph={$corridorGraph}
     corridorGroup={corridorGroupId(selectedJunction, $corridorGroupIds)}
+    reverseCorridorGroup={$corridorReverseGroupIds[selectedJunction.id] ?? null}
+    direction={$optimizationDirection}
     initialSignal={selectedJunctionSignal}
     on:save={saveJunction}
     on:delete={deleteJunction}
@@ -554,7 +560,7 @@
           {:else if viewMode === 'diagram'}
             <TimeSpaceDiagram
               junctions={$junctions}
-              groupIds={$corridorGroupIds}
+              groupIds={$corridorGroupIds} reverseGroupIds={$corridorReverseGroupIds} direction={$optimizationDirection}
               wavesAreOutdated={$wavesAreOutdated}
               interactive={true}
               greenWaves={$originalGreenWaves}
@@ -569,7 +575,7 @@
               on:editJunction={openJunctionModal}
             />
           {:else}
-            <RoadView junctions={$junctions} groupIds={$corridorGroupIds} />
+            <RoadView junctions={$junctions} groupIds={$corridorGroupIds} reverseGroupIds={$corridorReverseGroupIds} direction={$optimizationDirection} />
           {/if}
         </div>
 
@@ -682,7 +688,7 @@
             {#if viewMode === 'diagram'}
               <TimeSpaceDiagram
                 junctions={$optimizedJunctions}
-                groupIds={$optimizedGroupIds}
+                groupIds={$optimizedGroupIds} reverseGroupIds={$optimizedReverseGroupIds} direction={$optimizedDirection}
                 greenWaves={$optimizedGreenWaves}
                 throughWaves={$optimizedThroughWaves}
                 reverseGreenWaves={$optimizedReverseGreenWaves}
@@ -692,7 +698,7 @@
                 interactive={false}
               />
             {:else}
-              <RoadView junctions={$optimizedJunctions} groupIds={$optimizedGroupIds} showOffsets={true} />
+              <RoadView junctions={$optimizedJunctions} groupIds={$optimizedGroupIds} reverseGroupIds={$optimizedReverseGroupIds} direction={$optimizedDirection} showOffsets={true} />
             {/if}
           {:else}
             <div class="flex items-center border-2 border-dashed border-gray-300 rounded-md justify-center h-full text-gray-500 p-6">
@@ -736,14 +742,14 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <span class="block text-sm font-medium mb-2">Actual intensity{#if $optimizedDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
                 {($actualIntensityOptimized || 0).toFixed(2)} veh/h
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
               </div>
             </div>
             <div>
-              <span class="block text-sm font-medium mb-2">Actual flow{#if $optimizationDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
+              <span class="block text-sm font-medium mb-2">Actual flow{#if $optimizedDirection === 'bidirectional'} <span class="text-green-600">(fwd)</span>{/if}</span>
               <div class="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-700 tabular-nums">
                 {$actualFlowOptimized.toFixed(6)} veh/s
                 {#if hasResults && $optimizedResultsAreOutdated.isOutdated}<span class="text-orange-500 text-xs">(outdated)</span>{/if}
@@ -751,7 +757,7 @@
             </div>
           </div>
 
-          {#if $optimizationDirection === 'bidirectional'}
+          {#if $optimizedDirection === 'bidirectional'}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <span class="block text-sm font-medium mb-2">Actual intensity <span class="text-blue-600">(rev)</span></span>

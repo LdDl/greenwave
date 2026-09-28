@@ -1,4 +1,4 @@
-import { readProgram, corridorGroupId } from './junction-program.js';
+import { readProgram, corridorGroupId, reverseCorridorGroupId } from './junction-program.js';
 
 // This in-memory model is the first step towards shared editor data.
 // It does not read or migrate saved greenwave-network version 1 projects.
@@ -64,6 +64,8 @@ export function inputToSimpleCorridor(input) {
     const ids = readGroups(junction.cycle, junction.id);
     const groupId = corridorGroupId(junction, input.groupIds);
     requireValue(groupId === null || ids.includes(groupId), `Junction ${junction.id}: selected group does not match its program.`);
+    const reverseGroupId = reverseCorridorGroupId(junction, input.groupIds, input.reverseGroupIds);
+    requireValue(reverseGroupId === null || ids.includes(reverseGroupId), `Junction ${junction.id}: selected reverse group does not match its program.`);
     const offset = junction.offset ?? 0;
     requireValue(Number.isFinite(offset), `Junction ${junction.id}: offset must be finite.`);
     nodes.push({
@@ -73,7 +75,7 @@ export function inputToSimpleCorridor(input) {
       signalGroups: ids.map(id => ({ id, label: `G${id}` })),
       program: { offset, cycle: structuredClone(junction.cycle) },
     });
-    stops.push({ nodeId: junction.id, forwardGroupId: groupId, reverseGroupId: groupId });
+    stops.push({ nodeId: junction.id, forwardGroupId: groupId, reverseGroupId });
     if (index > 0) {
       const previous = input.junctions[index - 1];
       const lengthMeters = junction.point.y - previous.point.y;
@@ -93,6 +95,7 @@ export function inputToSimpleCorridor(input) {
   return {
     settings,
     ...(input.groupIds === undefined ? {} : { groupIds: structuredClone(input.groupIds) }),
+    ...(input.reverseGroupIds === undefined ? {} : { reverseGroupIds: structuredClone(input.reverseGroupIds) }),
     nodes,
     roads,
     corridor: { origin, stops, roadIds: roads.map(road => road.id) },
@@ -113,6 +116,7 @@ export function simpleCorridorToInput(project) {
   requireValue(Number.isFinite(corridor.origin?.x) && Number.isFinite(corridor.origin?.y), 'Corridor origin must be finite.');
   requireValue(corridor.roadIds.length === Math.max(0, corridor.stops.length - 1), 'Each pair of stops needs one road.');
   const groupIds = {};
+  const reverseGroupIds = {};
   const visited = new Set();
   let distance = corridor.origin.y;
   const junctions = corridor.stops.map((stop, index) => {
@@ -125,9 +129,10 @@ export function simpleCorridorToInput(project) {
     const ids = readGroups(node.program?.cycle, node.id);
     requireValue(node.signalGroups?.length === ids.length && ids.every(id => node.signalGroups.some(group => group.id === id)),
       `Junction ${node.id}: program must match its permanent signal groups.`);
-    requireValue(stop.forwardGroupId === stop.reverseGroupId && (stop.forwardGroupId === null || ids.includes(stop.forwardGroupId)),
+    requireValue([stop.forwardGroupId, stop.reverseGroupId].every(id => id === null || ids.includes(id)),
       `Junction ${node.id}: selected group does not match its program.`);
     if (stop.forwardGroupId !== null && (ids.length > 1 || Object.hasOwn(project.groupIds ?? {}, node.id))) groupIds[node.id] = stop.forwardGroupId;
+    if (stop.reverseGroupId !== null && (stop.reverseGroupId !== stop.forwardGroupId || Object.hasOwn(project.reverseGroupIds ?? {}, node.id))) reverseGroupIds[node.id] = stop.reverseGroupId;
     requireValue(Number.isFinite(node.program.offset), `Junction ${node.id}: offset must be finite.`);
 
     if (index > 0) {
@@ -157,5 +162,5 @@ export function simpleCorridorToInput(project) {
       cycle: structuredClone(node.program.cycle),
     };
   });
-  return { ...settings, junctions, ...(project.groupIds !== undefined || Object.keys(groupIds).length ? { groupIds } : {}) };
+  return { ...settings, junctions, ...(project.reverseGroupIds !== undefined || Object.keys(reverseGroupIds).length ? { reverseGroupIds } : {}), ...(project.groupIds !== undefined || Object.keys(groupIds).length ? { groupIds } : {}) };
 }

@@ -12,6 +12,8 @@ export const optimizedReverseThroughWaves = writable([]);
 export const optimizedOffsets = writable([]);
 export const optimizedJunctions = writable([]);
 export const optimizedGroupIds = writable({});
+export const optimizedReverseGroupIds = writable({});
+export const optimizedDirection = writable('forward');
 export const optimizationHistory = writable([]);
 export const isOptimizing = writable(false);
 

@@ -6,13 +6,14 @@
   export let time = 0;
   export let offset = 0;
   export let groupId = 0;
+  export let groupLabel = '';
   const dispatch = createEventDispatcher();
   $: state = programStateAt(timeline, time, offset);
 </script>
 
 <div class="space-y-2" role="group" aria-label={`Signal timeline for group ${groupId}`}>
   <div class="flex flex-wrap items-center justify-between gap-1 text-xs text-gray-600">
-    <span class="font-semibold">G{groupId} · {timeline.duration} s cycle</span>
+    <span class="font-semibold">G{groupId}{groupLabel ? ` · ${groupLabel}` : ''} · {timeline.duration} s cycle</span>
     <span>Program time: {state?.position.toFixed(1) ?? '0'} s</span>
   </div>
   <div class="relative">

@@ -1,10 +1,12 @@
 <script>
   import { onMount } from 'svelte';
-  import { corridorGroupId } from '$lib/utils/junction-program.js';
+  import { corridorTimelineRows } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
   export let groupIds = {};
-  $: viewJunctions = junctions.map(junction => ({ ...junction, group_id: corridorGroupId(junction, groupIds) }));
+  export let reverseGroupIds = {};
+  export let direction = 'forward';
+  $: viewJunctions = junctions.map(junction => ({ ...junction, rows: corridorTimelineRows(junction, groupIds, reverseGroupIds, direction) }));
   export let showOffsets = false;
 
   let container;
@@ -132,8 +134,6 @@
 
       {#each viewJunctions as junction (junction.id)}
         {@const y = yPos(junction.point.y)}
-        {@const segments = getSegments(junction)}
-        {@const activeIdx = getActiveIdx(junction)}
 
         <!-- Crossbar on road -->
         <line
@@ -151,7 +151,7 @@
           font-size="11"
           font-weight="600"
           fill="#1e293b"
-        >{junction.label || `J${junction.id}`}</text>
+        >{(junction.label || `J${junction.id}`).length > 14 ? `${junction.label.slice(0, 13)}…` : junction.label || `J${junction.id}`}<title>{junction.label || `J${junction.id}`}</title></text>
 
         <!-- Distance -->
         <text
@@ -162,8 +162,12 @@
           fill="#94a3b8"
         >{junction.point.y} m</text>
 
-        <!-- Signal bar -->
-        <g transform={`translate(${roadX + ROAD_W / 2 + 8}, ${y - 6})`}>
+        {#each junction.rows as row (row.groupId)}
+        {@const groupJunction = { ...junction, group_id: row.groupId }}
+        {@const segments = getSegments(groupJunction)}
+        {@const activeIdx = getActiveIdx(groupJunction)}
+        <g transform={`translate(${roadX + ROAD_W / 2 + 8}, ${y - 6 + row.offset * 1.5})`}>
+          <title>{row.label}</title>
           {#each segments as seg (seg.i)}
             <rect
               x={seg.x} y={0}
@@ -191,13 +195,17 @@
             stroke-width="0.5"
             rx="1"
           />
+          {#if direction === 'bidirectional'}
+            <text x={SIGNAL_BAR_W + 4} y={9} font-size="9" fill="#475569">{row.groupId === null ? 'Choose group' : row.label}</text>
+          {/if}
         </g>
+        {/each}
 
         <!-- Offset label -->
         {#if showOffsets}
           <text
             x={roadX + ROAD_W / 2 + 8 + SIGNAL_BAR_W + 6}
-            y={y}
+            y={y + (direction === 'bidirectional' ? 24 : 0)}
             dy="0.35em"
             font-size="10"
             font-weight="700"

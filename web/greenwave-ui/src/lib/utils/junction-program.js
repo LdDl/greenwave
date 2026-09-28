@@ -37,6 +37,19 @@ export function corridorGroupId(junction, selections = {}) {
   return ids.length === 1 ? ids[0] : null;
 }
 
+export function reverseCorridorGroupId(junction, selections = {}, reverseSelections = {}) {
+  return Object.hasOwn(reverseSelections, junction.id) ? reverseSelections[junction.id] : corridorGroupId(junction, selections);
+}
+
+export function corridorTimelineRows(junction, selections = {}, reverseSelections = {}, direction = 'forward') {
+  const forwardId = corridorGroupId(junction, selections);
+  const reverseId = reverseCorridorGroupId(junction, selections, reverseSelections);
+  if (direction === 'bidirectional' && reverseId !== forwardId) {
+    return [{ groupId: forwardId, label: `Fwd G${forwardId}`, offset: -6 }, { groupId: reverseId, label: `Rev G${reverseId}`, offset: 6 }];
+  }
+  return [{ groupId: forwardId, label: `${direction === 'bidirectional' ? 'Fwd/Rev' : 'Fwd'} G${forwardId}`, offset: 0 }];
+}
+
 export function calculationGroupIds(junctions, selections = {}) {
   return Object.fromEntries(junctions.map(junction => {
     const { groupIds } = readProgram(junction);
@@ -47,8 +60,12 @@ export function calculationGroupIds(junctions, selections = {}) {
   }));
 }
 
-export function corridorProgramError(junctions, selections = {}) {
-  try { calculationGroupIds(junctions, selections); return ''; }
+export function corridorProgramError(junctions, selections = {}, reverseSelections = {}, direction = 'forward') {
+  try {
+    calculationGroupIds(junctions, selections);
+    if (direction === 'bidirectional') calculationGroupIds(junctions, { ...selections, ...reverseSelections });
+    return '';
+  }
   catch (cause) { return cause.message; }
 }
 
@@ -61,10 +78,10 @@ export function addProgramGroup(junction) {
   return { junction: next, groupId };
 }
 
-export function removeProgramGroup(junction, groupId, selectedId) {
+export function removeProgramGroup(junction, groupId, selectedId, reverseSelectedId = selectedId) {
   const ids = programGroupIds(junction);
   if (ids.length <= 1) throw new Error('Keep at least one signal group.');
-  if (groupId === selectedId) throw new Error('Choose another corridor group before removing this group.');
+  if (groupId === selectedId || groupId === reverseSelectedId) throw new Error('Choose another corridor group before removing this group.');
   const next = structuredClone(junction);
   for (const phase of next.cycle) phase.signal_groups = phase.signal_groups.filter(group => group.id !== groupId);
   return next;

@@ -3,10 +3,12 @@
   import { createEventDispatcher } from 'svelte';
 
   import * as d3 from 'd3';
-  import { corridorGroupId } from '$lib/utils/junction-program.js';
+  import { corridorGroupId, corridorTimelineRows } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
   export let groupIds = {};
+  export let reverseGroupIds = {};
+  export let direction = 'forward';
   export let wavesAreOutdated = { isOutdated: false, reason: null };
   export let interactive = false;
   export let greenWaves = [];
@@ -24,7 +26,7 @@
   let height = 400;
   let isDragging = false; 
 
-  const margin = { top: 30, right: 30, bottom: 40, left: 60 };
+  const margin = { top: 44, right: 30, bottom: 40, left: 60 };
   let chartWidth = width - margin.left - margin.right;
   let chartHeight = height - margin.top - margin.bottom;
   
@@ -56,7 +58,8 @@
     const junctionsWithDuration = junctions.map(junction => ({
       ...junction,
       total_duration: calculateTotalDuration(junction),
-      group_id: corridorGroupId(junction, groupIds)
+      group_id: corridorGroupId(junction, groupIds),
+      timelineRows: corridorTimelineRows(junction, groupIds, reverseGroupIds, direction)
     }));
     
     // Calculate max time domain
@@ -177,8 +180,8 @@
     // Draw junction labels with duration
     const junctionLabels = junctionGroups.append("text")
       .attr("x", 0)
-      .attr("y", -15)
-      .attr("text-anchor", "middle")
+      .attr("y", d => d.timelineRows.length > 1 ? -36 : -27)
+      .attr("text-anchor", "start")
       .attr("font-size", "10px")
       .attr("font-weight", "bold")
       .attr("fill", "#333")
@@ -244,149 +247,59 @@
     return ((value % modulus) + modulus) % modulus;
   }
 
-  // Function to update signal lines for a specific junction during drag
   function updateSignalLinesForJunction(junctionId, newY, junctionsWithDuration, xScale, yScale, chart) {
     const junction = junctionsWithDuration.find(j => j.id === junctionId);
     if (!junction) return;
-    
-    chart.selectAll(`.signal-line-${junctionId}`).remove();
-    
-    let currentTime = junction.offset;
-    
-    junction.cycle.forEach(phase => {
-      (phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []).forEach(signal => {
-        if (signal.duration > 0) {
-          const startTime = positiveModulo(currentTime, junction.total_duration);
-          const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
-
-          if (endTime < startTime || signal.duration >= junction.total_duration) {
-            chart.append("line")
-              .attr("class", `signal-line-${junctionId}`)
-              .attr("x1", xScale(startTime))
-              .attr("x2", xScale(junction.total_duration))
-              .attr("y1", newY)
-              .attr("y2", newY)
-              .attr("stroke", getSignalColor(signal.color))
-              .attr("stroke-width", 4);
-
-            chart.append("line")
-              .attr("class", `signal-line-${junctionId}`)
-              .attr("x1", xScale(0))
-              .attr("x2", xScale(endTime))
-              .attr("y1", newY)
-              .attr("y2", newY)
-              .attr("stroke", getSignalColor(signal.color))
-              .attr("stroke-width", 4);
-          } else {
-            chart.append("line")
-              .attr("class", `signal-line-${junctionId}`)
-              .attr("x1", xScale(startTime))
-              .attr("x2", xScale(endTime))
-              .attr("y1", newY)
-              .attr("y2", newY)
-              .attr("stroke", getSignalColor(signal.color))
-              .attr("stroke-width", 4);
-          }
-        }
-        currentTime += signal.duration;
-      });
-    });
+    chart.selectAll(`.signal-row-${junctionId}`).remove();
+    drawJunctionTimelines(chart, junction, xScale, newY);
   }
-  
-  // Draw signal timelines function
+
   function drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale) {
-    junctionsWithDuration.forEach(junction => {
-      let currentTime = junction.offset;
-      const y = yScale(junction.point.y);
-      
-      junction.cycle.forEach(phase => {
-        (phase.signal_groups.find(group => group.id === junction.group_id)?.signals ?? []).forEach(signal => {
+    junctionsWithDuration.forEach(junction => drawJunctionTimelines(chart, junction, xScale, yScale(junction.point.y)));
+  }
+
+  function drawJunctionTimelines(chart, junction, xScale, y) {
+    for (const row of junction.timelineRows) {
+      const container = chart.append('g').attr('class', `signal-row-${junction.id}`).attr('data-group-id', row.groupId);
+      let currentTime = junction.offset ?? 0;
+      for (const phase of junction.cycle) {
+        for (const signal of phase.signal_groups.find(group => group.id === row.groupId)?.signals ?? []) {
           if (signal.duration > 0) {
-            const startTime = positiveModulo(currentTime, junction.total_duration);
-            const endTime = positiveModulo(currentTime + signal.duration, junction.total_duration);
-            if (endTime < startTime || signal.duration >= junction.total_duration) {
-              const linePartOne = chart.append("line")
-                .attr("class", `signal-line-${junction.id}`)
-                .attr("x1", xScale(startTime))
-                .attr("x2", xScale(junction.total_duration))
-                .attr("y1", y)
-                .attr("y2", y)
-                .attr("stroke", getSignalColor(signal.color))
-                .attr("stroke-width", 4);
+            const start = positiveModulo(currentTime, junction.total_duration);
+            const end = positiveModulo(currentTime + signal.duration, junction.total_duration);
+            const parts = end < start || signal.duration >= junction.total_duration ? [[start, junction.total_duration], [0, end]] : [[start, end]];
+            for (const [from, to] of parts) {
+              if (from === to) continue;
+              const line = container.append('line')
+                .attr('class', `signal-line-${junction.id}`)
+                .attr('x1', xScale(from)).attr('x2', xScale(to))
+                .attr('y1', y + row.offset).attr('y2', y + row.offset)
+                .attr('stroke', getSignalColor(signal.color)).attr('stroke-width', 4);
+              line.append('title').text(`${row.label}: ${signal.color}, ${signal.duration} s`);
               if (interactive) {
-                linePartOne
-                  .style("cursor", "pointer")
-                  .on("mouseover", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 8)
-                      .attr("stroke-opacity", 0.8);
-                  })
-                  .on("mouseout", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 4)
-                      .attr("stroke-opacity", 1);
-                  })
-                  .on("click", () => handleSignalClick(junction, phase, signal));
-              }
-              const linePartTwo = chart.append("line")
-                .attr("class", `signal-line-${junction.id}`)
-                .attr("x1", xScale(0))
-                .attr("x2", xScale(endTime))
-                .attr("y1", y)
-                .attr("y2", y)
-                .attr("stroke", getSignalColor(signal.color))
-                .attr("stroke-width", 4);
-              if (interactive) {
-                linePartTwo
-                  .style("cursor", "pointer")
-                  .on("mouseover", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 8)
-                      .attr("stroke-opacity", 0.8);
-                  })
-                  .on("mouseout", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 4)
-                      .attr("stroke-opacity", 1);
-                  })
-                  .on("click", () => handleSignalClick(junction, phase, signal));
-              }
-            } else {
-              const line = chart.append("line")
-                .attr("class", `signal-line-${junction.id}`)
-                .attr("x1", xScale(startTime))
-                .attr("x2", xScale(endTime))
-                .attr("y1", y)
-                .attr("y2", y)
-                .attr("stroke", getSignalColor(signal.color))
-                .attr("stroke-width", 4);
-              if (interactive) {
-                line
-                  .style("cursor", "pointer")
-                  .on("mouseover", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 8)
-                      .attr("stroke-opacity", 0.8);
-                  })
-                  .on("mouseout", function () {
-                    d3.select(this)
-                      .attr("stroke-width", 4)
-                      .attr("stroke-opacity", 1);
-                  })
-                  .on("click", () => handleSignalClick(junction, phase, signal));
+                line.style('cursor', 'pointer')
+                  .on('mouseover', function() { d3.select(this).attr('stroke-width', 8); })
+                  .on('mouseout', function() { d3.select(this).attr('stroke-width', 4); })
+                  .on('click', () => handleSignalClick(junction, phase, signal));
               }
             }
           }
           currentTime += signal.duration;
-        });
-      });
-    });
+        }
+      }
+      if (direction === 'bidirectional') {
+        container.append('text').attr('x', chartWidth).attr('y', y + row.offset - 3)
+          .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', '#334155')
+          .attr('stroke', 'white').attr('stroke-width', 3).attr('paint-order', 'stroke')
+          .style('pointer-events', 'none').text(row.groupId === null ? 'Choose group' : row.label);
+      }
+    }
   }
 
   function drawPhases(chart, junctionsWithDuration, xScale, yScale) {
     junctionsWithDuration.forEach((junction) => {
       let currentTime = junction.offset; // Start at the junction's offset
-      const y = yScale(junction.point.y);
+      const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
 
       junction.cycle.forEach((phase, phaseIdx) => {
         // Calculate phase duration from the first signal group (all groups are synchronized)
@@ -504,7 +417,7 @@
       wave.intervals.forEach((interval, junctionIdx) => {
         if (junctionIdx < junctionsWithDuration.length) {
           const junction = junctionsWithDuration[junctionIdx];
-          const y = yScale(junction.point.y);
+          const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
 
           starts.push([xScale(interval.start), y]);
           ends.push([xScale(interval.end), y]);
@@ -580,7 +493,7 @@
         const junctionIdx = numJunctions - 1 - idx;
         if (junctionIdx >= 0 && junctionIdx < numJunctions) {
           const junction = junctionsWithDuration[junctionIdx];
-          const y = yScale(junction.point.y);
+          const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
 
           starts.push([xScale(interval.start), y]);
           ends.push([xScale(interval.end), y]);
@@ -617,7 +530,7 @@
   }
   
   // Also reactive to all prop changes
-  $: groupIds, greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
+  $: groupIds, reverseGroupIds, direction, greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
   
   function updateSize() {
     if (container) {

@@ -31,8 +31,8 @@ function parseDocument(text) {
 }
 
 function calculationData(document) {
-  const { junctions, desiredSpeed, direction, groupIds } = document.input;
-  return JSON.stringify({ junctions, desiredSpeed, direction, groupIds });
+  const { junctions, desiredSpeed, direction, groupIds, reverseGroupIds } = document.input;
+  return JSON.stringify({ junctions, desiredSpeed, direction, groupIds, reverseGroupIds });
 }
 
 export function createCorridorEditor() {
@@ -83,7 +83,9 @@ export function createCorridorEditor() {
     mutator(next);
     const ids = new Set(next.input.junctions.map(node => String(node.id)));
     next.positions = Object.fromEntries(Object.entries(next.positions).filter(([id]) => ids.has(id)));
-    if (next.input.groupIds) next.input.groupIds = Object.fromEntries(Object.entries(next.input.groupIds).filter(([id]) => ids.has(id)));
+    for (const key of ['groupIds', 'reverseGroupIds']) {
+      if (next.input[key]) next.input[key] = Object.fromEntries(Object.entries(next.input[key]).filter(([id]) => ids.has(id)));
+    }
     if (JSON.stringify(next) === JSON.stringify(current)) return;
     initialized = true;
     preserveSaved = false;
@@ -127,10 +129,12 @@ export function createCorridorEditor() {
 
   function replaceInput(input) {
     const next = { ...current.input };
-    for (const key of ['junctions', 'desiredSpeed', 'desiredIntensity', 'direction', 'groupIds']) {
+    for (const key of ['junctions', 'desiredSpeed', 'desiredIntensity', 'direction', 'groupIds', 'reverseGroupIds']) {
       if (input[key] !== undefined) next[key] = structuredClone(input[key]);
     }
-    if (input.junctions !== undefined && input.groupIds === undefined) delete next.groupIds;
+    for (const key of ['groupIds', 'reverseGroupIds']) {
+      if (input.junctions !== undefined && input[key] === undefined) delete next[key];
+    }
     checkInput(next);
     finish();
     initialized = true;
@@ -182,7 +186,7 @@ export function createCorridorEditor() {
   return {
     project: { subscribe: project.subscribe }, history, persistence, calculationRevision, graph,
     junctions: field('junctions'), desiredSpeed: field('desiredSpeed'), desiredIntensity: field('desiredIntensity'), direction: field('direction'),
-    groupIds: field('groupIds', {}),
+    groupIds: field('groupIds', {}), reverseGroupIds: field('reverseGroupIds', {}),
     begin, finish, undo, redo, replaceInput, connectStorage,
     snapshot: () => structuredClone(current),
     canvas: {
@@ -196,7 +200,7 @@ export function createCorridorEditor() {
         });
       },
     },
-    saveJunction(junction, isNew = false, groupId) {
+    saveJunction(junction, isNew = false, groupId, reverseGroupId) {
       change(document => {
         const program = readProgram(junction);
         if (groupId !== undefined && groupId !== null && !program.groupIds.includes(groupId)) throw new Error('Selected corridor group does not exist.');
@@ -206,6 +210,11 @@ export function createCorridorEditor() {
           document.input.groupIds = { ...document.input.groupIds };
           if (groupId === null) delete document.input.groupIds[junction.id];
           else document.input.groupIds[junction.id] = groupId;
+        }
+        if (reverseGroupId !== undefined && (reverseGroupId !== null || document.input.reverseGroupIds)) {
+          document.input.reverseGroupIds = { ...document.input.reverseGroupIds };
+          if (reverseGroupId === null) delete document.input.reverseGroupIds[junction.id];
+          else document.input.reverseGroupIds[junction.id] = reverseGroupId;
         }
         checkInput(document.input);
       });
@@ -234,5 +243,6 @@ export const corridorGraph = corridorEditor.graph;
 export const corridorHistory = corridorEditor.history;
 export const corridorPersistence = corridorEditor.persistence;
 export const corridorGroupIds = corridorEditor.groupIds;
+export const corridorReverseGroupIds = corridorEditor.reverseGroupIds;
 export const corridorNodes = derived(corridorGraph, graph => graph.nodes);
 export const corridorEdges = derived(corridorGraph, graph => graph.edges);

@@ -11,6 +11,8 @@
   export let junction = null;
   export let isNew = false;
   export let corridorGroup = undefined;
+  export let reverseCorridorGroup = null;
+  export let direction = 'forward';
   export let initialSignal = null;
   export let graph = { nodes: [], edges: [], error: '' };
 
@@ -32,6 +34,7 @@
   let selectedSignalKey = null;
   let groupId = null;
   let selectedGroupId = null;
+  let selectedReverseGroupId = null;
   let removingGroupId = null;
   let dialogElement;
   let discardButton;
@@ -39,19 +42,28 @@
 
   $: groupIds = programGroupIds(editedJunction);
   $: topology = graph.error || isNew ? { stubs: [], movements: [] } : intersectionTopology(editedJunction?.id, graph.nodes, graph.edges);
-  $: movementState = Object.fromEntries(topology.movements.map(movement => [movement.id, { groupIds: selectedGroupId === null ? [] : [selectedGroupId] }]));
+  $: effectiveReverseGroupId = selectedReverseGroupId ?? selectedGroupId;
+  $: movementState = Object.fromEntries(topology.movements.map(movement => {
+    const id = movement.inDir === 'back' ? effectiveReverseGroupId : selectedGroupId;
+    return [movement.id, { groupIds: id === null ? [] : [id] }];
+  }));
   $: previews = groupIds.map(id => ({ id, ...readTimeline(editedJunction, id) }));
   $: preview = previews.find(preview => preview.id === groupId) ?? { timeline: { duration: 0, segments: [] }, error: '' };
   $: programError = validateProgram(editedJunction);
   $: signalState = programStateAt(preview.timeline, previewTime, editedJunction?.offset ?? 0);
   $: colors = Object.fromEntries(previews.map(preview => [preview.id, signalColor(programStateAt(preview.timeline, previewTime, editedJunction?.offset ?? 0)?.segment.color)]));
   $: selectedMovement = topology.movements.find(movement => movement.id === selMovId);
-  $: dirty = editedJunction !== null && JSON.stringify({ junction: editedJunction, groupId: selectedGroupId }) !== original;
+  $: dirty = editedJunction !== null && JSON.stringify({ junction: editedJunction, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId }) !== original;
 
   function validateProgram(junction) {
     if (!junction) return '';
     try { readProgram(junction); return ''; }
     catch (cause) { return cause.message; }
+  }
+
+  function groupLabel(junction, id) {
+    const label = junction?.cycle[0]?.signal_groups.find(group => group.id === id)?.label;
+    return typeof label === 'string' ? label : '';
   }
 
   function readTimeline(junction, id) {
@@ -104,8 +116,9 @@
     const ids = programGroupIds(draft);
     const selected = corridorGroup === undefined ? (ids.length === 1 ? ids[0] : null) : corridorGroup;
     selectedGroupId = selected;
+    selectedReverseGroupId = reverseCorridorGroup;
     groupId = selected ?? ids[0];
-    original = JSON.stringify({ junction: draft, groupId: selected });
+    original = JSON.stringify({ junction: draft, groupId: selected, reverseGroupId: reverseCorridorGroup });
     removingGroupId = null;
     activeTab = isNew ? 'program' : 'movements';
     previewTime = 0;
@@ -152,7 +165,7 @@
     }
 
     if (programError) { validationError = programError; return; }
-    dispatch('save', { junction: editedJunction, isNew, groupId: selectedGroupId });
+    dispatch('save', { junction: editedJunction, isNew, groupId: selectedGroupId, reverseGroupId: selectedReverseGroupId });
   }
 
   function confirmDelete() {
@@ -210,7 +223,7 @@
 
   function removeGroup() {
     try {
-      editedJunction = removeProgramGroup(editedJunction, removingGroupId, selectedGroupId);
+      editedJunction = removeProgramGroup(editedJunction, removingGroupId, selectedGroupId, effectiveReverseGroupId);
       if (groupId === removingGroupId) groupId = programGroupIds(editedJunction)[0];
       removingGroupId = null;
       validationError = null;
@@ -262,7 +275,7 @@
             <div class="max-h-[220px] overflow-y-auto space-y-3">
               {#each previews as row (row.id)}
                 {#if row.error}<p class="text-sm text-red-700" role="status">G{row.id}: {row.error}</p>
-                {:else}<SignalTimeline timeline={row.timeline} time={previewTime} offset={editedJunction.offset ?? 0} groupId={row.id} on:select={selectSignal} />{/if}
+                {:else}<SignalTimeline timeline={row.timeline} time={previewTime} offset={editedJunction.offset ?? 0} groupId={row.id} groupLabel={groupLabel(editedJunction, row.id)} on:select={selectSignal} />{/if}
               {/each}
             </div>
             {#if programError}<p class="text-sm text-amber-800" role="status">{programError} Adjust the groups before saving.</p>{/if}
@@ -287,13 +300,13 @@
               {:else if !topology.movements.length}
                 <p class="text-sm text-gray-500">{topology.stubs.length === 1 ? 'This is an end of the corridor. The external approach is not drawn, so there is no complete through movement here.' : 'Connect roads to see through movements.'} The signal group and its program can still be edited.</p>
               {:else}
-                <p class="mb-3 text-sm text-gray-500">Select an arc or a movement below. Through movements use the corridor group in both directions. Choose it in "Groups".</p>
+                <p class="mb-3 text-sm text-gray-500">Select an arc or a movement below. Each through movement uses its direction's group. Choose forward and reverse groups in "Groups".</p>
                 <div class="space-y-2">
                   {#each topology.movements as movement (movement.id)}
-                    <button class="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-blue-50" class:border-blue-600={selMovId === movement.id} class:bg-blue-50={selMovId === movement.id} aria-pressed={selMovId === movement.id} on:click={() => selMovId = movement.id}>{movement.inLabel} → {movement.outLabel} · {selectedGroupId === null ? 'Choose group' : `G${selectedGroupId}`}</button>
+                    <button class="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-blue-50" class:border-blue-600={selMovId === movement.id} class:bg-blue-50={selMovId === movement.id} aria-pressed={selMovId === movement.id} on:click={() => selMovId = movement.id}>{movement.inLabel} → {movement.outLabel} · {movement.inDir === 'back' ? 'Reverse' : 'Forward'} · {movementState[movement.id].groupIds.length ? `G${movementState[movement.id].groupIds[0]}` : 'Choose group'}</button>
                   {/each}
                 </div>
-                {#if selectedMovement}<p class="mt-4 text-sm text-gray-600">Selected: {selectedMovement.inLabel} → {selectedMovement.outLabel}. Corridor group: {selectedGroupId === null ? 'Not selected' : `G${selectedGroupId}`}.</p>{/if}
+                {#if selectedMovement}<p class="mt-4 text-sm text-gray-600">Selected: {selectedMovement.inLabel} → {selectedMovement.outLabel}. Corridor group: {movementState[selectedMovement.id].groupIds.length ? `G${movementState[selectedMovement.id].groupIds[0]}` : 'Not selected'}.</p>{/if}
               {/if}
               <button class="mt-4 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => activeTab = 'program'}>Edit G{groupId} program</button>
             {/if}
@@ -303,20 +316,27 @@
                 <button class="rounded bg-green-600 px-3 py-2 text-sm text-white" on:click={addGroup}>+ Add group</button>
               </div>
               <p class="text-sm text-gray-600">Groups persist across every phase and share its duration. A new group starts red for the full program.</p>
-              <label for="corridor-group" class="mt-4 mb-1 block text-sm font-medium">Corridor group</label>
+              <label for="corridor-group" class="mt-4 mb-1 block text-sm font-medium">Forward group</label>
               <select id="corridor-group" bind:value={selectedGroupId} class="w-full rounded border p-2 pr-8">
                 <option value={null}>Choose a group</option>
                 {#each groupIds as id (id)}<option value={id}>G{id}</option>{/each}
               </select>
-              <p class="mt-1 mb-4 text-xs text-gray-500">Used by the diagram, calculations and through movements in both directions.</p>
+              <label for="reverse-corridor-group" class="mt-3 mb-1 block text-sm font-medium">Reverse group</label>
+              <select id="reverse-corridor-group" bind:value={selectedReverseGroupId} class="w-full rounded border p-2 pr-8">
+                <option value={null}>Same as forward</option>
+                {#each groupIds as id (id)}<option value={id}>G{id}</option>{/each}
+              </select>
+              <p class="mt-1 mb-4 text-xs text-gray-500">{direction === 'bidirectional' ? 'Both directions use the same program and offset, with the groups selected here.' : 'Reverse selection is saved and used when the corridor direction is Bidirectional.'}</p>
               <div class="space-y-2">
                 {#each groupIds as id (id)}
                   <div class="rounded border p-3" class:border-blue-500={groupId === id}>
                     <div class="flex items-center justify-between gap-2">
                       <button class="font-semibold text-blue-700" on:click={() => { groupId = id; activeTab = 'program'; }}>Edit G{id} program</button>
-                      <button aria-label={`Remove group G${id}`} class="text-sm text-red-600 disabled:opacity-40" disabled={groupIds.length <= 1 || selectedGroupId === id} title={selectedGroupId === id ? 'Choose another corridor group before removing this group' : 'Remove this group from every phase'} on:click={() => removingGroupId = id}>Remove</button>
+                      <button aria-label={`Remove group G${id}`} class="text-sm text-red-600 disabled:opacity-40" disabled={groupIds.length <= 1 || selectedGroupId === id || effectiveReverseGroupId === id} title={selectedGroupId === id || effectiveReverseGroupId === id ? 'Choose another corridor group before removing this group' : 'Remove this group from every phase'} on:click={() => removingGroupId = id}>Remove</button>
                     </div>
-                    {#if selectedGroupId === id}<p class="mt-1 text-xs text-gray-500">Corridor group</p>{/if}
+                    {#if groupLabel(editedJunction, id)}<p class="mt-1 text-xs text-gray-600">{groupLabel(editedJunction, id)}</p>{/if}
+                    {#if selectedGroupId === id}<p class="mt-1 text-xs text-gray-500">Forward corridor group</p>{/if}
+                    {#if effectiveReverseGroupId === id}<p class="mt-1 text-xs text-gray-500">Reverse corridor group</p>{/if}
                   </div>
                 {/each}
               </div>

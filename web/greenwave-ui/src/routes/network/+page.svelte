@@ -2,10 +2,10 @@
   import { onMount, tick } from 'svelte';
   import MacroCanvas from '../../components/MacroCanvas.svelte';
   import EditJunctionModal from '../../components/EditJunctionModal.svelte';
-  import { corridorEditor, corridorGraph, corridorNodes, corridorEdges, corridorHistory, corridorPersistence, corridorGroupIds } from '$lib/stores/corridor.js';
+  import { corridorEditor, corridorGraph, corridorNodes, corridorEdges, corridorHistory, corridorPersistence, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core.js';
   import { resetToDemo } from '$lib/stores';
-  import { corridorGroupId } from '$lib/utils/junction-program.js';
+  import { corridorGroupId, reverseCorridorGroupId } from '$lib/utils/junction-program.js';
   import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
   import { exportToJSON, prepareInputExport } from '$lib/utils/export-import.js';
 
@@ -47,7 +47,7 @@
 
   function saveJunction(event) {
     try {
-      corridorEditor.saveJunction(event.detail.junction, event.detail.isNew, event.detail.groupId);
+      corridorEditor.saveJunction(event.detail.junction, event.detail.isNew, event.detail.groupId, event.detail.reverseGroupId);
       selectedNodeId = event.detail.junction.id;
       editing = null;
       error = '';
@@ -86,7 +86,7 @@
   }
 
   function exportInput() {
-    exportToJSON(prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $corridorGroupIds), 'greenwave-input.json');
+    exportToJSON(prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection, $corridorGroupIds, $corridorReverseGroupIds), 'greenwave-input.json');
   }
 
   async function loadDemo() {
@@ -149,7 +149,7 @@
           <section>
             <h2 class="font-semibold">{selectedJunction.label}</h2>
             <p class="mt-2 text-sm text-gray-500">Distance: {selectedJunction.point.y} m · Cycle: {calculateTotalDuration(selectedJunction)} s</p>
-            <p class="mt-1 text-sm text-gray-500">Group: {corridorGroupId(selectedJunction, $corridorGroupIds) === null ? 'Choose a group' : `G${corridorGroupId(selectedJunction, $corridorGroupIds)}`} · Offset: {selectedJunction.offset ?? 0} s</p>
+            <p class="mt-1 text-sm text-gray-500">Forward: {corridorGroupId(selectedJunction, $corridorGroupIds) === null ? 'Choose a group' : `G${corridorGroupId(selectedJunction, $corridorGroupIds)}`}{#if $optimizationDirection === 'bidirectional'} · Reverse: {reverseCorridorGroupId(selectedJunction, $corridorGroupIds, $corridorReverseGroupIds) === null ? 'Choose a group' : `G${reverseCorridorGroupId(selectedJunction, $corridorGroupIds, $corridorReverseGroupIds)}`}{/if} · Offset: {selectedJunction.offset ?? 0} s</p>
             <button class="mt-3 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => openJunction(selectedJunction.id)}>Edit intersection</button>
           </section>
         {:else if selectedEdge}
@@ -193,5 +193,5 @@
 </div>
 
 {#if editing}
-  <EditJunctionModal junction={editing} {isNew} graph={$corridorGraph} corridorGroup={corridorGroupId(editing, $corridorGroupIds)} on:save={saveJunction} on:delete={removeJunction} on:close={() => editing = null} />
+  <EditJunctionModal junction={editing} {isNew} graph={$corridorGraph} corridorGroup={corridorGroupId(editing, $corridorGroupIds)} reverseCorridorGroup={$corridorReverseGroupIds[editing.id] ?? null} direction={$optimizationDirection} on:save={saveJunction} on:delete={removeJunction} on:close={() => editing = null} />
 {/if}
