@@ -20,6 +20,7 @@ export const isOptimizing = writable(false);
 // Track the state of junctions and speed when optimization was last performed
 export const optimizedWaveCalculationPositions = writable([]);
 export const optimizedLastCalculatedSpeed = writable(null);
+export const optimizedInputRevision = writable(null);
 
 // Derived store to check if optimized results are outdated
 export const optimizedResultsAreOutdated = derived(

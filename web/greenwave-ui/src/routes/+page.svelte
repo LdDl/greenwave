@@ -13,7 +13,7 @@
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
   import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph, corridorGroupIds, corridorReverseGroupIds } from '$lib/stores/corridor.js';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, lastCalculatedSpeed, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
-  import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
+  import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedInputRevision, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
   import { prepareJunctionsForAPI, applyOffsetsToJunctions, validateJunctionCycles } from '$lib/utils/junction-helpers.js';
@@ -23,6 +23,7 @@
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
   onDestroy(() => corridorEditor.finish());
+  const calculationRevision = corridorEditor.calculationRevision;
 
   function reveal(node) {
     return slide(node, { duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180 });
@@ -55,6 +56,10 @@
   // Reactive variables
   $: hasGreenWaveData = $originalGreenWaves.length > 0;
   $: hasResults = $optimizedJunctions.length > 0;
+  $: offsetsMatchInput = hasResults && $optimizedJunctions.length === $junctions.length
+    && $optimizedJunctions.every(result => $junctions.some(node => node.id === result.id && (node.offset ?? 0) === result.offset));
+  $: canApplyOffsets = hasResults && !$isLoading && !$optimizedResultsAreOutdated.isOutdated
+    && $optimizedInputRevision === $calculationRevision && !offsetsMatchInput;
 
   // Validation: check if all junctions have the same cycle duration
   $: cycleValidation = $junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
@@ -166,6 +171,7 @@
 
       optimizedWaveCalculationPositions.set($junctions.map(j => ({ id: j.id, y: j.point.y })));
       optimizedLastCalculatedSpeed.set($desiredSpeed);
+      optimizedInputRevision.set(revision);
       validateResults();
     } catch (optimizeError) {
       error.set(optimizeError.message || 'Failed to optimize');
@@ -186,7 +192,30 @@
     optimizedThroughWaves.set([]);
     optimizedReverseGreenWaves.set([]);
     optimizedReverseThroughWaves.set([]);
+    optimizedInputRevision.set(null);
+    optimizedLastCalculatedSpeed.set(null);
+    optimizedWaveCalculationPositions.set([]);
     validateResults();
+  }
+
+  function applyOptimizedOffsets() {
+    if (!canApplyOffsets) return;
+    try {
+      const applied = corridorEditor.applyOffsets($optimizedJunctions, $optimizedInputRevision);
+      if (!applied) return;
+      originalGreenWaves.set(structuredClone($optimizedGreenWaves));
+      originalThroughWaves.set(structuredClone($optimizedThroughWaves));
+      originalReverseGreenWaves.set(structuredClone($optimizedReverseGreenWaves));
+      originalReverseThroughWaves.set(structuredClone($optimizedReverseThroughWaves));
+      storeWaveCalculationPositions($junctions, $optimizedLastCalculatedSpeed);
+      optimizedInputRevision.set($calculationRevision);
+      showGreenWaves.set(true);
+      validateInput();
+      validateResults();
+      error.set(null);
+    } catch (cause) {
+      error.set(cause.message);
+    }
   }
 
   function saveSignal(e) {
@@ -684,14 +713,21 @@
 
       <!-- RIGHT: Optimized Results -->
       <div class="corridor-panel bg-white rounded-lg shadow-md p-4 sm:p-5 flex flex-col min-w-0">
-        <div class="corridor-panel-header flex justify-between items-start mb-4">
+        <div class="corridor-panel-header flex flex-wrap justify-between items-start gap-2 mb-4">
           <h2 class="text-xl font-semibold">Optimized results</h2>
-          <button
-            on:click={clearResults}
-            class="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
-          >
-            Clear results
-          </button>
+          <div class="corridor-toolbar flex flex-wrap gap-1.5">
+            {#if hasResults}
+              <button on:click={applyOptimizedOffsets} disabled={!canApplyOffsets}
+                class="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1"
+                title={$optimizedResultsAreOutdated.isOutdated ? 'Optimize again for the current input' : offsetsMatchInput ? 'Input already uses these offsets' : 'Apply offsets to the shared input corridor as one Undo step'}>Apply offsets</button>
+            {/if}
+            <button
+              on:click={clearResults}
+              class="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
+            >
+              Clear results
+            </button>
+          </div>
         </div>
 
         <!-- Chart height stays independent of the controls below it. -->
@@ -735,7 +771,7 @@
               {#if $optimizedResultsAreOutdated.isOutdated}
                 <span class="block text-orange-600 mt-0.5">⚠ {$optimizedResultsAreOutdated.reason}</span>
               {:else}
-                <span class="text-green-600"> -> offsets applied</span>
+                <span class="text-green-600" role="status">{offsetsMatchInput ? ' · offsets match input' : ' · offsets ready to apply'}</span>
               {/if}
             {:else}
               <span class="text-gray-400">No results yet -> press Optimize</span>

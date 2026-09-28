@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { get } from 'svelte/store';
 import { createCorridorEditor, CORRIDOR_STORAGE_KEY } from '../src/lib/stores/corridor.js';
 import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
+import { readFileSync } from 'node:fs';
 
 function memoryStorage(initial = []) {
   const values = new Map(initial);
@@ -177,4 +178,69 @@ test('storage failures and temporarily invalid settings do not destroy the last 
   second.desiredSpeed.set(50);
   assert.equal(get(second.persistence).state, 'saved');
   assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).input.desiredSpeed, 50);
+});
+
+test('applying optimized offsets preserves shared programs, groups and layout in one persistent undo step', () => {
+  const input = JSON.parse(readFileSync(new URL('./fixtures/bidirectional-turns.json', import.meta.url), 'utf8'));
+  const storage = memoryStorage();
+  const editor = createCorridorEditor();
+  editor.connectStorage(storage);
+  editor.replaceInput(input);
+  const resultRevision = get(editor.calculationRevision);
+  editor.canvas.change(view => { view.nodes[1].y = 350; });
+  editor.desiredIntensity.set(0);
+  const original = editor.snapshot();
+  const result = input.junctions.map((node, index) => ({ id: node.id, offset: [0, 9, 19, 30][index] })).reverse();
+  assert.equal(editor.applyOffsets(result, resultRevision), true);
+  const applied = editor.snapshot();
+  assert.deepEqual(applied.input.junctions.map(node => node.offset), [0, 9, 19, 30]);
+  const expected = structuredClone(original);
+  expected.input.junctions.forEach((node, index) => { node.offset = [0, 9, 19, 30][index]; });
+  assert.deepEqual(applied, expected);
+  assert.deepEqual(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)), applied);
+  assert.equal(get(editor.calculationRevision), resultRevision + 1);
+  assert.equal(editor.applyOffsets(result, get(editor.calculationRevision)), false);
+  editor.undo();
+  assert.deepEqual(editor.snapshot(), original);
+  editor.redo();
+  assert.deepEqual(editor.snapshot(), applied);
+  result[0].offset = 99;
+  assert.deepEqual(editor.snapshot(), applied);
+  const restored = createCorridorEditor();
+  restored.connectStorage(storage);
+  assert.deepEqual(restored.snapshot(), applied);
+});
+
+test('stale optimization cannot overwrite a changed corridor or add history', () => {
+  const editor = createCorridorEditor();
+  editor.replaceInput(DEMO_DATA);
+  const revision = get(editor.calculationRevision);
+  const result = DEMO_DATA.junctions.map(node => ({ id: node.id, offset: 12 }));
+  editor.setRoadLength(1, 250);
+  const changed = editor.snapshot();
+  assert.throws(() => editor.applyOffsets(result, revision), /Input changed/);
+  assert.deepEqual(editor.snapshot(), changed);
+  editor.undo();
+  assert.deepEqual(get(editor.junctions), DEMO_DATA.junctions);
+  assert.throws(() => editor.applyOffsets(result, revision), /Input changed/);
+});
+
+test('incomplete or invalid offsets leave input, storage and undo history intact', () => {
+  const storage = memoryStorage();
+  const editor = createCorridorEditor();
+  editor.connectStorage(storage);
+  editor.replaceInput(DEMO_DATA);
+  const original = editor.snapshot();
+  const saved = storage.getItem(CORRIDOR_STORAGE_KEY);
+  const revision = get(editor.calculationRevision);
+  const result = DEMO_DATA.junctions.map(node => ({ id: node.id, offset: 12 }));
+  const invalid = [null, result.slice(1), result.map(() => result[0]), [...result.slice(1), {id: 99, offset: 12}], ...[NaN, Infinity, 1.5].map(offset => [{id: 0, offset}, ...result.slice(1)])];
+  for (const candidate of invalid) {
+    assert.throws(() => editor.applyOffsets(candidate, revision), /result/);
+    assert.deepEqual(editor.snapshot(), original);
+    assert.equal(storage.getItem(CORRIDOR_STORAGE_KEY), saved);
+    assert.equal(get(editor.calculationRevision), revision);
+  }
+  editor.undo();
+  assert.deepEqual(get(editor.junctions), []);
 });

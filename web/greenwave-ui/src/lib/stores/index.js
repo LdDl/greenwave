@@ -3,7 +3,7 @@ import { writable } from 'svelte/store';
 import { corridorEditor } from './corridor.js';
 import { DEMO_DATA } from '../utils/demo-input.js';
 import { originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
-import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed } from './optimization';
+import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedInputRevision } from './optimization';
 import { validateInput, validateResults } from './invalidation';
 
 // UI state stores
@@ -46,6 +46,7 @@ function clearCalculatedData() {
   optimizedReverseThroughWaves.set([]);
   optimizedWaveCalculationPositions.set([]);
   optimizedLastCalculatedSpeed.set(null);
+  optimizedInputRevision.set(null);
   validateInput();
   validateResults();
 

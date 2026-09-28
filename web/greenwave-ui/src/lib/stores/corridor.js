@@ -189,6 +189,28 @@ export function createCorridorEditor() {
     groupIds: field('groupIds', {}), reverseGroupIds: field('reverseGroupIds', {}),
     begin, finish, undo, redo, replaceInput, connectStorage,
     snapshot: () => structuredClone(current),
+    applyOffsets(junctionOffsets, expectedRevision) {
+      if (expectedRevision !== get(calculationRevision)) throw new Error('Input changed after optimization. Optimize again before applying offsets.');
+      if (!Array.isArray(junctionOffsets) || junctionOffsets.length !== current.input.junctions.length || junctionOffsets.length < 2) {
+        throw new Error('The result must contain an offset for every corridor junction.');
+      }
+      const offsets = new Map();
+      const ids = new Set(current.input.junctions.map(node => node.id));
+      for (const node of junctionOffsets) {
+        if (!ids.has(node?.id) || offsets.has(node.id) || !Number.isSafeInteger(node.offset)) {
+          throw new Error('The result contains an invalid junction or offset.');
+        }
+        offsets.set(node.id, node.offset);
+      }
+      const junctions = current.input.junctions.map(node => ({ ...node, offset: offsets.get(node.id) }));
+      checkInput({ ...current.input, junctions });
+      if (current.input.junctions.every(node => (node.offset ?? 0) === offsets.get(node.id))) return false;
+      finish();
+      change(document => {
+        for (const node of document.input.junctions) node.offset = offsets.get(node.id);
+      });
+      return true;
+    },
     canvas: {
       begin, finish,
       change: mutate => {
