@@ -416,12 +416,12 @@
   />
 {/if}
 
-<div class="min-h-screen bg-gray-50 flex flex-col">
-  <div class="container mx-auto p-4 flex-1 flex flex-col">
+<div class="corridor-page min-h-screen bg-gray-50 flex flex-col">
+  <div class="corridor-workspace container mx-auto p-4 flex-1 flex flex-col">
 
     <!-- Header -->
-    <div class="mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <div class="corridor-page-header mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="w-32">
           <a href="/network"
             class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"
@@ -460,7 +460,7 @@
       {#if $error}
         <div
           transition:slide={{ duration: 200 }}
-          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-4 flex justify-between items-start gap-3"
+          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mt-3 flex justify-between items-start gap-3"
         >
           <span><strong>Error:</strong> {$error}</span>
           <button
@@ -473,13 +473,13 @@
     </div>
 
     <!-- Main content grid  Input LEFT, Results RIGHT -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 items-start gap-4">
+    <div class="corridor-grid grid grid-cols-1 lg:grid-cols-2 items-start gap-4">
 
       <!-- LEFT: Input Configuration -->
       <div class="corridor-panel bg-white rounded-lg shadow-md p-4 sm:p-5 flex flex-col min-w-0">
 
         <!-- Panel header: title + wrapping toolbar -->
-        <div class="mb-4">
+        <div class="corridor-panel-header mb-4">
           <div class="flex justify-between items-center mb-3">
             <h2 class="text-xl font-semibold">Input configuration</h2>
           </div>
@@ -585,18 +585,19 @@
           {/if}
         </div>
 
-        {#if $junctions.length > 0}
-          <div class="mb-3 text-xs text-gray-500 leading-relaxed">
+        <div class="corridor-chart-hint mb-3 text-xs text-gray-500 leading-relaxed">
+          {#if $junctions.length > 0}
             {#if $wavesAreOutdated.isOutdated}
               <span class="text-orange-600">⚠️ {$wavesAreOutdated.reason}</span>
             {:else}
               Drag junctions to reposition · Click junction label or circle to edit · Click signal line to change
             {/if}
-          </div>
-        {/if}
+          {/if}
+        </div>
 
-        <!-- Controls can grow without reducing the chart height. -->
-        <div class="corridor-controls border-t pt-3 space-y-3">
+        <!-- Keyboard focus lets users scroll this region with Page Up and Page Down. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <section aria-label="Input settings and indicators" tabindex="0" class="corridor-controls border-t pt-3 space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label for="input-direction" class="block text-sm font-medium mb-2">Optimization direction</label>
@@ -678,12 +679,12 @@
               </div>
             </div>
           {/if}
-        </div>
+        </section>
       </div>
 
       <!-- RIGHT: Optimized Results -->
       <div class="corridor-panel bg-white rounded-lg shadow-md p-4 sm:p-5 flex flex-col min-w-0">
-        <div class="flex justify-between items-center mb-4">
+        <div class="corridor-panel-header flex justify-between items-start mb-4">
           <h2 class="text-xl font-semibold">Optimized results</h2>
           <button
             on:click={clearResults}
@@ -718,14 +719,15 @@
           {/if}
         </div>
 
-        {#if $optimizedJunctions.length > 0 && !$optimizedResultsAreOutdated.isOutdated}
-          <div class="mb-3 text-xs text-gray-500 leading-relaxed">
+        <div class="corridor-chart-hint mb-3 text-xs text-gray-500 leading-relaxed">
+          {#if $optimizedJunctions.length > 0 && !$optimizedResultsAreOutdated.isOutdated}
             Press Optimize to recalculate with current settings
-          </div>
-        {/if}
+          {/if}
+        </div>
 
-        <!-- Controls can grow without reducing the chart height. -->
-        <div class="corridor-controls border-t pt-3 space-y-3">
+        <!-- Keyboard focus lets users scroll this region with Page Up and Page Down. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <section aria-label="Result settings and indicators" tabindex="0" class="corridor-controls border-t pt-3 space-y-3">
           <!-- Optimization status -> own line, wraps freely -->
           <div class="text-sm leading-snug">
             {#if $optimizedJunctions.length > 0}
@@ -793,7 +795,7 @@
               </div>
             </div>
           {/if}
-        </div>
+        </section>
       </div>
 
     </div>
@@ -804,6 +806,16 @@
   .corridor-chart {
     height: clamp(320px, 42vh, 480px);
     flex: none;
+  }
+
+  .corridor-controls:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+  }
+
+  .corridor-toolbar :global([role='menu']) {
+    left: 0;
+    right: auto;
   }
 
   .corridor-toolbar :global(button) {
@@ -823,6 +835,58 @@
   .corridor-controls :global(.tabular-nums) {
     padding: 0.375rem 0.625rem;
     font-size: 0.875rem;
+  }
+
+  @media (min-width: 1024px) and (min-height: 640px) {
+    .corridor-page {
+      height: 100dvh;
+      min-height: 0;
+    }
+
+    .corridor-workspace {
+      min-height: 0;
+    }
+
+    .corridor-page-header {
+      flex: none;
+    }
+
+    .corridor-grid {
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+      grid-template-rows: auto clamp(220px, 38dvh, 480px) auto minmax(0, 1fr);
+      row-gap: 0.5rem;
+    }
+
+    .corridor-panel {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span 4;
+      min-height: 0;
+      padding: 1rem;
+    }
+
+    .corridor-panel-header,
+    .corridor-chart,
+    .corridor-chart-hint {
+      margin-bottom: 0;
+    }
+
+    .corridor-chart {
+      height: auto;
+      min-height: 0;
+    }
+
+    .corridor-controls {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      padding-right: 0.5rem;
+      padding-bottom: 0.25rem;
+    }
   }
 
   @media (pointer: coarse) {
