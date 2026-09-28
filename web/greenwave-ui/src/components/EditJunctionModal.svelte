@@ -1,11 +1,16 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { modalFocus } from '$lib/utils/modal-focus.js';
   import { validateImportedConfig } from '$lib/utils/export-import.js';
+  import { intersectionTopology } from '$lib/utils/network-project.js';
+  import { programGroupIds, programTimeline, programStateAt, signalColor } from '$lib/utils/junction-program.js';
+  import IntersectionDiagram from './IntersectionDiagram.svelte';
+  import SignalTimeline from './SignalTimeline.svelte';
 
   export let junction = null;
   export let isNew = false;
+  export let graph = { nodes: [], edges: [], error: '' };
 
   const dispatch = createEventDispatcher();
 
@@ -17,9 +22,77 @@
 
   // Inline delete confirmation  replaces native confirm()
   let showDeleteConfirm = false;
+  let activeTab = 'movements';
+  let original = '';
+  let discard = false;
+  let selMovId = null;
+  let previewTime = 0;
+  let selectedSignalKey = null;
+  let dialogElement;
+  let discardButton;
+  let returnFocus;
+
+  $: groupIds = programGroupIds(editedJunction);
+  $: groupId = groupIds[0] ?? 0;
+  $: topology = graph.error || isNew ? { stubs: [], movements: [] } : intersectionTopology(editedJunction?.id, graph.nodes, graph.edges);
+  $: movementState = Object.fromEntries(topology.movements.map(movement => [movement.id, { groupIds: [groupId] }]));
+  $: preview = readTimeline(editedJunction, groupId);
+  $: signalState = programStateAt(preview.timeline, previewTime, editedJunction?.offset ?? 0);
+  $: colors = { [groupId]: signalColor(signalState?.segment.color) };
+  $: selectedMovement = topology.movements.find(movement => movement.id === selMovId);
+  $: dirty = editedJunction !== null && JSON.stringify(editedJunction) !== original;
+
+  function readTimeline(junction, id) {
+    try { return { timeline: programTimeline(junction, id), error: '' }; }
+    catch (cause) { return { timeline: { duration: 0, segments: [] }, error: cause.message }; }
+  }
+
+  async function requestClose() {
+    if (!dirty) { dispatch('close'); return; }
+    returnFocus = document.activeElement;
+    discard = true;
+    await tick();
+    discardButton?.focus();
+  }
+
+  async function keepEditing() {
+    discard = false;
+    await tick();
+    if (returnFocus?.isConnected) returnFocus.focus();
+    else dialogElement?.focus();
+  }
+
+  function dialogKeys(event) {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    event.preventDefault();
+    if (discard) keepEditing();
+    else requestClose();
+  }
+
+  function beforeUnload(event) {
+    if (dirty) { event.preventDefault(); event.returnValue = ''; }
+  }
+
+  async function selectSignal(event) {
+    const segment = event.detail;
+    selectedSignalKey = `${segment.phaseId}:${segment.signalIndex}`;
+    previewTime = ((segment.start + (editedJunction.offset ?? 0)) % preview.timeline.duration + preview.timeline.duration) % preview.timeline.duration;
+    activeTab = 'program';
+    await tick();
+    document.getElementById(`program-duration-${segment.phaseId}-${segment.signalIndex}`)?.focus();
+  }
+
 
   $: if (junction) {
-    editedJunction = JSON.parse(JSON.stringify(junction));
+    const draft = { ...structuredClone(junction), offset: junction.offset ?? 0 };
+    editedJunction = draft;
+    original = JSON.stringify(draft);
+    activeTab = isNew ? 'program' : 'movements';
+    previewTime = 0;
+    selMovId = null;
+    selectedSignalKey = null;
+    discard = false;
     validationError = null;
 
     showDeleteConfirm = false;
@@ -27,7 +100,7 @@
 
   function handleBackdropClick(event) {
     if (event.target === event.currentTarget) {
-      dispatch('close');
+      requestClose();
     }
   }
 
@@ -103,23 +176,27 @@
   }
 </script>
 
+<svelte:window on:beforeunload={beforeUnload} />
+
 {#if editedJunction}
   <div
+    bind:this={dialogElement}
     transition:fade={{ duration: 150 }}
     class="fixed inset-0 flex items-center justify-center z-50"
     style="background-color: rgba(0, 0, 0, 0.6);"
     on:click={handleBackdropClick}
-    on:keydown={(e) => e.key === 'Escape' && dispatch('close')}
+    on:keydown={dialogKeys}
     role="dialog"
     aria-modal="true"
+    aria-labelledby="junction-editor-title"
     tabindex="-1"
     use:modalFocus
   >
     <div
       transition:scale={{ start: 0.96, duration: 150 }}
-      class="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto"
+      class="bg-white rounded-xl shadow-xl max-w-6xl w-full mx-2 sm:mx-4 h-[92dvh] flex flex-col overflow-hidden"
     >
-      <h3 class="text-lg font-medium mb-4">
+      <h3 id="junction-editor-title" class="px-4 py-3 text-lg font-medium border-b border-gray-200 shrink-0">
         {isNew ? 'Create New Junction' : `Edit ${editedJunction.label}`}
       </h3>
 
@@ -130,108 +207,173 @@
         </div>
       {/if}
 
-      <!-- Junction basic info -->
-      <div class="space-y-4 mb-6">
-        <div class="flex items-center gap-4">
-          <label for="junction-label" class="text-sm font-medium w-32 shrink-0">Label:</label>
-          <input
-            id="junction-label"
-            type="text"
-            bind:value={editedJunction.label}
-            class="flex-1 px-3 py-2 border rounded-md min-w-0"
-            placeholder="Junction name"
-          />
-        </div>
+      <div class="flex-1 min-h-0 overflow-y-auto lg:flex lg:overflow-hidden">
+        <section class="flex min-w-0 flex-col lg:flex-1 lg:min-h-0" aria-label="Junction diagram and timeline">
+          <div class="flex h-[300px] shrink-0 lg:h-auto lg:flex-1 lg:min-h-[240px]">
+            <IntersectionDiagram stubs={topology.stubs} movements={topology.movements} movState={movementState} bind:selMovId groupColors={colors}
+              emptyMessage={isNew ? 'Save the new junction to connect it to the corridor.' : graph.error || 'No roads connected to this junction.'}
+              on:select={() => activeTab = 'movements'} />
+          </div>
+          <div class="shrink-0 border-t border-gray-200 bg-white p-4 space-y-3">
+            {#if preview.error}
+              <p class="text-sm text-red-700" role="status">{preview.error}</p>
+            {:else}
+              <SignalTimeline timeline={preview.timeline} time={previewTime} offset={editedJunction.offset ?? 0} {groupId} on:select={selectSignal} />
+              <label for="junction-preview-time" class="block text-xs text-gray-600">Signal preview at corridor time {Number(previewTime).toFixed(1)} s: <strong>{signalState?.segment.color ?? 'No signal'}</strong></label>
+              <input id="junction-preview-time" type="range" min="0" max={preview.timeline.duration || 1} step="0.1" bind:value={previewTime} class="w-full" />
+              <p class="text-xs text-gray-500">Click a colored interval to edit it. Offset: {editedJunction.offset ?? 0} s. Preview does not change the saved program.</p>
+            {/if}
+          </div>
+        </section>
+        <section class="border-t border-gray-200 lg:border-t-0 lg:border-l lg:w-[28rem] lg:shrink-0 lg:flex lg:flex-col lg:min-h-0" aria-label="Junction settings">
+          <div class="flex flex-wrap gap-1 border-b border-gray-200 bg-gray-50 p-2" role="group" aria-label="Junction sections">
+            {#each [{ id: 'movements', label: 'Movements' }, { id: 'groups', label: 'Groups' }, { id: 'program', label: 'Program' }] as tab (tab.id)}
+              <button type="button" aria-pressed={activeTab === tab.id} class="rounded px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-blue-500" class:bg-blue-600={activeTab === tab.id} class:text-white={activeTab === tab.id} on:click={() => activeTab = tab.id}>{tab.label}</button>
+            {/each}
+          </div>
+          <div class="p-4 lg:overflow-y-auto lg:flex-1">
+            {#if activeTab === 'movements'}
+              <h4 class="mb-3 font-semibold">Movements ({topology.movements.length})</h4>
+              {#if graph.error}
+                <p class="text-sm text-amber-800">{graph.error} Your signal program remains available in "Program".</p>
+              {:else if isNew}
+                <p class="text-sm text-gray-500">Set the program, then create the junction to see its connected roads.</p>
+              {:else if !topology.movements.length}
+                <p class="text-sm text-gray-500">{topology.stubs.length === 1 ? 'This is an end of the corridor. The external approach is not drawn, so there is no complete through movement here.' : 'Connect roads to see through movements.'} The signal group and its program can still be edited.</p>
+              {:else}
+                <p class="mb-3 text-sm text-gray-500">Select an arc or a movement below. In this simple corridor, through movements use G{groupId} in both directions.</p>
+                <div class="space-y-2">
+                  {#each topology.movements as movement (movement.id)}
+                    <button class="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-blue-50" class:border-blue-600={selMovId === movement.id} class:bg-blue-50={selMovId === movement.id} aria-pressed={selMovId === movement.id} on:click={() => selMovId = movement.id}>{movement.inLabel} → {movement.outLabel} · G{groupId}</button>
+                  {/each}
+                </div>
+                {#if selectedMovement}<p class="mt-4 text-sm text-gray-600">Selected: {selectedMovement.inLabel} → {selectedMovement.outLabel}. Current signal: {signalState?.segment.color ?? 'Unavailable'}.</p>{/if}
+              {/if}
+              <button class="mt-4 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => activeTab = 'program'}>Edit G{groupId} program</button>
+            {/if}
+            {#if activeTab === 'groups'}
+              <h4 class="mb-3 font-semibold">Signal group G{groupId}</h4>
+              <p class="text-sm text-gray-600">This group exists across all phases. Its program controls the movements shown on the left.</p>
+              <p class="mt-3 text-sm text-gray-600">Cycle: {preview.timeline.duration} s · Offset: {editedJunction.offset ?? 0} s</p>
+              <p class="mt-3 text-sm text-gray-600">{topology.movements.length} drawn movements · Current signal: {signalState?.segment.color ?? 'Unavailable'}</p>
+              {#if groupIds.length > 1}<p class="mt-3 text-sm text-amber-800">This input contains {groupIds.length} groups. This editor changes the first group; all other imported groups are retained.</p>{/if}
+              <button class="mt-4 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => activeTab = 'program'}>Edit G{groupId} program</button>
+            {/if}
+            <div hidden={activeTab !== 'program'}>
+              <p class="mb-4 text-sm text-gray-500">Program for G{groupId}. Changes appear in both the diagram and the network after Save.</p>
+              <div class="space-y-4 mb-6">
+                <div class="flex items-center gap-4">
+                  <label for="junction-label" class="text-sm font-medium w-32 shrink-0">Label:</label>
+                  <input
+                    id="junction-label"
+                    type="text"
+                    bind:value={editedJunction.label}
+                    class="flex-1 px-3 py-2 border rounded-md min-w-0"
+                    placeholder="Junction name"
+                  />
+                </div>
 
-        <div class="flex items-center gap-4">
-          <label for="junction-distance" class="text-sm font-medium w-32 shrink-0">Distance (m):</label>
-          <input
-            id="junction-distance"
-            type="number"
-            bind:value={editedJunction.point.y}
-            class="flex-1 px-3 py-2 border rounded-md min-w-0"
-            min="0"
-            step="10"
-            placeholder="Distance from start"
-          />
-        </div>
-        <div class="flex items-center gap-4">
-          <label for="junction-offset" class="text-sm font-medium w-32 shrink-0">Offset (s):</label>
-          <input id="junction-offset" type="number" bind:value={editedJunction.offset} class="flex-1 px-3 py-2 border rounded-md min-w-0" step="1" />
-        </div>
-      </div>
-
-      <!-- Phases section -->
-      <div class="border-t pt-4">
-        <div class="flex justify-between items-center mb-4">
-          <h4 class="text-md font-medium">Phases ({editedJunction.cycle.length})</h4>
-          <button
-            class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
-            on:click={addPhase}
-          >
-            + Add Phase
-          </button>
-        </div>
-
-        <div class="space-y-4">
-          {#each editedJunction.cycle as phase, phaseIndex (phase.id)}
-            <div class="border rounded-md p-4 bg-gray-50">
-              <div class="flex justify-between items-center mb-3">
-                <h5 class="text-sm font-medium">Phase {phaseIndex + 1}</h5>
-                <button
-                  class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-md hover:bg-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                  on:click={() => removePhase(phaseIndex)}
-                  title="Remove phase"
-                >
-                  Remove
-                </button>
+                <div class="flex items-center gap-4">
+                  <label for="junction-distance" class="text-sm font-medium w-32 shrink-0">Distance (m):</label>
+                  <input
+                    id="junction-distance"
+                    type="number"
+                    bind:value={editedJunction.point.y}
+                    class="flex-1 px-3 py-2 border rounded-md min-w-0"
+                    min="0"
+                    step="10"
+                    placeholder="Distance from start"
+                  />
+                </div>
+                <div class="flex items-center gap-4">
+                  <label for="junction-offset" class="text-sm font-medium w-32 shrink-0">Offset (s):</label>
+                  <input id="junction-offset" type="number" bind:value={editedJunction.offset} class="flex-1 px-3 py-2 border rounded-md min-w-0" step="1" />
+                </div>
               </div>
 
-              <div class="space-y-2">
-                {#each phase.signal_groups[0].signals as signal, signalIndex (signalIndex)}
-                  <!-- flex-wrap so rows don't overflow on narrow modals (phones) -->
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs text-gray-500 w-14 shrink-0">Signal {signalIndex + 1}</span>
-                    <select
-                      bind:value={signal.color}
-                      class="px-2 py-1.5 border rounded-md text-sm min-w-0"
-                    >
-                      <option value="GREEN">Green</option>
-                      <option value="RED">Red</option>
-                      <option value="YELLOW">Yellow</option>
-                    </select>
-                    <input
-                      type="number"
-                      bind:value={signal.duration}
-                      class="w-16 px-2 py-1.5 border rounded-md text-sm"
-                      min="1"
-                      placeholder="sec"
-                    />
-                    <span class="text-xs text-gray-400">s</span>
-                    <button
-                      class="px-2 py-1 text-red-500 hover:text-red-700 text-xs rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                      on:click={() => removeSignal(phaseIndex, signalIndex)}
-                      title="Remove signal"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                {/each}
+              <!-- Phases section -->
+              <div class="border-t pt-4">
+                <div class="flex justify-between items-center mb-4">
+                  <h4 class="text-md font-medium">Phases ({editedJunction.cycle.length})</h4>
+                  <button
+                    class="px-3 py-1.5 bg-green-500 text-white text-sm rounded-md hover:bg-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
+                    on:click={addPhase}
+                  >
+                    + Add Phase
+                  </button>
+                </div>
+
+                <div class="space-y-4">
+                  {#each editedJunction.cycle as phase, phaseIndex (phase.id)}
+                    <div class="border rounded-md p-4 bg-gray-50">
+                      <div class="flex justify-between items-center mb-3">
+                        <h5 class="text-sm font-medium">Phase {phaseIndex + 1}</h5>
+                        <button
+                          class="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-md hover:bg-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                          on:click={() => removePhase(phaseIndex)}
+                          title="Remove phase"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div class="space-y-2">
+                        {#each phase.signal_groups[0].signals as signal, signalIndex (signalIndex)}
+                          <!-- flex-wrap so rows don't overflow on narrow modals (phones) -->
+                          <div class="flex items-center gap-2 flex-wrap rounded p-1" class:bg-blue-100={selectedSignalKey === `${phase.id}:${signalIndex}`}>
+                            <span class="text-xs text-gray-500 w-14 shrink-0">Signal {signalIndex + 1}</span>
+                            <select
+                              aria-label={`Phase ${phaseIndex + 1} signal ${signalIndex + 1} color`}
+                              bind:value={signal.color}
+                              class="pl-2 pr-8 py-1.5 border rounded-md text-sm min-w-0"
+                            >
+                              <option value="GREEN">Green</option>
+                              <option value="RED">Red</option>
+                              <option value="YELLOW">Yellow</option>
+                            </select>
+                            <input
+                              type="number"
+                              id={`program-duration-${phase.id}-${signalIndex}`}
+                              aria-label={`Phase ${phaseIndex + 1} signal ${signalIndex + 1} duration`}
+                              bind:value={signal.duration}
+                              class="w-16 px-2 py-1.5 border rounded-md text-sm"
+                              min="1"
+                              placeholder="sec"
+                            />
+                            <span class="text-xs text-gray-400">s</span>
+                            <button
+                              class="px-2 py-1 text-red-500 hover:text-red-700 text-xs rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                              on:click={() => removeSignal(phaseIndex, signalIndex)}
+                              title="Remove signal"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+
+                      <button
+                        class="mt-2 px-2 py-1.5 bg-gray-200 text-xs rounded-md hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+                        on:click={() => addSignal(phaseIndex)}
+                      >
+                        + Add Signal
+                      </button>
+                    </div>
+                  {/each}
+                </div>
               </div>
 
-              <button
-                class="mt-2 px-2 py-1.5 bg-gray-200 text-xs rounded-md hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-                on:click={() => addSignal(phaseIndex)}
-              >
-                + Add Signal
-              </button>
             </div>
-          {/each}
-        </div>
+          </div>
+        </section>
       </div>
 
       <!-- Action buttons -->
-      <div class="flex justify-between mt-6 pt-4 border-t">
+      <div class="flex flex-wrap items-center justify-between gap-3 p-4 border-t shrink-0">
+        {#if discard}
+          <p class="text-sm text-gray-600">Discard unsaved junction changes?</p>
+          <div class="flex gap-2"><button bind:this={discardButton} class="rounded border px-3 py-2 text-sm" on:click={keepEditing}>Keep editing</button><button class="rounded bg-red-600 px-3 py-2 text-sm text-white" on:click={() => dispatch('close')}>Discard changes</button></div>
+        {:else}
         <div>
           {#if !isNew}
             {#if showDeleteConfirm}
@@ -261,10 +403,11 @@
             {/if}
           {/if}
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          {#if dirty}<span class="text-xs text-gray-500">Unsaved changes</span>{/if}
           <button
             class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-            on:click={() => dispatch('close')}
+            on:click={requestClose}
           >
             Cancel
           </button>
@@ -275,6 +418,7 @@
             {isNew ? 'Create' : 'Save'}
           </button>
         </div>
+        {/if}
       </div>
     </div>
   </div>

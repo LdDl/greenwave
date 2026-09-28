@@ -9,7 +9,7 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
-  import { corridorEditor, corridorHistory, corridorPersistence } from '$lib/stores/corridor.js';
+  import { corridorEditor, corridorHistory, corridorPersistence, corridorGraph } from '$lib/stores/corridor.js';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
@@ -383,6 +383,7 @@
   <EditJunctionModal
     junction={selectedJunction}
     isNew={isNewJunction}
+    graph={$corridorGraph}
     on:save={saveJunction}
     on:delete={deleteJunction}
     on:close={closeJunctionModal}

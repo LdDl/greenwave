@@ -124,7 +124,7 @@
       <div class="relative h-[50dvh] min-h-[300px] min-w-0 flex-1 md:h-auto">
         {#if mounted}
           <MacroCanvas bind:this={canvas} networkNodes={corridorNodes} networkEdges={corridorEdges} networkEditor={corridorEditor.canvas}
-            interactionHint="Double-click a junction to edit its signal program"
+            interactionHint="Double-click a junction to open its diagram and program"
             mode="select" disabled={editing !== null || !!$corridorGraph.error} {selectedNodeId} {selectedEdgeId}
             highlightFrom={selectedEdge?.from ?? null} highlightTo={selectedEdge?.to ?? null}
             on:selectNode={event => { selectedNodeId = event.detail.node.id; selectedEdgeId = null; }}
@@ -149,7 +149,7 @@
             <h2 class="font-semibold">{selectedJunction.label}</h2>
             <p class="mt-2 text-sm text-gray-500">Distance: {selectedJunction.point.y} m · Cycle: {calculateTotalDuration(selectedJunction)} s</p>
             <p class="mt-1 text-sm text-gray-500">Group: G{selectedJunction.cycle[0].signal_groups[0].id} · Offset: {selectedJunction.offset ?? 0} s</p>
-            <button class="mt-3 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => openJunction(selectedJunction.id)}>Edit junction and program</button>
+            <button class="mt-3 rounded bg-blue-600 px-3 py-2 text-sm text-white" on:click={() => openJunction(selectedJunction.id)}>Edit intersection</button>
           </section>
         {:else if selectedEdge}
           <section>
@@ -160,7 +160,7 @@
             <p class="mt-2 text-xs text-gray-500">Changing this length shifts all following junctions along the corridor.</p>
           </section>
         {:else}
-          <p class="text-sm text-gray-500">Select a junction to edit its program or a road to edit its length. Double-click a junction to open its editor.</p>
+          <p class="text-sm text-gray-500">Select a junction to open its movement diagram and program, or select a road to edit its length. Double-click a junction to open its editor.</p>
         {/if}
 
         <section class="space-y-2">
@@ -192,5 +192,5 @@
 </div>
 
 {#if editing}
-  <EditJunctionModal junction={editing} {isNew} on:save={saveJunction} on:delete={removeJunction} on:close={() => editing = null} />
+  <EditJunctionModal junction={editing} {isNew} graph={$corridorGraph} on:save={saveJunction} on:delete={removeJunction} on:close={() => editing = null} />
 {/if}
