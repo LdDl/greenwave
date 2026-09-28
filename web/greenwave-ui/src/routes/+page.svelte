@@ -9,21 +9,17 @@
   import { isLoading, error, resetToDemo, resetToEmpty } from '$lib/stores';
   import { exportToJSON, importFromJSON, validateImportedConfig, prepareInputExport, prepareOutputExport } from '$lib/utils/export-import.js';
   import { junctions, desiredSpeed, desiredIntensity, desiredFlow, optimizationDirection } from '$lib/stores/core';
+  import { corridorEditor, corridorHistory, corridorPersistence } from '$lib/stores/corridor.js';
   import { wavesAreOutdated, originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, storeWaveCalculationPositions, actualFlow, actualIntensity, actualReverseFlow, actualReverseIntensity } from '$lib/stores/greenwave';
   import { optimizedResultsAreOutdated, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, actualFlowOptimized, actualIntensityOptimized, actualReverseFlowOptimized, actualReverseIntensityOptimized } from '$lib/stores/optimization';
-  import { invalidateSignals, resetResultsInvalidation } from '$lib/stores/signals';
   import { extractGreenWaves } from '$lib/api/greenwave.js';
   import { optimizeOffsets } from '$lib/api/optimize.js';
-  import { prepareJunctionsForAPI, applyOffsetsToJunctions, validateJunctionCycles, calculateTotalDuration } from '$lib/utils/junction-helpers.js';
-  import { onMount } from 'svelte';
+  import { prepareJunctionsForAPI, applyOffsetsToJunctions, validateJunctionCycles } from '$lib/utils/junction-helpers.js';
+  import { onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { invalidateAll, validateInput, validateResults } from '$lib/stores/invalidation';
 
-  onMount(() => {
-    isDesiredSpeedInitialized = true;
-    previousDesiredSpeed = $desiredSpeed;
-    isDirectionInitialized = true;
-    previousDirection = $optimizationDirection;
-  });
+  onDestroy(() => corridorEditor.finish());
 
   // Confirmation modal state
   let showResetModal = false;
@@ -59,13 +55,14 @@
     ? `Different cycle durations: ${$junctions.map((j, i) => `${j.label}: ${cycleValidation.durations[i]}s`).join(', ')}`
     : '';
 
-  $: isExtractDisabled = $isLoading || $junctions.length < 2 || hasValidationError;
+  $: isExtractDisabled = $isLoading || $junctions.length < 2 || hasValidationError || !Number.isFinite($desiredSpeed) || $desiredSpeed <= 0;
 
   $: isCleanState = $junctions.length === 0 && !hasGreenWaveData;
 
   // Extract green waves from API
   async function handleExtractWaves() {
     if (isExtractDisabled) return;
+    const revision = get(corridorEditor.calculationRevision);
     try {
       isExtracting = true;
       isLoading.set(true);
@@ -73,6 +70,7 @@
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
       const response = await extractGreenWaves(junctionsForAPI, $desiredSpeed, $optimizationDirection);
+      if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during extraction. Extract waves again for the current corridor.');
       originalGreenWaves.set(response.green_waves || []);
       originalThroughWaves.set(response.through_green_waves || []);
       originalReverseGreenWaves.set(response.reverse_green_waves || []);
@@ -116,59 +114,23 @@
 
   function confirmImport() {
     if (pendingImportData) {
-      junctions.set(pendingImportData.junctions);
-      if (pendingImportData.desiredSpeed) desiredSpeed.set(pendingImportData.desiredSpeed);
-      if (pendingImportData.desiredIntensity) desiredIntensity.set(pendingImportData.desiredIntensity);
-      if (pendingImportData.direction) optimizationDirection.set(pendingImportData.direction);
+      corridorEditor.replaceInput(pendingImportData);
       invalidateAll('configuration imported');
       pendingImportData = null;
     }
   }
 
-  // Handle desired speed changes
-  let desiredSpeedTimeout;
-  let isDesiredSpeedInitialized = false;
-  let previousDesiredSpeed = null;
-  $: if (isDesiredSpeedInitialized && $desiredSpeed !== previousDesiredSpeed) {
-    previousDesiredSpeed = $desiredSpeed;
-    clearTimeout(desiredSpeedTimeout);
-    desiredSpeedTimeout = setTimeout(() => {
-      invalidateAll('desired speed changed');
-    }, 100);
-  }
-
-  // Handle optimization direction changes
-  let directionTimeout;
-  let isDirectionInitialized = false;
-  let previousDirection = null;
-  $: if (isDirectionInitialized && $optimizationDirection !== previousDirection) {
-    previousDirection = $optimizationDirection;
-    clearTimeout(directionTimeout);
-    directionTimeout = setTimeout(() => {
-      invalidateAll('optimization direction changed');
-    }, 100);
-  }
-
-  let debounceTimeout;
   function updateJunction(event) {
     const { id, newDistance } = event.detail;
-    clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
-      junctions.update(junctionList => {
-        return junctionList.map(junction => {
-          if (junction.id === id) {
-            return { ...junction, point: { ...junction.point, y: newDistance } };
-          }
-          return junction;
-        });
-      });
-    }, 100);
-    invalidateAll('junction positions changed');
+    junctions.update(list => list.map(junction => junction.id === id
+      ? { ...junction, point: { ...junction.point, y: newDistance } }
+      : junction));
   }
 
   // Handle optimization
   async function handleOptimize() {
     if (isExtractDisabled) return;
+    const revision = get(corridorEditor.calculationRevision);
     try {
       isOptimizing = true;
       isLoading.set(true);
@@ -176,12 +138,15 @@
 
       const junctionsForAPI = prepareJunctionsForAPI($junctions);
       const optimizeResponse = await optimizeOffsets(junctionsForAPI, $desiredSpeed, 'genetic', {}, $optimizationDirection);
-
-      optimizedOffsets.set(optimizeResponse.best_offsets || []);
-      optimizedJunctions.set(applyOffsetsToJunctions($junctions, optimizeResponse.best_offsets));
-
-      const optimizedJunctionsForAPI = prepareJunctionsForAPI($optimizedJunctions);
+      if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during optimization. Optimize the current corridor again.');
+      const nextOffsets = optimizeResponse.best_offsets || [];
+      const nextJunctions = applyOffsetsToJunctions($junctions, nextOffsets);
+      const optimizedJunctionsForAPI = prepareJunctionsForAPI(nextJunctions);
       const response = await extractGreenWaves(optimizedJunctionsForAPI, $desiredSpeed, $optimizationDirection);
+      if (revision !== get(corridorEditor.calculationRevision)) throw new Error('Input changed during optimization. Optimize the current corridor again.');
+
+      optimizedOffsets.set(nextOffsets);
+      optimizedJunctions.set(nextJunctions);
       optimizedGreenWaves.set(response.green_waves || []);
       optimizedThroughWaves.set(response.through_green_waves || []);
       optimizedReverseGreenWaves.set(response.reverse_green_waves || []);
@@ -206,30 +171,30 @@
     optimizedThroughWaves.set([]);
     optimizedReverseGreenWaves.set([]);
     optimizedReverseThroughWaves.set([]);
-    optimizedResultsAreOutdated.set(false);
+    validateResults();
   }
 
   function saveSignal(e) {
     const updatedSignal = e.detail.signal;
 
-    if (!selectedSignalContext || !selectedSignalContext.junction || !selectedSignalContext.phase) {
+    if (!selectedSignalContext) {
       console.error("Invalid selectedSignalContext:", selectedSignalContext);
       return;
     }
 
     junctions.update((junctionList) => {
       const updatedJunctions = junctionList.map((junction) => {
-        if (junction.id === selectedSignalContext.junction.id) {
+        if (junction.id === selectedSignalContext.junctionId) {
           return {
             ...junction,
             cycle: junction.cycle.map((phase) => {
-              if (phase === selectedSignalContext.phase) {
+              if (phase.id === selectedSignalContext.phaseId) {
                 return {
                   ...phase,
                   signal_groups: phase.signal_groups.map((sg) => ({
                     ...sg,
-                    signals: sg.signals.map((signal) => {
-                      if (signal === selectedSignal) {
+                    signals: sg.signals.map((signal, index) => {
+                      if (sg.id === selectedSignalContext.groupId && index === selectedSignalContext.signalIndex) {
                         return { ...signal, ...updatedSignal };
                       }
                       return signal;
@@ -252,8 +217,9 @@
 
   function openSignalModal(event) {
     const { junction, phase, signal } = event.detail;
-    selectedSignalContext = { junction, phase };
-    selectedSignal = signal;
+    const group = phase.signal_groups.find(group => group.signals.includes(signal));
+    selectedSignalContext = { junctionId: junction.id, phaseId: phase.id, groupId: group.id, signalIndex: group.signals.indexOf(signal) };
+    selectedSignal = structuredClone(signal);
     isSignalModalOpen = true;
   }
 
@@ -287,7 +253,7 @@
         }
       ],
       offset: 0,
-      point: { x: 0, y: maxY + 150 }
+      point: { x: $junctions[0]?.point.x ?? 0, y: maxY + 150 }
     };
     isNewJunction = true;
     isJunctionModalOpen = true;
@@ -295,20 +261,14 @@
 
   function saveJunction(event) {
     const { junction, isNew } = event.detail;
-    if (isNew) {
-      junctions.update(junctionList => [...junctionList, junction]);
-    } else {
-      junctions.update(junctionList =>
-        junctionList.map(j => j.id === junction.id ? junction : j)
-      );
-    }
+    corridorEditor.saveJunction(junction, isNew);
     invalidateAll('junction configuration changed');
     closeJunctionModal();
   }
 
   function deleteJunction(event) {
     const { junction } = event.detail;
-    junctions.update(junctionList => junctionList.filter(j => j.id !== junction.id));
+    corridorEditor.removeJunction(junction.id);
     invalidateAll('junction deleted');
     closeJunctionModal();
   }
@@ -333,11 +293,12 @@
     const { id } = event.detail;
 
     switch (id) {
-      case 'export-input':
+      case 'export-input': {
         const inputData = prepareInputExport($junctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(inputData, 'greenwave-input.json');
         break;
 
+      }
       case 'import-input':
         try {
           const imported = await importFromJSON();
@@ -349,10 +310,7 @@
           }
 
           if (isCleanState) {
-            junctions.set(imported.junctions);
-            if (imported.desiredSpeed) desiredSpeed.set(imported.desiredSpeed);
-            if (imported.desiredIntensity) desiredIntensity.set(imported.desiredIntensity);
-            if (imported.direction) optimizationDirection.set(imported.direction);
+            corridorEditor.replaceInput(imported);
             invalidateAll('configuration imported');
           } else {
             pendingImportData = imported;
@@ -365,11 +323,12 @@
         }
         break;
 
-      case 'export-output':
+      case 'export-output': {
         const outputData = prepareOutputExport($optimizedJunctions, $desiredSpeed, $desiredIntensity, $optimizationDirection);
         exportToJSON(outputData, 'greenwave-output.json');
         break;
 
+      }
       case 'demo-data':
         handleDemoDataClick();
         break;
@@ -385,7 +344,7 @@
 <ConfirmModal
   bind:show={showResetModal}
   title="Reset All Data"
-  message="This will clear all junctions, reset the desired speed, and remove all calculated results. This action cannot be undone."
+  message="This will clear the shared input corridor, reset the desired speed, and remove calculated results. Undo can restore the input configuration."
   confirmText="Reset"
   cancelText="Cancel"
   onConfirm={confirmReset}
@@ -497,6 +456,7 @@
           <div class="flex justify-between items-center mb-3">
             <h2 class="text-xl font-semibold">Input configuration</h2>
           </div>
+          <p class="mb-3 text-xs" class:text-red-700={$corridorPersistence.state === 'error'} class:text-gray-500={$corridorPersistence.state !== 'error'} role="status">{$corridorPersistence.message}</p>
           <!-- Toolbar wraps on narrow panels instead of clipping -->
           <div class="flex flex-wrap gap-2 items-center">
             <DropdownMenu
@@ -504,6 +464,9 @@
               items={fileMenuItems}
               on:select={handleFileMenuSelect}
             />
+
+            <button on:click={() => corridorEditor.undo()} disabled={!$corridorHistory.undo} class="rounded-md border px-3 py-2 text-sm disabled:opacity-40">Undo</button>
+            <button on:click={() => corridorEditor.redo()} disabled={!$corridorHistory.redo} class="rounded-md border px-3 py-2 text-sm disabled:opacity-40">Redo</button>
 
             <button
               on:click={openNewJunctionModal}
@@ -584,6 +547,8 @@
               reverseThroughWaves={$originalReverseThroughWaves}
               showWaves={$showGreenWaves}
               on:updateJunction={updateJunction}
+              on:dragStart={() => corridorEditor.begin()}
+              on:dragEnd={() => corridorEditor.finish()}
               on:editSignal={openSignalModal}
               on:editJunction={openJunctionModal}
             />

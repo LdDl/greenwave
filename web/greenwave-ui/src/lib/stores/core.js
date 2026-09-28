@@ -1,14 +1,15 @@
-import { writable, derived } from 'svelte/store';
+import { derived } from 'svelte/store';
+import { corridorEditor } from './corridor.js';
 
 // Core data stores
-export const junctions = writable([]);
-export const desiredSpeed = writable(40.0);
+export const junctions = corridorEditor.junctions;
+export const desiredSpeed = corridorEditor.desiredSpeed;
 
 // Optimization direction: 'forward' or 'bidirectional'
-export const optimizationDirection = writable('forward');
+export const optimizationDirection = corridorEditor.direction;
 
 // Desired intensity (vehicles per hour)
-export const desiredIntensity = writable(1800);
+export const desiredIntensity = corridorEditor.desiredIntensity;
 
 // Desired flow (vehicles per second)
 export const desiredFlow = derived(desiredIntensity, $desiredIntensity => $desiredIntensity / 3600);

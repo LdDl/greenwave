@@ -1,8 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import { junctions, desiredSpeed, desiredFlow } from './core';
+import { junctions, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
-import { resultsInvalidated } from './signals';
-import { resultsInvalidationReasons, isResultsInvalidated } from '$lib/stores/invalidation';
+import { resultsInvalidationReasons, isResultsInvalidated } from './invalidation-state.js';
 
 // Optimized waves (forward direction)
 export const optimizedGreenWaves = writable([]);

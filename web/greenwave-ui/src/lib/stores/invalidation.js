@@ -1,32 +1,24 @@
-import { writable, derived } from 'svelte/store';
+import { derived, get } from 'svelte/store';
 import { originalGreenWaves } from './greenwave';
-
-// Writable stores for invalidation flags
-export const isResultsInvalidated = writable(false);
-export const isInputInvalidated = writable(false);
-
-// Separate stores for invalidation reasons
-export const resultsInvalidationReasons = writable([]);
-export const inputInvalidationReasons = writable([]);
+import { isResultsInvalidated, isInputInvalidated, resultsInvalidationReasons, inputInvalidationReasons } from './invalidation-state.js';
+export { isResultsInvalidated, isInputInvalidated, resultsInvalidationReasons, inputInvalidationReasons } from './invalidation-state.js';
 
 // Helper: Invalidate results and input data
 export function invalidateAll(reason) {
   isResultsInvalidated.set(true);
 
   // Only invalidate input data if green waves have been extracted
-  originalGreenWaves.subscribe(greenWaves => {
-    if (greenWaves.length > 0) {
-      isInputInvalidated.set(true);
+  if (get(originalGreenWaves).length > 0) {
+    isInputInvalidated.set(true);
 
-      // Add reason to input invalidation reasons
-      inputInvalidationReasons.update(reasons => {
-        if (!reasons.includes(reason)) {
-          return [...reasons, reason];
-        }
-        return reasons;
-      });
-    }
-  });
+    // Add reason to input invalidation reasons
+    inputInvalidationReasons.update(reasons => {
+      if (!reasons.includes(reason)) {
+        return [...reasons, reason];
+      }
+      return reasons;
+    });
+  }
 
   // Add reason to results invalidation reasons
   resultsInvalidationReasons.update(reasons => {

@@ -1,8 +1,8 @@
 import { writable, derived } from 'svelte/store';
-import { junctions, desiredSpeed, desiredFlow } from './core';
+import { junctions, desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
-import { signalsInvalidated, resetSignalsInvalidation } from './signals';
-import { inputInvalidationReasons, isInputInvalidated } from '$lib/stores/invalidation';
+import { resetSignalsInvalidation } from './signals';
+import { inputInvalidationReasons, isInputInvalidated } from './invalidation-state.js';
 
 // Wave-related stores (forward direction)
 export const originalGreenWaves = writable([]);

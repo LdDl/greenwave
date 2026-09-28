@@ -1,11 +1,17 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
+  import { modalFocus } from '$lib/utils/modal-focus.js';
 
   export let signal;
   const dispatch = createEventDispatcher();
+  let validationError = '';
 
   function saveSignal() {
+    if (!Number.isFinite(signal.duration) || signal.duration <= 0) {
+      validationError = 'Enter a positive signal duration.';
+      return;
+    }
     dispatch('save', { signal });
   }
 
@@ -17,7 +23,6 @@
 </script>
 
 {#if signal}
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 150 }}
     class="fixed inset-0 flex items-center justify-center z-50"
@@ -27,12 +32,14 @@
     role="dialog"
     aria-modal="true"
     tabindex="-1"
+    use:modalFocus
   >
     <div
       transition:scale={{ start: 0.96, duration: 150 }}
       class="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6"
     >
       <h3 class="text-lg font-medium mb-4">Edit Signal</h3>
+      {#if validationError}<p role="alert" class="mb-3 text-sm text-red-700">{validationError}</p>{/if}
       <div class="space-y-4">
         <div class="flex items-center gap-4">
           <label for="signal-color" class="text-sm font-medium w-24 shrink-0">Color:</label>

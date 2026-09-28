@@ -1,6 +1,8 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
+  import { modalFocus } from '$lib/utils/modal-focus.js';
+  import { validateImportedConfig } from '$lib/utils/export-import.js';
 
   export let junction = null;
   export let isNew = false;
@@ -19,6 +21,7 @@
   $: if (junction) {
     editedJunction = JSON.parse(JSON.stringify(junction));
     validationError = null;
+
     showDeleteConfirm = false;
   }
 
@@ -31,6 +34,12 @@
   function saveJunction() {
     if (!editedJunction) return;
     validationError = null;
+
+    const validation = validateImportedConfig({ junctions: [editedJunction], desiredSpeed: 40 });
+    if (!validation.isValid) {
+      validationError = validation.errors.join(' ');
+      return;
+    }
 
     if (editedJunction.cycle.length === 0) {
       validationError = 'Junction must have at least one phase.';
@@ -58,7 +67,7 @@
       ...editedJunction.cycle,
       {
         id: newPhaseId,
-        signal_groups: [{ id: 0, signals: [
+        signal_groups: [{ id: editedJunction.cycle[0]?.signal_groups[0]?.id ?? 0, signals: [
           { duration: 30, color: 'GREEN' },
           { duration: 20, color: 'RED' }
         ]}]
@@ -95,7 +104,6 @@
 </script>
 
 {#if editedJunction}
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 150 }}
     class="fixed inset-0 flex items-center justify-center z-50"
@@ -105,6 +113,7 @@
     role="dialog"
     aria-modal="true"
     tabindex="-1"
+    use:modalFocus
   >
     <div
       transition:scale={{ start: 0.96, duration: 150 }}
@@ -146,6 +155,10 @@
             placeholder="Distance from start"
           />
         </div>
+        <div class="flex items-center gap-4">
+          <label for="junction-offset" class="text-sm font-medium w-32 shrink-0">Offset (s):</label>
+          <input id="junction-offset" type="number" bind:value={editedJunction.offset} class="flex-1 px-3 py-2 border rounded-md min-w-0" step="1" />
+        </div>
       </div>
 
       <!-- Phases section -->
@@ -161,7 +174,7 @@
         </div>
 
         <div class="space-y-4">
-          {#each editedJunction.cycle as phase, phaseIndex}
+          {#each editedJunction.cycle as phase, phaseIndex (phase.id)}
             <div class="border rounded-md p-4 bg-gray-50">
               <div class="flex justify-between items-center mb-3">
                 <h5 class="text-sm font-medium">Phase {phaseIndex + 1}</h5>
@@ -175,7 +188,7 @@
               </div>
 
               <div class="space-y-2">
-                {#each phase.signal_groups[0].signals as signal, signalIndex}
+                {#each phase.signal_groups[0].signals as signal, signalIndex (signalIndex)}
                   <!-- flex-wrap so rows don't overflow on narrow modals (phones) -->
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-xs text-gray-500 w-14 shrink-0">Signal {signalIndex + 1}</span>

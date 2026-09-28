@@ -60,20 +60,38 @@ export function validateImportedConfig(data) {
     return { isValid: false, errors };
   }
 
-  // Check junctions
+  const validId = value => Number.isSafeInteger(value) && value >= 0;
+  const junctionIds = new Set();
   if (!Array.isArray(data.junctions)) {
     errors.push('Missing or invalid "junctions" array');
   } else {
     data.junctions.forEach((j, i) => {
-      if (typeof j.id === 'undefined') errors.push(`Junction ${i}: missing "id"`);
-      if (!j.label) errors.push(`Junction ${i}: missing "label"`);
-      if (!j.point || typeof j.point.y === 'undefined') errors.push(`Junction ${i}: missing "point.y"`);
+      if (!j || typeof j !== 'object') { errors.push(`Junction ${i}: invalid object`); return; }
+      if (!validId(j.id) || junctionIds.has(j.id)) errors.push(`Junction ${i}: invalid or duplicate ID`);
+      junctionIds.add(j.id);
+      if (typeof j.label !== 'string' || !j.label.trim()) errors.push(`Junction ${i}: missing "label"`);
+      if (!Number.isFinite(j.point?.x) || !Number.isFinite(j.point?.y)) errors.push(`Junction ${i}: coordinates must be finite`);
+      if (j.offset !== undefined && !Number.isFinite(j.offset)) errors.push(`Junction ${i}: invalid offset`);
       if (!Array.isArray(j.cycle) || j.cycle.length === 0) {
         errors.push(`Junction ${i}: missing or empty "cycle"`);
       } else {
+        const phaseIds = new Set();
         j.cycle.forEach((phase, pi) => {
-          if (!Array.isArray(phase.signal_groups) || phase.signal_groups.length === 0) {
+          if (!validId(phase?.id) || phaseIds.has(phase.id)) errors.push(`Junction ${i}, phase ${pi}: invalid or duplicate ID`);
+          phaseIds.add(phase?.id);
+          if (!Array.isArray(phase?.signal_groups) || phase.signal_groups.length === 0) {
             errors.push(`Junction ${i}, Phase ${pi}: missing or empty "signal_groups"`);
+          } else {
+            const groupIds = new Set();
+            for (const group of phase.signal_groups) {
+              if (!validId(group?.id) || groupIds.has(group.id)) errors.push(`Junction ${i}, phase ${pi}: invalid or duplicate group ID`);
+              groupIds.add(group?.id);
+              if (!Array.isArray(group?.signals) || !group.signals.length) {
+                errors.push(`Junction ${i}, phase ${pi}: missing signals`);
+              } else if (group.signals.some(signal => !Number.isFinite(signal?.duration) || signal.duration <= 0 || typeof signal.color !== 'string' || !signal.color)) {
+                errors.push(`Junction ${i}, phase ${pi}: invalid signal duration or color`);
+              }
+            }
           }
         });
       }
@@ -81,9 +99,12 @@ export function validateImportedConfig(data) {
   }
 
   // Check desiredSpeed
-  if (typeof data.desiredSpeed !== 'number' || data.desiredSpeed <= 0) {
+  if (!Number.isFinite(data.desiredSpeed) || data.desiredSpeed <= 0) {
     errors.push('Missing or invalid "desiredSpeed" (must be positive number)');
   }
+
+  if (data.desiredIntensity !== undefined && (!Number.isFinite(data.desiredIntensity) || data.desiredIntensity < 0)) errors.push('Desired intensity must be non-negative');
+  if (data.direction !== undefined && !['forward', 'bidirectional'].includes(data.direction)) errors.push('Invalid optimization direction');
 
   return {
     isValid: errors.length === 0,

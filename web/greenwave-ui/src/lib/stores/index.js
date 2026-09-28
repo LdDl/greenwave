@@ -1,135 +1,29 @@
 // lib/stores/index.js
 import { writable } from 'svelte/store';
-import { junctions, desiredSpeed } from './core';
+import { corridorEditor } from './corridor.js';
+import { DEMO_DATA } from '../utils/demo-input.js';
 import { originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
+import { optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed } from './optimization';
+import { validateInput, validateResults } from './invalidation';
 
 // UI state stores
 export const isLoading = writable(false);
 export const error = writable(null);
 
-export const DEMO_DATA = {
-  junctions: [
-    {
-      id: 0,
-      label: "Junction 1",
-      cycle: [
-        {
-          id: 0,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 30, color: "GREEN" },
-            { duration: 20, color: "RED" }
-          ]}]
-        },
-        {
-          id: 1,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 20, color: "GREEN" },
-            { duration: 15, color: "RED" }
-          ]}]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 0 }
-    },
-    {
-      id: 1,
-      label: "Junction 2",
-      cycle: [
-        {
-          id: 10,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 20, color: "RED" },
-            { duration: 35, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]}]
-        },
-        {
-          id: 11,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 10, color: "RED" },
-            { duration: 10, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]}]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 200 }
-    },
-    {
-      id: 2,
-      label: "Junction 3",
-      cycle: [
-        {
-          id: 20,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 45, color: "RED" },
-            { duration: 10, color: "GREEN" }
-          ]}]
-        },
-        {
-          id: 21,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 7, color: "RED" },
-            { duration: 18, color: "GREEN" },
-            { duration: 5, color: "YELLOW" }
-          ]}]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 450 }
-    },
-    {
-      id: 3,
-      label: "Junction 4",
-      cycle: [
-        {
-          id: 20,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 40, color: "RED" },
-            { duration: 15, color: "GREEN" }
-          ]}]
-        },
-        {
-          id: 21,
-          signal_groups: [{ id: 0, signals: [
-            { duration: 10, color: "RED" },
-            { duration: 20, color: "GREEN" }
-          ]}]
-        }
-      ],
-      offset: 0,
-      point: { x: 0, y: 600 }
-    }
-  ],
-  desiredSpeed: 40.0
-};
+export { DEMO_DATA } from '../utils/demo-input.js';
 
 // Reset function to restore demo data and clear API results
 export function resetToDemo() {
-  junctions.set([...DEMO_DATA.junctions]); // Deep copy to avoid mutation
-  desiredSpeed.set(DEMO_DATA.desiredSpeed);
-  
-  // Clear API results
-  originalGreenWaves.set([]);
-  originalThroughWaves.set([]);
-  originalReverseGreenWaves.set([]);
-  originalReverseThroughWaves.set([]);
-  showGreenWaves.set(false);
-
-  // Clear wave calculation positions
-  waveCalculationPositions.set([]);
-  // Clear last calculated speed
-  lastCalculatedSpeed.set(null);
-
-  // Clear UI state
-  isLoading.set(false);
-  error.set(null);
+  corridorEditor.replaceInput(DEMO_DATA);
+  clearCalculatedData();
 }
 
 export function resetToEmpty() {
-  junctions.set([]);
-  desiredSpeed.set(40.0);
+  corridorEditor.replaceInput({ junctions: [], desiredSpeed: 40 });
+  clearCalculatedData();
+}
 
+function clearCalculatedData() {
   // Clear API results
   originalGreenWaves.set([]);
   originalThroughWaves.set([]);
@@ -141,6 +35,16 @@ export function resetToEmpty() {
   waveCalculationPositions.set([]);
   // Clear last calculated speed
   lastCalculatedSpeed.set(null);
+  optimizedJunctions.set([]);
+  optimizedOffsets.set([]);
+  optimizedGreenWaves.set([]);
+  optimizedThroughWaves.set([]);
+  optimizedReverseGreenWaves.set([]);
+  optimizedReverseThroughWaves.set([]);
+  optimizedWaveCalculationPositions.set([]);
+  optimizedLastCalculatedSpeed.set(null);
+  validateInput();
+  validateResults();
 
   // Clear UI state
   isLoading.set(false);

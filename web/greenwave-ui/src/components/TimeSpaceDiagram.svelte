@@ -128,12 +128,20 @@
         .on("start", function(event, d) {
           console.log("🎯 Drag start:", d.label, "at distance:", d.point.y);
           d3.select(this).style("opacity", 0.8);
-          isDragging = true; // Set flag
+          isDragging = true;
+          dispatch('dragStart');
         })
         .on("drag", function(event, d) {
           // Use the simple working approach with event.y
-          const newY = Math.max(0, Math.min(chartHeight, event.y));
-          const newDistance = yScale.invert(newY);
+          let newDistance = Math.round(yScale.invert(Math.max(0, Math.min(chartHeight, event.y))));
+          const index = junctions.findIndex(junction => junction.id === d.id);
+          const ordered = junctions.every((junction, i) => i === 0 || junction.point.y >= junctions[i - 1].point.y);
+          if (ordered) {
+            const lower = index > 0 ? junctions[index - 1].point.y : 0;
+            const upper = index < junctions.length - 1 ? junctions[index + 1].point.y : Infinity;
+            newDistance = Math.min(upper, Math.max(lower, newDistance));
+          }
+          const newY = yScale(newDistance);
           
           console.log("🔄 Dragging:", d.label, "new distance:", Math.round(newDistance));
           
@@ -155,7 +163,8 @@
           }
           
           d3.select(this).style("opacity", 1);
-          isDragging = false; // Clear flag
+          isDragging = false;
+          dispatch('dragEnd');
           // Force complete redraw after drag ends
           setTimeout(() => updateChart(), 10);
         })
@@ -283,7 +292,7 @@
   
   // Draw signal timelines function
   function drawSignalTimelines(chart, junctionsWithDuration, xScale, yScale) {
-    junctionsWithDuration.forEach((junction, jIdx) => {
+    junctionsWithDuration.forEach(junction => {
       let currentTime = junction.offset;
       const y = yScale(junction.point.y);
       

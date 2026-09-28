@@ -1,6 +1,11 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
-  import { networkNodes, networkEdges, networkEditor } from '$lib/stores/network.js';
+  import { networkNodes as defaultNodes, networkEdges as defaultEdges, networkEditor as defaultEditor } from '$lib/stores/network.js';
+
+  export let networkNodes = defaultNodes;
+  export let networkEdges = defaultEdges;
+  export let networkEditor = defaultEditor;
+  export let interactionHint = 'Double-click a junction to configure its intersection';
 
   // 'select' | 'node' | 'edge'
   export let mode = 'select';
@@ -54,7 +59,12 @@
   onMount(() => {
     updateSize();
     sized = true;
-    const observer = new ResizeObserver(updateSize);
+    const observer = new ResizeObserver(() => {
+      const oldWidth = width;
+      const oldHeight = height;
+      updateSize();
+      if (oldWidth !== width || oldHeight !== height) fit();
+    });
     observer.observe(container);
     return () => { observer.disconnect(); networkEditor.finish(); };
   });
@@ -450,7 +460,7 @@
     <!-- Mode hint overlay -->
     {#if mode === 'select' && $networkNodes.length > 0}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-gray-700/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
-        Double-click a junction to configure its intersection
+        {interactionHint}
       </div>
     {:else if mode === 'edge' && edgeFromId === null}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
