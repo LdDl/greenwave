@@ -2,6 +2,9 @@
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
 
+  import { MAX_LANES } from '$lib/utils/network-project.js';
+  import { modalFocus } from '$lib/utils/modal-focus.js';
+
   export let fromLabel = '';
   export let toLabel = '';
 
@@ -11,7 +14,11 @@
   let lanesFwd = 1;
   let lanesBack = 1;
 
+  $: valid = Number.isInteger(lanesFwd) && lanesFwd >= 1 && lanesFwd <= MAX_LANES &&
+    (!twoWay || (Number.isInteger(lanesBack) && lanesBack >= 1 && lanesBack <= MAX_LANES));
+
   function save() {
+    if (!valid) return;
     dispatch('save', { lanesFwd, lanesBack: twoWay ? lanesBack : 0 });
   }
 
@@ -20,22 +27,23 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
+  use:modalFocus
+  aria-labelledby="road-modal-title"
   transition:fade={{ duration: 150 }}
   class="fixed inset-0 flex items-center justify-center z-50"
   style="background-color: rgba(0,0,0,0.5)"
   on:click={handleBackdrop}
-  on:keydown={e => e.key === 'Escape' && dispatch('close')}
+  on:keydown={e => { if (e.key === 'Escape') { e.stopPropagation(); dispatch('close'); } }}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
 >
-  <div
+  <form on:submit|preventDefault={save}
     transition:scale={{ start: 0.96, duration: 150 }}
     class="bg-white rounded-lg shadow-xl w-80 mx-4 p-6"
   >
-    <h3 class="text-base font-semibold mb-3">New Road Segment</h3>
+    <h3 id="road-modal-title" class="text-base font-semibold mb-3">New Road Segment</h3>
     <div class="flex items-center gap-2 mb-5">
       <span class="px-2 py-0.5 rounded-md text-sm font-medium bg-green-50 text-green-700 border border-green-200">{fromLabel}</span>
       <span class="text-gray-400 text-sm">→</span>
@@ -75,7 +83,7 @@
         <input
           id="rse-lanes-fwd"
           type="number"
-          min="1"
+          min="1" max={MAX_LANES} step="1"
           bind:value={lanesFwd}
           class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
@@ -90,7 +98,7 @@
           <input
             id="rse-lanes-back"
             type="number"
-            min="1"
+            min="1" max={MAX_LANES} step="1"
             bind:value={lanesBack}
             class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
@@ -98,6 +106,7 @@
       {/if}
     </div>
 
+    {#if !valid}<p class="mt-3 text-xs text-red-600" role="alert">Lane counts must be whole numbers from 1 to {MAX_LANES}.</p>{/if}
     <div class="flex justify-end gap-2 mt-6">
       <button
         type="button"
@@ -105,10 +114,10 @@
         on:click={() => dispatch('close')}
       >Cancel</button>
       <button
-        type="button"
+        type="submit"
         class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-        on:click={save}
+        disabled={!valid}
       >Add road</button>
     </div>
-  </div>
+  </form>
 </div>

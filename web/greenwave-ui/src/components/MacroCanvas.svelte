@@ -1,9 +1,12 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
-  import { networkNodes, networkEdges, nextNodeId } from '$lib/stores/network.js';
+  import { networkNodes, networkEdges, networkEditor } from '$lib/stores/network.js';
 
   // 'select' | 'node' | 'edge'
   export let mode = 'select';
+  export let disabled = false;
+  export let selectedNodeId = null;
+  export let selectedEdgeId = null;
   // Highlight connected nodes when an edge is selected (node IDs or null)
   export let highlightFrom = null;
   export let highlightTo   = null;
@@ -31,7 +34,9 @@
 
   // Edge drawing state
   let edgeFromId = null;
-  let hoverNodeId = null; // for red-preview on destination while drawing
+  let hoverNodeId = null;
+  let pointerStart = null;
+  let inside = false;
 
   // Track whether pointer moved since mousedown (to distinguish click from drag)
   let pointerMoved = false;
@@ -49,8 +54,9 @@
   onMount(() => {
     updateSize();
     sized = true;
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(container);
+    return () => { observer.disconnect(); networkEditor.finish(); };
   });
 
   // Convert window coords to canvas coords
@@ -65,38 +71,35 @@
   // Window-level mouse events (for smooth drag even if cursor leaves SVG)
 
   function onWindowMousemove(e) {
+    if (disabled || !svgEl) return;
     const pos = toCanvas(e.clientX, e.clientY);
     mouseCanvas = pos;
-
+    if (pointerStart && Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y) > 4) pointerMoved = true;
+    if (!pointerMoved) return;
     if (isPanning && panStart) {
-      pointerMoved = true;
       tx = e.clientX - panStart.x;
       ty = e.clientY - panStart.y;
     }
-
     if (dragNodeId !== null) {
-      pointerMoved = true;
-      networkNodes.update(ns =>
-        ns.map(n =>
-          n.id === dragNodeId
-            ? { ...n, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }
-            : n
-        )
-      );
+      networkEditor.change(p => {
+        const node = p.nodes.find(n => n.id === dragNodeId);
+        if (node) { node.x = pos.x - dragOffset.x; node.y = pos.y - dragOffset.y; }
+      });
     }
   }
 
   function onWindowMouseup() {
+    if (dragNodeId !== null) networkEditor.finish();
     isPanning = false;
     dragNodeId = null;
     panStart = null;
+    pointerStart = null;
   }
 
-  // SVG background
-
   function onBgMousedown(e) {
-    if (e.button !== 0) return;
+    if (disabled || e.button !== 0) return;
     pointerMoved = false;
+    pointerStart = { x: e.clientX, y: e.clientY };
     if (mode === 'select') {
       isPanning = true;
       panStart = { x: e.clientX - tx, y: e.clientY - ty };
@@ -104,80 +107,120 @@
   }
 
   function onBgClick(e) {
-    if (pointerMoved) return;
+    if (disabled || pointerMoved) return;
     if (mode === 'node') {
       const pos = toCanvas(e.clientX, e.clientY);
-      const id = nextNodeId();
-      networkNodes.update(ns => [
-        ...ns,
-        { id, x: pos.x, y: pos.y, label: `J${id}` },
-      ]);
+      const id = networkEditor.addNode(pos.x, pos.y);
       dispatch('nodeAdded', { id });
-    } else if (mode === 'edge') {
-      edgeFromId = null; // cancel pending edge
-    } else if (mode === 'select') {
-      dispatch('deselect');
-    }
+    } else if (mode === 'edge') edgeFromId = null;
+    else dispatch('deselect');
   }
-
-  // Node events
 
   function onNodeMousedown(e, node) {
     e.stopPropagation();
-    if (e.button !== 0) return;
+    if (disabled || e.button !== 0) return;
     pointerMoved = false;
+    pointerStart = { x: e.clientX, y: e.clientY };
     if (mode === 'select') {
       const pos = toCanvas(e.clientX, e.clientY);
       dragNodeId = node.id;
       dragOffset = { x: pos.x - node.x, y: pos.y - node.y };
+      networkEditor.begin();
     }
   }
 
   function onNodeClick(e, node) {
     e.stopPropagation();
-    if (pointerMoved) return;
-    if (mode === 'node') return; // clicking node in node-mode does nothing
+    if (disabled || pointerMoved || mode === 'node') return;
     if (mode === 'edge') {
-      if (edgeFromId === null) {
-        edgeFromId = node.id;
-      } else if (edgeFromId !== node.id) {
-        // Avoid duplicate edges
-        const dup = $networkEdges.find(
-          ed =>
-            (ed.from === edgeFromId && ed.to === node.id) ||
-            (ed.from === node.id && ed.to === edgeFromId)
-        );
-        if (!dup) {
-          dispatch('edgePending', { fromId: edgeFromId, toId: node.id });
-        }
+      if (edgeFromId === null) edgeFromId = node.id;
+      else if (edgeFromId !== node.id) {
+        const duplicate = $networkEdges.some(edge =>
+          (edge.from === edgeFromId && edge.to === node.id) || (edge.from === node.id && edge.to === edgeFromId));
+        if (duplicate) dispatch('notice', 'These junctions already have a road. Select it to change its lanes or direction.');
+        else dispatch('edgePending', { fromId: edgeFromId, toId: node.id });
         edgeFromId = null;
       }
-    } else if (mode === 'select') {
-      dispatch('selectNode', { node });
-    }
+    } else dispatch('selectNode', { node });
   }
-
-  // Edge events
 
   function onEdgeClick(e, edge) {
     e.stopPropagation();
-    if (mode === 'select') {
-      dispatch('selectEdge', { edge });
-    }
+    if (!disabled && !pointerMoved && mode === 'select') dispatch('selectEdge', { edge });
   }
 
-  // Scroll to zoom
+  function activateNode(event, node) {
+    if (disabled) return;
+    const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (mode === 'select' && directions[event.key]) {
+      event.preventDefault();
+      event.stopPropagation();
+      const [dx, dy] = directions[event.key];
+      const distance = (event.shiftKey ? 50 : 10) / scale;
+      networkEditor.change(p => {
+        const moving = p.nodes.find(n => n.id === node.id);
+        moving.x += dx * distance;
+        moving.y += dy * distance;
+      });
+      return;
+    }
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    pointerMoved = false;
+    onNodeClick(event, node);
+  }
+
+  function activateEdge(event, edge) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    pointerMoved = false;
+    onEdgeClick(event, edge);
+  }
+
+  function zoomAt(factor, mx = width / 2, my = height / 2) {
+    const next = Math.min(Math.max(scale * factor, 0.1), 8);
+    const ratio = next / scale;
+    tx = mx + (tx - mx) * ratio;
+    ty = my + (ty - my) * ratio;
+    scale = next;
+  }
 
   function onWheel(e) {
+    if (disabled) return;
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     const rect = svgEl.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    tx = mx + (tx - mx) * factor;
-    ty = my + (ty - my) * factor;
-    scale = Math.min(Math.max(scale * factor, 0.1), 8);
+    zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - rect.left, e.clientY - rect.top);
   }
+
+  export function cancelDrawing() { edgeFromId = null; onWindowMouseup(); }
+
+  export function fit() {
+    updateSize();
+    if (!$networkNodes.length) { tx = 0; ty = 0; scale = 1; return; }
+    const xs = $networkNodes.map(n => n.x);
+    const ys = $networkNodes.map(n => n.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    scale = Math.max(0.1, Math.min(2, Math.max(1, width - 120) / Math.max(100, maxX - minX), Math.max(1, height - 120) / Math.max(100, maxY - minY)));
+    tx = width / 2 - (minX + maxX) * scale / 2;
+    ty = height / 2 - (minY + maxY) * scale / 2;
+  }
+
+  function canvasKeys(event) {
+    if (disabled || event.target !== svgEl) return;
+    if (event.key === 'Enter' && mode === 'node') {
+      networkEditor.addNode((width / 2 - tx) / scale, (height / 2 - ty) / scale);
+    } else if (event.key === '+' || event.key === '=') zoomAt(1.15);
+    else if (event.key === '-') zoomAt(1 / 1.15);
+    else if (event.key === 'ArrowLeft') tx += 30;
+    else if (event.key === 'ArrowRight') tx -= 30;
+    else if (event.key === 'ArrowUp') ty += 30;
+    else if (event.key === 'ArrowDown') ty -= 30;
+    else return;
+    event.preventDefault();
+  }
+
+  $: if (mode !== 'edge' || disabled) edgeFromId = null;
 
   // Helpers
 
@@ -225,16 +268,20 @@
     isPanning ? 'grabbing' : 'grab';
 </script>
 
-<svelte:window on:mousemove={onWindowMousemove} on:mouseup={onWindowMouseup} />
+<svelte:window on:pointermove={onWindowMousemove} on:pointerup={onWindowMouseup} on:pointercancel={onWindowMouseup} on:blur={onWindowMouseup} />
 
 <div bind:this={container} class="absolute inset-0" style="cursor:{canvasCursor}">
   {#if sized}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
     <svg
       bind:this={svgEl}
       {width}
       {height}
-      style="display:block; user-select:none"
-      on:mousedown={onBgMousedown}
+      style="display:block; user-select:none; touch-action:none"
+      role="application" aria-label="Road network canvas" aria-describedby="canvas-keyboard-help" tabindex="0"
+      on:keydown={canvasKeys}
+      on:pointerenter={() => inside = true} on:pointerleave={() => inside = false}
+      on:pointerdown={onBgMousedown}
       on:click={onBgClick}
       on:wheel|nonpassive={onWheel}
     >
@@ -257,7 +304,7 @@
 
       <g {transform}>
         <!-- Edges -->
-        {#each $networkEdges as edge}
+        {#each $networkEdges as edge (edge.id)}
           {@const a = getNode(edge.from, $networkNodes)}
           {@const b = getNode(edge.to, $networkNodes)}
           {#if a && b}
@@ -284,32 +331,35 @@
             <!-- Arrow on back path at t=0.65 (back goes b -> a) -->
             {@const bAP  = two ? bezierPt(ep.x2,ep.y2,cbx,cby,ep.x1,ep.y1,0.65)  : null}
             {@const bAD  = two ? bezierDir(ep.x2,ep.y2,cbx,cby,ep.x1,ep.y1,0.65) : null}
-            {@const as   = 6}
+            {@const as = 6 / scale}
+            {@const edgeColor = selectedEdgeId === edge.id ? '#2563eb' : '#475569'}
 
             <!-- Hit areas (both arcs select the same edge) -->
             <path d={fwdD} stroke="transparent" stroke-width={14/scale} fill="none"
-              style="cursor:pointer" on:click={e => onEdgeClick(e, edge)} />
+              style="cursor:pointer" role="button" tabindex="0" aria-label={`Road ${a.label} to ${b.label}`} aria-pressed={selectedEdgeId === edge.id}
+              on:pointerdown={e => { e.stopPropagation(); pointerMoved = false; }} on:keydown={e => activateEdge(e, edge)} on:click={e => onEdgeClick(e, edge)} />
             {#if two && backD}
               <path d={backD} stroke="transparent" stroke-width={14/scale} fill="none"
-                style="cursor:pointer" on:click={e => onEdgeClick(e, edge)} />
+                style="cursor:pointer" role="button" tabindex="-1" aria-label={`Road ${b.label} to ${a.label}`}
+                on:pointerdown={e => { e.stopPropagation(); pointerMoved = false; }} on:keydown={e => activateEdge(e, edge)} on:click={e => onEdgeClick(e, edge)} />
             {/if}
 
             <!-- Forward path -->
-            <path d={fwdD} stroke="#475569" stroke-width={2/scale} fill="none" pointer-events="none" />
+            <path d={fwdD} stroke={edgeColor} stroke-width={(selectedEdgeId === edge.id ? 3 : 2)/scale} fill="none" pointer-events="none" />
             <!-- Forward arrowhead -->
             <polygon
               points={`${fAP.x+fAD.x*as},${fAP.y+fAD.y*as} ${fAP.x-fAD.x*as-fAD.y*as*0.5},${fAP.y-fAD.y*as+fAD.x*as*0.5} ${fAP.x-fAD.x*as+fAD.y*as*0.5},${fAP.y-fAD.y*as-fAD.x*as*0.5}`}
-              fill="#475569" pointer-events="none"
+              fill={edgeColor} pointer-events="none"
             />
             <!-- Forward lane label offset to the curve side -->
             <text
               x={two ? cfx : mx} y={two ? cfy - 7 : my - 8/scale}
-              text-anchor="middle" font-size={9/scale} fill="#475569" pointer-events="none"
+              text-anchor="middle" font-size={9/scale} fill={edgeColor} pointer-events="none"
             >→{edge.lanes_fwd}</text>
 
             <!-- Backward path + arrow + label (two-way only) -->
             {#if two && backD && bAP && bAD}
-              <path d={backD} stroke="#94a3b8" stroke-width={2/scale} fill="none" pointer-events="none" />
+              <path d={backD} stroke={selectedEdgeId === edge.id ? '#2563eb' : '#94a3b8'} stroke-width={2/scale} fill="none" pointer-events="none" />
               <polygon
                 points={`${bAP.x+bAD.x*as},${bAP.y+bAD.y*as} ${bAP.x-bAD.x*as-bAD.y*as*0.5},${bAP.y-bAD.y*as+bAD.x*as*0.5} ${bAP.x-bAD.x*as+bAD.y*as*0.5},${bAP.y-bAD.y*as-bAD.x*as*0.5}`}
                 fill="#94a3b8" pointer-events="none"
@@ -335,7 +385,7 @@
         {/if}
 
         <!-- Ghost node preview in node mode -->
-        {#if mode === 'node'}
+        {#if mode === 'node' && inside}
           <circle
             cx={mouseCanvas.x} cy={mouseCanvas.y}
             r={NODE_R / scale}
@@ -349,21 +399,21 @@
         {/if}
 
         <!-- Nodes -->
-        {#each $networkNodes as node}
+        {#each $networkNodes as node (node.id)}
           {@const isEdgeSrc  = edgeFromId === node.id}
           {@const isDstHover = mode === 'edge' && edgeFromId != null && hoverNodeId === node.id && node.id !== edgeFromId}
           {@const isHlFrom   = highlightFrom === node.id}
           {@const isHlTo     = highlightTo   === node.id}
-          {@const nodeFill   = isEdgeSrc || isHlFrom ? '#dcfce7' : isDstHover || isHlTo ? '#fee2e2' : '#ffffff'}
-          {@const nodeStroke = isEdgeSrc || isHlFrom ? '#16a34a' : isDstHover || isHlTo ? '#ef4444' : '#475569'}
+          {@const nodeFill   = selectedNodeId === node.id ? '#dbeafe' : isEdgeSrc || isHlFrom ? '#dcfce7' : isDstHover || isHlTo ? '#fee2e2' : '#ffffff'}
+          {@const nodeStroke = selectedNodeId === node.id ? '#2563eb' : isEdgeSrc || isHlFrom ? '#16a34a' : isDstHover || isHlTo ? '#ef4444' : '#475569'}
           {@const labelColor = isEdgeSrc || isHlFrom ? '#15803d' : isDstHover || isHlTo ? '#dc2626' : '#1e293b'}
-          <!-- svelte-ignore a11y_interactive_supports_focus -->
           <g
-            role="button"
+            role="button" tabindex="0" aria-label={`Junction ${node.label}`} aria-pressed={selectedNodeId === node.id}
+            on:keydown={e => activateNode(e, node)}
             style="cursor:pointer"
-            on:mousedown={e => onNodeMousedown(e, node)}
+            on:pointerdown={e => onNodeMousedown(e, node)}
             on:click={e => onNodeClick(e, node)}
-            on:dblclick={e => { e.stopPropagation(); if (mode === 'select') dispatch('openIntersection', { nodeId: node.id }); }}
+            on:dblclick={e => { e.stopPropagation(); if (!disabled && mode === 'select') dispatch('openIntersection', { nodeId: node.id }); }}
             on:mouseenter={() => hoverNodeId = node.id}
             on:mouseleave={() => hoverNodeId = null}
           >
@@ -388,6 +438,15 @@
       </g>
     </svg>
 
+    <div class="absolute top-3 left-3 flex gap-1 rounded-lg bg-white p-1 shadow" aria-label="Canvas view">
+      <button class="rounded px-3 py-1 hover:bg-gray-100" aria-label="Zoom out" disabled={disabled} on:click={() => zoomAt(1 / 1.15)}>-</button>
+      <span class="self-center text-xs tabular-nums">{Math.round(scale * 100)}%</span>
+      <button class="rounded px-3 py-1 hover:bg-gray-100" aria-label="Zoom in" disabled={disabled} on:click={() => zoomAt(1.15)}>+</button>
+      <button class="rounded px-3 py-1 text-xs hover:bg-gray-100" disabled={disabled} on:click={fit}>Fit network</button>
+    </div>
+
+    <p id="canvas-keyboard-help" class="sr-only">Arrow keys pan the canvas. Plus and minus zoom. In Junction mode, Enter creates a junction at the center. Focus a junction and use arrows to move it, or Enter to select it. In Road mode, select two junctions with Enter to connect them.</p>
+
     <!-- Mode hint overlay -->
     {#if mode === 'select' && $networkNodes.length > 0}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-gray-700/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
@@ -399,7 +458,7 @@
       </div>
     {:else if mode === 'edge' && edgeFromId !== null}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
-        Click another junction to finish — or background to cancel
+        Click another junction to finish, or background to cancel
       </div>
     {:else if mode === 'node'}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
