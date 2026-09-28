@@ -25,6 +25,8 @@ type GreenWavesRequest struct {
 	// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
 	// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
 	GroupIDs map[int]junction.GroupID `json:"group_ids"`
+	// ReverseGroupIDs selects the return group per junction; missing entries use GroupIDs.
+	ReverseGroupIDs map[int]junction.GroupID `json:"reverse_group_ids,omitempty"`
 }
 
 // GreenWavesResponse represents the response structure for green waves requests.
@@ -80,13 +82,18 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 			})
 		}
 
+		forwardGroups, reverseGroups, err := coordinationGroups(requestData.Junctions, requestData.GroupIDs, requestData.ReverseGroupIDs)
+		if err != nil {
+			return ctx.JSON(400, echo.Map{"Error": err.Error()})
+		}
+
 		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}
 
 		// Extract forward green waves
-		greenWaves := greenwave.FindGreenWaves(junctions, requestData.GroupIDs, requestData.DesiredSpeedKmh)
+		greenWaves := greenwave.FindGreenWaves(junctions, forwardGroups, requestData.DesiredSpeedKmh)
 		throughGreenWaves := greenwave.MergeGreenWaves(greenWaves)
 
 		response := GreenWavesResponse{
@@ -99,7 +106,7 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 		// If bidirectional, also calculate reverse waves
 		if strings.ToLower(requestData.Direction) == "bidirectional" {
 			reversedJunctions := greenwave.ReverseJunctions(junctions)
-			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.GroupIDs, requestData.DesiredSpeedKmh)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, reverseGroups, requestData.DesiredSpeedKmh)
 			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
 
 			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)

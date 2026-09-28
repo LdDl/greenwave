@@ -322,6 +322,28 @@
                     "items": {
                         "$ref": "#/definitions/dto.JunctionDTO"
                     }
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": [
+                        "forward",
+                        "bidirectional"
+                    ],
+                    "description": "Calculation direction. Defaults to forward. Both directions use one program and offset per junction."
+                },
+                "group_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    },
+                    "description": "Forward signal group ID keyed by junction ID. Legacy requests without a selection use group 0."
+                },
+                "reverse_group_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    },
+                    "description": "Optional reverse signal group ID keyed by junction ID. Missing entries use the forward group. Selected groups must exist in every phase."
                 }
             }
         },
@@ -340,6 +362,23 @@
                 },
                 "through_green_waves": {
                     "description": "List of through green waves (so they can be passed through multiple junctions)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
+                    }
+                },
+                "reverse_green_waves": {
+                    "description": "Reverse direction waves, ordered from the last junction to the first; populated for bidirectional requests.",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/dto.GreenWaveDTO"
+                        }
+                    }
+                },
+                "reverse_through_green_waves": {
+                    "description": "Reverse direction waves, ordered from the last junction to the first; populated for bidirectional requests.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
@@ -378,6 +417,28 @@
                 "optimizer_type": {
                     "description": "Specifies which optimizer to use",
                     "type": "string"
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": [
+                        "forward",
+                        "bidirectional"
+                    ],
+                    "description": "Calculation direction. Defaults to forward. Both directions use one program and offset per junction."
+                },
+                "group_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    },
+                    "description": "Forward signal group ID keyed by junction ID. Legacy requests without a selection use group 0."
+                },
+                "reverse_group_ids": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    },
+                    "description": "Optional reverse signal group ID keyed by junction ID. Missing entries use the forward group. Selected groups must exist in every phase."
                 }
             }
         },
@@ -411,6 +472,23 @@
                 },
                 "through_green_waves": {
                     "description": "List of through green waves (so they can be passed through multiple junctions) considering the optimal offsets",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
+                    }
+                },
+                "reverse_green_waves": {
+                    "description": "Reverse direction waves, ordered from the last junction to the first; populated for bidirectional requests.",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/dto.GreenWaveDTO"
+                        }
+                    }
+                },
+                "reverse_through_green_waves": {
+                    "description": "Reverse direction waves, ordered from the last junction to the first; populated for bidirectional requests.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.ThroughGreenWaveDTO"
