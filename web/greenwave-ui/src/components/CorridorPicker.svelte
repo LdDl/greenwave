@@ -3,18 +3,11 @@
 	import { corridorsOpen } from '$lib/stores/workspace.js';
 	import { corridorProjection } from '$lib/utils/shared-project.js';
 	import { modalFocus } from '$lib/utils/modal-focus.js';
-	import { goto } from '$app/navigation';
+	import CreateCorridorButton from './CreateCorridorButton.svelte';
 
 	function select(id) {
 		corridorEditor.selectCorridor(id);
 		corridorsOpen.set(false);
-	}
-	function create() {
-		corridorEditor.addCorridor(
-			`Corridor ${Math.max(...$corridorProject.corridors.map((route) => route.id)) + 2}`
-		);
-		corridorsOpen.set(false);
-		goto('/network');
 	}
 </script>
 
@@ -49,6 +42,7 @@
 				A corridor is an ordered route through the same network. Select one to edit its input and
 				calculate its green waves.
 			</p>
+			<div class="corridor-create"><CreateCorridorButton /></div>
 			<div class="corridor-options">
 				{#each $corridorProject.corridors as route (route.id)}
 					{@const projection = corridorProjection($corridorProject, route)}
@@ -78,12 +72,17 @@
 				{/each}
 			</div>
 			<footer>
-				<button class="ui-button ui-primary" on:click={create}>+ Create corridor</button><a
-					href="/network"
-					class="ui-button"
-					on:click={() => corridorsOpen.set(false)}>Edit route on network</a
+				<a href="/network" class="ui-button" on:click={() => corridorsOpen.set(false)}
+					>Edit route on network</a
 				>
 			</footer>
 		</section>
 	</div>
 {/if}
+
+<style>
+	.corridor-create {
+		flex-shrink: 0;
+		margin-bottom: 16px;
+	}
+</style>

@@ -1,6 +1,7 @@
 <script>
 	import { onMount, tick } from 'svelte';
 	import MacroCanvas from '../../components/MacroCanvas.svelte';
+	import CreateCorridorButton from '../../components/CreateCorridorButton.svelte';
 	import EditJunctionModal from '../../components/EditJunctionModal.svelte';
 	import EditRoadSegmentModal from '../../components/EditRoadSegmentModal.svelte';
 	import {
@@ -23,12 +24,18 @@
 	} from '$lib/stores/core.js';
 	import { roadBetween } from '$lib/utils/shared-project.js';
 	import { MAX_LANES } from '$lib/utils/network-project.js';
-	import { corridorsOpen, workspaceDialogOpen, projectOpened } from '$lib/stores/workspace.js';
+	import {
+		corridorsOpen,
+		corridorToEdit,
+		workspaceDialogOpen,
+		projectOpened
+	} from '$lib/stores/workspace.js';
 	import { corridorGroupId } from '$lib/utils/junction-program.js';
 
 	const button =
 		'rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-blue-500';
 	let canvas;
+	let corridorNameInput;
 	let mounted = false;
 	let mode = 'select';
 	let selectedNodeId = null;
@@ -55,6 +62,21 @@
 	$: pendingTo = $corridorNodes.find((node) => node.id === pendingEdge?.toId);
 
 	$: if (mounted && $projectOpened) resetView();
+	$: if (mounted && $corridorToEdit !== null) editNewCorridor($corridorToEdit);
+	async function editNewCorridor(id) {
+		corridorToEdit.set(null);
+		if ($selectedCorridor.id !== id) return;
+		deselect();
+		canvas?.cancelDrawing();
+		mode = 'select';
+		inspectorOpen = true;
+		inspectorTab = 'route';
+		error = '';
+		notice = '';
+		await tick();
+		corridorNameInput?.focus();
+		corridorNameInput?.select();
+	}
 	async function resetView() {
 		deselect();
 		editing = null;
@@ -194,6 +216,7 @@
 		<button class={button} aria-pressed={mode === 'edge'} on:click={() => (mode = 'edge')}
 			>+ Road</button
 		>
+		<CreateCorridorButton label="+ Corridor" />
 		<button
 			class={button}
 			disabled={selectedNodeId === null && selectedEdgeId === null}
@@ -374,6 +397,7 @@
 							<label for="corridor-name" class="block text-xs">Corridor name</label>
 							<input
 								id="corridor-name"
+								bind:this={corridorNameInput}
 								maxlength="120"
 								class="w-full rounded border p-2 text-sm"
 								value={$selectedCorridor.name}
@@ -383,8 +407,8 @@
 									)}
 							/>
 							<p class="text-xs text-gray-500">
-								Select junctions on the network and append them in travel order. Removing a stop
-								keeps its junction and roads in the network.
+								Select a junction on the network, then click "Append to corridor" in Selection.
+								Repeat in travel order. Removing a stop keeps its junction and roads in the network.
 							</p>
 							<ol class="space-y-1">
 								{#each $selectedCorridor.nodeIds as id, index (id)}
@@ -418,8 +442,10 @@
 									</li>
 								{/each}
 							</ol>
-							{#if !$selectedCorridor.nodeIds.length}<p class="text-sm text-gray-500">
-									No junctions selected for this corridor.
+							{#if !$selectedCorridor.nodeIds.length}<p class="selection-hint">
+									{#if $corridorNodes.length}Start by selecting the first junction on the canvas.
+									{:else}Add junctions with "+ Junction" and connect them with "+ Road", then select
+										the first junction of this corridor.{/if}
 								</p>{/if}
 							{#if $corridorIssue}<p
 									role="status"
@@ -429,7 +455,7 @@
 								</p>{/if}
 							<div class="flex flex-wrap gap-2">
 								<button
-									class={button}
+									class="ui-button delete-corridor"
 									disabled={$corridorProject.corridors.length === 1}
 									on:click={() => corridorEditor.removeCorridor($selectedCorridor.id)}
 									>Delete corridor</button
@@ -541,6 +567,18 @@
 {/if}
 
 <style>
+	.delete-corridor {
+		color: #fff;
+		background: #dc2626;
+		border-color: #dc2626;
+	}
+	.delete-corridor:hover:not(:disabled) {
+		background: #b91c1c;
+		border-color: #b91c1c;
+	}
+	.delete-corridor:focus-visible {
+		outline-color: #dc2626;
+	}
 	.network-workspace {
 		height: 100%;
 		display: flex;
