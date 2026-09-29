@@ -104,9 +104,19 @@
 	on:keydown={keys}
 />
 <header class="workspace-toolbar" bind:this={toolbar}>
-	<a href="/" class="workspace-brand" aria-label="Greenwave home"
-		><span aria-hidden="true">▥</span> Greenwave</a
-	>
+	<a href="/" class="workspace-brand" aria-label="Greenwave home">
+		<svg class="workspace-brand-mark" viewBox="0 0 24 36" aria-hidden="true" focusable="false">
+			<path d="M12 31v3" stroke="#36555a" stroke-width="3" stroke-linecap="round" />
+			<rect x="3" y="1" width="18" height="31" rx="6" fill="#153a3f" stroke="#36555a" />
+			<circle cx="12" cy="8" r="3.2" fill="#78464a" />
+			<circle cx="12" cy="16" r="3.2" fill="#78663b" />
+			<circle cx="12" cy="24" r="5.5" fill="#4ade80" opacity="0.15" />
+			<circle cx="12" cy="24" r="4.3" fill="#4ade80" opacity="0.25" />
+			<circle cx="12" cy="24" r="3.2" fill="#4ade80" />
+			<circle cx="11" cy="23" r="1" fill="#dcfce7" opacity="0.85" />
+		</svg>
+		Greenwave
+	</a>
 	<div class="workspace-navigation">
 		<nav aria-label="Workspace views" class="workspace-nav">
 			<a
