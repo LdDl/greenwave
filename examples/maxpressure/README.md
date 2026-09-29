@@ -1,12 +1,29 @@
 # Max-Pressure Example
 
-Demonstrates the Smoothing-MP algorithm on a 2-intersection corridor.
+Demonstrates an experimental normalized max-pressure controller with a coordination boost on a 2-intersection corridor. The current model is an adaptation inspired by the papers below, not a validated reproduction of their models or stability guarantees.
 
-Based on: Varaiya, P. (2013). [Max pressure control of a network of signalized intersections](https://doi.org/10.1016/j.trc.2013.08.014). Transportation Research Part C, 36, 184-195.
+Based on: Varaiya, P. (2013). [Max pressure control of a network of signalized intersections](https://doi.org/10.1016/j.trc.2013.08.014). Transportation Research Part C, 36, 177-195.
 
 Normalized pressure (Modified MP): Kouvelas, A., Lioris, J., Fayazi, S.A., Varaiya, P. (2014). [Maximum pressure controller for stabilizing queues in signalized arterial networks](https://doi.org/10.3141/2421-15). Transportation Research Record, 2421(1), 133-141.
 
-Coordination enhancement: Xu, H., Barman, S., Levin, M.W. (2024). [Smoothing-MP: A novel max-pressure signal control considering signal coordination](https://doi.org/10.1016/j.trc.2024.104782). Transportation Research Part C, 166, 104782.
+Coordination enhancement: Xu, T., Barman, S., Levin, M.W. (2024). [Smoothing-MP: A novel max-pressure signal control considering signal coordination to smooth traffic in urban networks](https://doi.org/10.1016/j.trc.2024.104760). Transportation Research Part C, 166, 104760.
+
+## Current status and next steps
+
+The original PDFs in `tex` have now been checked directly. [PAPER_MODEL.md](../../maxpressure/PAPER_MODEL.md) maps the implementation to the source equations and records an ambiguity in Xu's printed objective (13). Corridor membership and one-step actuation history follow section 3.5; the queue model and coordination score still contain explicit project-specific approximations.
+
+Transfers between road links now conserve vehicles: diverging movements share the upstream queue, merging movements share receiving space, and rejected flow remains upstream. Regression tests cover both alpha=0 and alpha=1, full and partially full destinations, duplicate connectors, and repeated simulation steps without external demand or drainage.
+
+The remaining work before connecting this controller to the shared network editor is:
+
+1. Define movement demand and turning proportions. Queues currently belong to roads, so separate left-turn and through demand cannot be represented. Graph topology lists possible movements but does not specify their traffic shares.
+2. Account for demand that cannot enter a full road. Injection currently clips at road capacity without retaining a boundary backlog or reporting rejected arrivals. Queue totals alone cannot establish throughput or stability under overload.
+3. Implement timing constraints. `MinGreenS`, `MaxGreenS`, and `ClearanceS` exist in the model but are not enforced. `StagesFromJunction` collects all groups with any green in a phase, without checking that their green intervals overlap.
+4. Resolve the objective's ambiguity and replace legacy road pressures with movement pressures. The indicator now follows the immediately preceding signal actuation only on configured corridors. Xu's indicator uses the green signal, not measured discharge or travel time.
+5. Validate REST inputs and synthesized programs. The current stage-frequency proposal is not a simulation of the resulting fixed program; its timing constraints, multi-group consistency, and offset preservation need review.
+6. Map the shared editor's directed roads and assigned movements to meso links and connectors, then compare controllers on identical demand. Corridor intensity alone does not supply turning proportions or demand for every network entrance.
+
+The source of truth for signal programs and group assignments remains the shared editor project. The existing green-wave calculation and its UI are separate from this MP simulation.
 
 ## Run
 
@@ -57,16 +74,16 @@ Intersection B (macroNode=60):
 
 ## Why meso-level graph
 
-The original MP papers (Varaiya 2013, Xu et al. 2024) use a macro graph: one node per intersection, one edge per road. Movements are abstract pairs with external turning ratios, and queues are per-movement point queues with infinite capacity. Our meso-level graph from go-gmns provides structural advantages:
+The meso graph from go-gmns represents movements as connector links between road links. The current implementation uses the following simplified data model:
 
 | Aspect | Macro (Varaiya / Xu) | Meso (ours) |
 |:---|:---|:---|
 | Movement | Abstract pair (i,j) + turning ratio | Connector link with ID, satflow, type |
-| Turning ratios | Required as external input | Encoded in graph structure |
+| Turning ratios | Required as external input | Not represented; topology only lists possible turns |
 | Queue model | Per-movement, point queue | Per-link, finite capacity $K$ |
 | Link capacity | Infinite (assumed) | Finite: $K = length \cdot lanes / L_{veh}$ |
 
-Consequences: turning ratios do not appear in the pressure formula (each connector = one movement). Finite capacity enables Kouvelas normalization ($x/K$). The coordination indicator $c_{u,d}$ maps directly to graph queries (`MovementMesoLinkOutcome` / `MovementMesoLinkIncome`).
+Pressure uses road occupancy $x/K$. When active connectors compete for a queue, discharge is allocated in proportion to their saturation flows. This is an explicit approximation, not measured turning demand. The coordination indicator $c_{u,d}$ uses graph queries (`MovementMesoLinkOutcome` / `MovementMesoLinkIncome`) and stored stage history.
 
 ## Scenario
 
@@ -74,10 +91,10 @@ The example simulates a 10-minute period with time-varying demand (morning rush)
 
 | Phase | Time | Demand multiplier | Description |
 |:---:|:---:|:---:|:---|
-| Ramp-up | 0--60s | 0.5x -> 1.0x | Traffic builds |
-| Peak | 60--300s | 1.3x | Rush hour, network oversaturated |
-| Ramp-down | 300--420s | 1.3x -> 1.0x | Peak subsides |
-| Recovery | 420--600s | 1.0x | Normal load |
+| Ramp-up | 0-60s | 0.5x -> 1.0x | Traffic builds |
+| Peak | 60-300s | 1.3x | Rush hour, network oversaturated |
+| Ramp-down | 300-420s | 1.3x -> 1.0x | Peak subsides |
+| Recovery | 420-600s | 1.0x | Normal load |
 
 Base demand rates:
 - Link 1 (WA->A): 1600 veh/h - heavy eastbound corridor
@@ -90,10 +107,11 @@ Initial queues represent residual congestion: link1=15, link2=8, link3=5, link4=
 
 Both scenarios (Standard MP and Smoothing-MP) run on identical input data.
 
+The coordinated corridor is explicitly `[1, 3, 7]`: movement 100 at A can give priority to movement 200 at B on the next step. Movement 201, which turns off the corridor, receives no coordination bonus. No previous signal state is supplied, so the first step has no bonus. REST clients with `alpha > 0` must now supply `coordinated_corridors`; see [the request contract](../../maxpressure/PAPER_MODEL.md#coordination-implemented-in-this-step).
+
 ## Realistic 4-phase scenario
 
-The `runRealisticScenario` function extends the basic 2-stage model to a realistic
-4-phase, 4-group signal plan derived from a `junction.Junction` via `StagesFromJunction`.
+The `runRealisticScenario` function extends the basic 2-stage model to a realistic 4-phase, 4-group signal plan derived from a `junction.Junction` via `StagesFromJunction`.
 
 ### Signal plan
 
@@ -106,8 +124,7 @@ Each intersection has 4 signal groups:
 | 2 | NS through |
 | 3 | NS left turn |
 
-4 phases per cycle (total cycle = 95s). Each active group follows GREEN->YELLOW->RED;
-inactive groups stay RED throughout the phase.
+4 phases per cycle (total cycle = 95s). Each active group follows GREEN->YELLOW->RED; inactive groups stay RED throughout the phase.
 
 | Phase | Duration | Group 0 | Group 1 | Group 2 | Group 3 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -116,15 +133,11 @@ inactive groups stay RED throughout the phase.
 | 2 | 28s | R(28) | R(28) | G(23)->Y(3)->R(2) | R(28) |
 | 3 | 12s | R(12) | R(12) | R(12) | G(8)->Y(2)->R(2) |
 
-**Signal transition rule**: for each group, consecutive phases must end with the same
-signal meaning -> prohibition (R, Y) or permission (G). All phases here end with R,
-so all transitions are prohibition->prohibition. This prevents e.g. a phase ending
-GREEN immediately followed by a phase starting GREEN for the same group.
+**Signal transition rule**: for each group, consecutive phases must end with the same signal meaning -> prohibition (R, Y) or permission (G). All phases here end with R, so all transitions are prohibition->prohibition. This prevents e.g. a phase ending GREEN immediately followed by a phase starting GREEN for the same group.
 
 ### Network extension
 
-Links 9, 10 (at A) and 18, 19 (at B) are added as left-turn departure links (boundary
-drains). Four new connectors map left-turn groups to these links:
+Links 9, 10 (at A) and 18, 19 (at B) are added as left-turn departure links (boundary drains). Four new connectors map left-turn groups to these links:
 
 | ID | Movement | Upstream -> Downstream | S (veh/h) | Group | Stage |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -135,9 +148,7 @@ drains). Four new connectors map left-turn groups to these links:
 
 ### Stages derived via StagesFromJunction
 
-Instead of listing connector IDs manually, stages are built from the junction config.
-`StagesFromJunction` inspects each phase's signal groups and collects connectors for
-every group with at least one GREEN signal:
+Instead of listing connector IDs manually, stages are built from the junction config. `StagesFromJunction` inspects each phase's signal groups and collects connectors for every group with at least one GREEN signal:
 
 ```
 Junction A: 4 phases -> 4 stages (cycle ~95s)
@@ -149,37 +160,19 @@ Junction A: 4 phases -> 4 stages (cycle ~95s)
 
 ### Realistic scenario output
 
+Current summary from the four-phase example:
+
 ```
-=== Realistic 4-phase junctions, Smoothing-MP (alpha=0.5) ===
-  t=  30s | total  40.3 | link3   0.7 | int50=>sg2 int60=>sg0
-  t=  60s | total  53.1 | link3   0.4 | int50=>sg0 int60=>sg0
-  ...
-  t= 600s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg2
-  ---
-  avg total queue: 161.6 veh | max: 211.0 veh
-  avg link3 queue:  27.0 veh | max:  42.6 veh
-  B stage selection: sg0(EW-thr)=49  sg1(EW-left)=0  sg2(NS-thr)=71  sg3(NS-left)=0  (total=120)
+  avg total queue: 156.7 veh | max: 222.5 veh
+  avg link3 queue:  31.6 veh | max:  58.1 veh
+  B stage selection: sg0(EW-thr)=38  sg1(EW-left)=0  sg2(NS-thr)=82  sg3(NS-left)=0  (total=120)
 ```
 
 ### Interpreting the realistic results
 
-**sg1 and sg3 are never selected.** This is expected and correct. Left-turn departure
-links (9, 10, 18, 19) are boundary drains -> always flushed to zero. With $x_d = 0$,
-the movement weight simplifies to $w = S \cdot x_u / K_u$. However, the competing
-through stages (sg0, sg2) have higher combined satflow (900+700=1600 vs 600 for sg1),
-so through movements always outweigh left turns under the same upstream queue.
+The left-turn stages are never selected in this example. This exposes the shared road-queue approximation: through and left-turn movements compete using the same upstream queue, and the through stages have higher combined saturation flow. Separate demand for vehicles waiting to turn left is not modeled, so these results cannot demonstrate acceptable left-turn service.
 
-**Left turns would activate when:** the downstream through-link (e.g. link 3) becomes
-heavily congested, reducing sg0's pressure via the $-x_d/K_d$ term. In a full network
-without boundary drains, left-turn departure links accumulate queue and create genuine
-competition. The current example uses isolated departures intentionally to keep the
-corridor dynamics clean.
-
-**The 49/71 split (sg0 vs sg2 at B) is identical to the 2-stage Smoothing-MP scenario.**
-Adding left-turn stages does not disturb coordination -> MP correctly ignores empty stages
-and focuses on competing through movements. This confirms that `StagesFromJunction`
-produces stages that are behaviorally equivalent to the manually built 2-stage case
-when left-turn demand is absent.
+The four-phase example currently produces the same totals as the two-stage scenario. It exercises the junction-to-stage mapping, but does not validate phase transitions or intergreen timing.
 
 ## Algorithm step-by-step
 
@@ -199,7 +192,7 @@ Links 5, 6, 7, 8 are auto-detected as boundary departures (they are `MovementMes
 
 ### Step 3: Compute pressure for each stage
 
-Note: the Original-MP (Varaiya, 2013) uses absolute queue lengths with infinite link capacity. We use the Modified MP formulation (Kouvelas et al., 2014) which normalizes queues by storage capacity $K$, accounting for finite link lengths. On the meso graph, turning ratios are encoded in the graph structure (each connector = one movement), so they do not appear in the formula.
+The current implementation normalizes road queues by storage capacity $K$. It does not use per-movement queues or turning proportions; these are model limitations, not information supplied implicitly by the meso graph.
 
 For each connector link (movement) connecting upstream segment $u$ to downstream segment $d$, compute the movement weight:
 
@@ -233,58 +226,74 @@ Decision: $W(\text{sg0}) = 367.9 > W(\text{sg1}) = 183.3$ $\Rightarrow$ activate
 
 ### Step 4: Discharge vehicles
 
-For the active stage, each connector discharges vehicles from upstream to downstream:
+For each active connector $m=(u,d)$, first compute the requested discharge:
 
-$$d_{u,d}(k) = \min\!\left(\frac{S_{u,d} \cdot \Delta t}{3600},\; x_u(k)\right)$$
+$$r_m = \frac{S_m \cdot \Delta t}{3600}$$
 
-Example: connector 100 (EBT, $S = 900$), $\Delta t = 5$ s $\Rightarrow$ max discharge $= 900 \cdot 5 / 3600 = 1.25$ veh.
+All active movements leaving the same road share its queue proportionally:
+
+$$a_m = r_m \cdot \min\!\left(1,\frac{x_u}{\sum_{j:\,u(j)=u} r_j}\right)$$
+
+All movements entering the same road then share its available space:
+
+$$d_m = a_m \cdot \min\!\left(1,\frac{\max(0,K_d-x_d)}{\sum_{j:\,d(j)=d} a_j}\right)$$
+
+Only positive requested flows participate. Queues $x$ are measured after demand injection and boundary drainage, before any internal transfer. A road with unspecified storage capacity retains the existing unlimited receiving behavior. Repeated references to the same active connector discharge only once.
+
+For example, one vehicle shared by two equal-capacity movements produces 0.5 vehicles on each destination. If one destination is full, its 0.5 vehicles stay upstream instead of disappearing or being reassigned to the other turn. Fractional vehicle counts represent continuous traffic flow.
+
+Transfers are simultaneous: arrivals cannot leave a second road in the same step, and room freed by outgoing traffic becomes available on the next step. This conservative discretization is not a travel-time model.
 
 ### Step 5: Update queues
 
-$$x_l(k+1) = x_l(k) - \sum_{\text{out}} d_{\text{out}}(k) + \sum_{\text{in}} d_{\text{in}}(k) + \text{inject}_l(k)$$
+Starting with the queues after injection and drainage:
+
+$$x_l(k+1) = x_l^{\text{pre-transfer}}(k) - \sum_{\text{out}} d_{\text{out}}(k) + \sum_{\text{in}} d_{\text{in}}(k)$$
 
 ### Step 6: Update intersection state
 
-Record which stage was active (needed for Smoothing-MP boost in next step). Advance simulation time by $\Delta t$.
+After every intersection has chosen its stage, record the selected stage in `PreviousStage`, mark `HasPreviousStage=true`, update the active stage, and advance simulation time by $\Delta t$. The next decision uses this completed step's actuation. A zero-value stage ID does not count as known history before the first step.
 
 ## Smoothing-MP enhancement
 
-Following Xu et al. (2024), when $\alpha > 0$, the optimizer adds a constant coordination boost to movements whose upstream intersection just released a platoon. Define the coordination indicator:
+When $\alpha > 0$, the prototype adds a constant coordination bonus to candidate-stage movements with an actuated predecessor on a configured corridor:
 
-$$c_{u,d}(k) = \begin{cases} 1 & \text{if a connector at an upstream intersection discharged into } u \text{ at step } k-1 \\ 0 & \text{otherwise} \end{cases}$$
+$$c_{u,d}(k) = \begin{cases} 1 & \text{if a configured corridor predecessor had green at step } k-1 \\ 0 & \text{otherwise} \end{cases}$$
 
 Then the smoothed movement weight becomes:
 
 $$w^{\text{smooth}}_{u,d} = w_{u,d} + \alpha \cdot S_{u,d} \cdot c_{u,d}$$
 
-The boost $\alpha \cdot S_{u,d}$ is a constant (not queue-dependent) -- this matches the proven formulation from Xu et al. where stability is preserved when $\xi_{u,d} = \alpha \cdot S_{u,d} \leq Q_{u,d}^2$.
+The boost $\alpha \cdot S_{u,d}$ is independent of queue length. The paper's stability result has not been established for this implementation, which uses normalized road queues, finite receiving space, and no explicit turning proportions.
 
 When $c_{u,d} = 0$, this reduces to standard max-pressure. When $c_{u,d} = 1$, the additional term $\alpha \cdot S_{u,d}$ biases the downstream intersection toward giving green to the arriving platoon.
 
-In this example: when intersection A gives green to EW (sg0), vehicles discharge from link 1 into link 3. On the next step, connectors 200 and 201 at intersection B see that their upstream link (link 3) was just served by A. The constant boost increases their pressure, making B more likely to also give green to EW -- letting the platoon pass through without stopping.
+In this example, movement 100 feeding link 3 can increase the weight of connector 200 at B. This biases B toward EW. Other movements feeding link 3 do not activate that corridor's indicator. A green stage does not itself prove that a platoon was released, and the current simulation cannot establish stop-free passage along a road.
 
 ## Output
 
+Recorded after configuring the directed corridor and correcting actuation history. Intersection columns may appear in a different order because results are collected from a Go map.
+
 ```
 === Standard MP (alpha=0) ===
-  t=  30s | total  40.2 | link3  10.0 | int50=>sg1 int60=>sg1
+  t=  30s | total  40.2 | link3  10.0 | int60=>sg1 int50=>sg1
   t=  60s | total  46.1 | link3  10.6 | int50=>sg0 int60=>sg0
   t=  90s | total  65.6 | link3  15.3 | int50=>sg1 int60=>sg1
   t= 120s | total  84.9 | link3  20.3 | int50=>sg0 int60=>sg1
   t= 150s | total 104.4 | link3  23.1 | int50=>sg0 int60=>sg1
   t= 180s | total 124.0 | link3  28.1 | int50=>sg0 int60=>sg1
-  t= 210s | total 143.6 | link3  30.8 | int50=>sg0 int60=>sg0
-  t= 240s | total 163.1 | link3  35.8 | int60=>sg1 int50=>sg0
+  t= 210s | total 143.6 | link3  30.8 | int60=>sg0 int50=>sg0
+  t= 240s | total 163.1 | link3  35.8 | int50=>sg0 int60=>sg1
   t= 270s | total 177.1 | link3  40.3 | int50=>sg1 int60=>sg1
   t= 300s | total 182.9 | link3  42.2 | int50=>sg1 int60=>sg0
-  t= 330s | total 188.2 | link3  46.7 | int60=>sg1 int50=>sg0
+  t= 330s | total 188.2 | link3  46.7 | int50=>sg0 int60=>sg1
   t= 360s | total 192.3 | link3  50.8 | int50=>sg0 int60=>sg1
   t= 390s | total 197.6 | link3  52.8 | int50=>sg1 int60=>sg1
   t= 420s | total 201.7 | link3  55.0 | int50=>sg1 int60=>sg1
   t= 450s | total 205.0 | link3  57.2 | int50=>sg1 int60=>sg1
   t= 480s | total 208.3 | link3  59.4 | int50=>sg1 int60=>sg1
   t= 510s | total 209.2 | link3  61.7 | int50=>sg0 int60=>sg1
-  t= 540s | total 212.5 | link3  61.7 | int60=>sg0 int50=>sg0
+  t= 540s | total 212.5 | link3  61.7 | int50=>sg0 int60=>sg0
   t= 570s | total 215.8 | link3  63.9 | int50=>sg0 int60=>sg0
   t= 600s | total 219.2 | link3  66.1 | int50=>sg0 int60=>sg0
   ---
@@ -293,30 +302,30 @@ In this example: when intersection A gives green to EW (sg0), vehicles discharge
   B chose EW(sg0): 34 times | NS(sg1): 86 times  (EW% = 28%)
 
 === Smoothing-MP (alpha=0.5) ===
-  t=  30s | total  40.3 | link3   0.7 | int60=>sg0 int50=>sg1
-  t=  60s | total  53.1 | link3   0.4 | int50=>sg0 int60=>sg0
-  t=  90s | total  75.2 | link3   2.9 | int50=>sg0 int60=>sg0
-  t= 120s | total  94.8 | link3   7.9 | int50=>sg0 int60=>sg1
-  t= 150s | total 114.3 | link3  12.6 | int50=>sg1 int60=>sg1
-  t= 180s | total 133.6 | link3  15.4 | int50=>sg0 int60=>sg0
-  t= 210s | total 153.1 | link3  20.4 | int50=>sg0 int60=>sg1
-  t= 240s | total 172.7 | link3  25.4 | int50=>sg0 int60=>sg1
-  t= 270s | total 189.2 | link3  27.9 | int50=>sg1 int60=>sg1
-  t= 300s | total 195.0 | link3  32.1 | int50=>sg1 int60=>sg1
-  t= 330s | total 200.3 | link3  36.2 | int50=>sg1 int60=>sg1
-  t= 360s | total 204.4 | link3  38.2 | int50=>sg1 int60=>sg1
-  t= 390s | total 207.2 | link3  40.4 | int50=>sg0 int60=>sg0
-  t= 420s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 450s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 480s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 510s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 540s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 570s | total 209.1 | link3  42.6 | int50=>sg0 int60=>sg1
-  t= 600s | total 209.1 | link3  42.6 | int60=>sg1 int50=>sg0
+  t=  30s | total  40.2 | link3   1.1 | int50=>sg1 int60=>sg0
+  t=  60s | total  46.9 | link3   2.5 | int50=>sg0 int60=>sg0
+  t=  90s | total  66.4 | link3   5.3 | int50=>sg0 int60=>sg0
+  t= 120s | total  86.0 | link3  10.0 | int50=>sg1 int60=>sg1
+  t= 150s | total 105.6 | link3  15.0 | int50=>sg1 int60=>sg1
+  t= 180s | total 124.8 | link3  17.8 | int50=>sg0 int60=>sg1
+  t= 210s | total 144.4 | link3  22.8 | int50=>sg0 int60=>sg1
+  t= 240s | total 163.9 | link3  25.6 | int50=>sg0 int60=>sg0
+  t= 270s | total 177.9 | link3  30.3 | int50=>sg0 int60=>sg1
+  t= 300s | total 183.8 | link3  34.4 | int50=>sg0 int60=>sg1
+  t= 330s | total 189.1 | link3  38.6 | int50=>sg0 int60=>sg1
+  t= 360s | total 195.6 | link3  40.6 | int50=>sg1 int60=>sg0
+  t= 390s | total 198.4 | link3  45.0 | int60=>sg1 int50=>sg0
+  t= 420s | total 202.5 | link3  46.9 | int50=>sg1 int60=>sg1
+  t= 450s | total 205.8 | link3  46.9 | int60=>sg0 int50=>sg1
+  t= 480s | total 209.2 | link3  49.2 | int50=>sg1 int60=>sg0
+  t= 510s | total 212.5 | link3  51.4 | int50=>sg1 int60=>sg0
+  t= 540s | total 215.8 | link3  53.6 | int50=>sg1 int60=>sg0
+  t= 570s | total 219.2 | link3  55.8 | int60=>sg1 int50=>sg1
+  t= 600s | total 222.5 | link3  58.1 | int60=>sg1 int50=>sg1
   ---
-  avg total queue: 161.6 veh | max: 211.0 veh
-  avg link3 queue:  27.0 veh | max:  42.6 veh
-  B chose EW(sg0): 49 times | NS(sg1): 71 times  (EW% = 41%)
+  avg total queue: 156.7 veh | max: 222.5 veh
+  avg link3 queue:  31.6 veh | max:  58.1 veh
+  B chose EW(sg0): 38 times | NS(sg1): 82 times  (EW% = 32%)
 ```
 
 ## Reading the output
@@ -332,39 +341,18 @@ Each line shows a snapshot every 30 seconds:
 Summary metrics:
 - `avg total queue` / `max` - network-wide congestion over the simulation
 - `avg link3 queue` / `max` - congestion on the coordination link specifically
-- `B chose EW%` - how often intersection B gave green to the eastbound corridor (higher = better coordination with A)
+- `B chose EW%` - how often intersection B selected the eastbound stage
 
 ## Results comparison
 
-| Metric | Standard MP | Smoothing-MP ($\alpha$=0.5) | Difference |
-|:---|---:|---:|---:|
-| avg total queue | 155.4 veh | 161.6 veh | +4% |
-| max total queue | 219.9 veh | 211.0 veh | -4% |
-| avg link3 queue | 40.2 veh | 27.0 veh | -33% |
-| max link3 queue | 67.1 veh | 42.6 veh | -36% |
-| B chose EW (sg0) | 28% | 41% | +13 p.p. |
+These are descriptive results from the current simplified example, not a validation of the paper or a measure of all requested traffic being served.
 
-Observations:
+| Metric | Standard MP | Smoothing-MP ($\alpha$=0.5) |
+|:---|---:|---:|
+| avg total queue | 155.4 veh | 156.7 veh |
+| max total queue | 219.9 veh | 222.5 veh |
+| avg link3 queue | 40.2 veh | 31.6 veh |
+| max link3 queue | 67.1 veh | 58.1 veh |
+| B chose EW (sg0) | 28% | 32% |
 
-1. The coordination link (link 3, A->B) shows a 33% reduction in average queue and 36% in peak queue. This is the core benefit: Smoothing-MP keeps the inter-intersection corridor clearer by coordinating B's green with A's platoon release.
-
-2. Intersection B chose EW (sg0) 41% of the time with smoothing vs 28% without. The constant boost $\alpha \cdot S$ makes B respond to platoons arriving from A.
-
-3. Total network queue is slightly higher (+4% average) -- a trade-off. The NS approaches at B get less green time because EW is boosted. This is expected: coordination improves corridor throughput at the cost of cross-street delay.
-
-4. Smoothing-MP stabilizes earlier (total queue stops growing at t=420s vs continuing through t=600s with standard MP). Peak total queue is lower (211 vs 220).
-
-5. During recovery (t>420s), standard MP still has link3 queue growing (55 -> 66), while Smoothing-MP plateaus at ~43. The coordination effect is most visible after peak demand subsides.
-
-## Code to math mapping
-
-| Formula | Code function | File |
-|:---|:---|:---|
-| $w_{u,d}$ (movement weight) | `Network.MovementWeight()` | `pressure.go` |
-| $W(p)$ (phase pressure) | `Network.PhasePressure()` | `pressure.go` |
-| $p^* = \arg\max W$ (phase selection) | `Network.SelectPhase()` | `pressure.go` |
-| $w^{\text{smooth}}_{u,d} = w + \alpha \cdot S \cdot c$ (Xu et al.) | `Network.SmoothedMovementWeight()` | `smoothing.go` |
-| $c_{u,d}$ (coordination indicator) | `Network.IsUpstreamServed()` | `smoothing.go` |
-| Queue dynamics $x_l(k+1)$ | `MPOptimizer.Step()` | `optimizer.go` |
-| $\text{inject}_l(k)$ | `DemandFunc` / `ConstantDemand()` | `optimizer.go` |
-| Boundary drain | `MPOptimizer.detectBoundaryDepartures()` | `optimizer.go` |
+In this run, smoothing reduces the queue on the connecting road while increasing the average total queue. More green selections for EW describe the controller's preference; they do not by themselves demonstrate coordination quality. Demand rejected at full entrances is not included in these totals, so a plateau in queue length must not be interpreted as network stability.

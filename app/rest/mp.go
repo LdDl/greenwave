@@ -52,6 +52,12 @@ func RequestMPRun() func(ctx echo.Context) error {
 		if req.Config.SimTime <= 0 {
 			return ctx.JSON(400, echo.Map{"Error": "config.sim_time must be greater than 0"})
 		}
+		if req.Config.Alpha < 0 {
+			return ctx.JSON(400, echo.Map{"Error": "config.alpha must be non-negative"})
+		}
+		if req.Config.Alpha > 0 && len(req.CoordinatedCorridors) == 0 {
+			return ctx.JSON(400, echo.Map{"Error": "coordinated_corridors is required when config.alpha > 0"})
+		}
 		deltaT := req.Config.DeltaT
 		if deltaT <= 0 {
 			deltaT = defaultMPDeltaT
@@ -79,10 +85,24 @@ func RequestMPRun() func(ctx echo.Context) error {
 				groupConnectors[junction.GroupID(gidInt)] = linkIDs
 			}
 			stages := maxpressure.StagesFromJunction(jun, groupConnectors)
+			if len(stages) == 0 {
+				return ctx.JSON(400, echo.Map{"Error": fmt.Sprintf("intersection %d must have at least one phase", intCfg.MacroNodeID)})
+			}
 			net.Intersections[gmns.NodeID(intCfg.MacroNodeID)] = &maxpressure.IntersectionState{
 				MacroNodeID: gmns.NodeID(intCfg.MacroNodeID),
 				Stages:      stages,
 			}
+		}
+
+		corridors := make([][]gmns.LinkID, len(req.CoordinatedCorridors))
+		for i, path := range req.CoordinatedCorridors {
+			corridors[i] = make([]gmns.LinkID, len(path))
+			for j, id := range path {
+				corridors[i][j] = gmns.LinkID(id)
+			}
+		}
+		if err := net.SetCoordinatedCorridors(corridors); err != nil {
+			return ctx.JSON(400, echo.Map{"Error": err.Error()})
 		}
 
 		// Build demand function
@@ -218,4 +238,3 @@ func RequestMPRun() func(ctx echo.Context) error {
 		})
 	}
 }
-

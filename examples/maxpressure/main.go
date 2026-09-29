@@ -91,6 +91,11 @@ func runScenario(alpha float64) {
 		},
 	}
 
+	// Coordinate through movements along the directed road path WA -> A -> B -> EB.
+	if err := net.SetCoordinatedCorridors([][]gmns.LinkID{{1, 3, 7}}); err != nil {
+		panic(err)
+	}
+
 	// Effective capacity per approach ~ 800 veh/h (satflow 1600 * ~50% green).
 	// Base rates above effective capacity to create realistic congestion.
 	// At peak (x1.3): link1=2080, link2=1040, link4=1560 - oversaturated.
@@ -300,6 +305,9 @@ func runRealisticScenario(alpha float64) {
 	net.Intersections[60] = &maxpressure.IntersectionState{
 		MacroNodeID: 60,
 		Stages:      maxpressure.StagesFromJunction(jun, groupConnectorsB),
+	}
+	if err := net.SetCoordinatedCorridors([][]gmns.LinkID{{1, 3, 7}}); err != nil {
+		panic(err)
 	}
 
 	demand := peakDemand(map[gmns.LinkID]float64{

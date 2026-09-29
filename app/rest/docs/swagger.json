@@ -128,6 +128,52 @@
                     }
                 }
             }
+        },
+        "/api/maxpressure/run": {
+            "post": {
+                "description": "Runs a Smoothing-MP simulation on a meso network and returns\nevaluation metrics and a synthesized signal timing proposal.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MaxPressure"
+                ],
+                "summary": "Run max-pressure simulation",
+                "parameters": [
+                    {
+                        "description": "MP simulation request",
+                        "name": "POST-body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.MPRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.MPRunResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error400"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/codes.Error500"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -244,16 +290,12 @@
                     "description": "Indentifier for the phase",
                     "type": "integer"
                 },
-                "signals": {
-                    "description": "List of signals that define the phase",
+                "signal_groups": {
+                    "description": "List of signal groups that define the phase (one entry per group)",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.SignalDTO"
+                        "$ref": "#/definitions/dto.SignalGroupDTO"
                     }
-                },
-                "total_seconds": {
-                    "description": "Total duration of the phase in seconds, calculated from the signals",
-                    "type": "integer"
                 }
             }
         },
@@ -505,6 +547,341 @@
                     "items": {
                         "type": "number"
                     }
+                }
+            }
+        },
+        "dto.MPDemandDTO": {
+            "type": "object",
+            "properties": {
+                "base_rates": {
+                    "description": "BaseRates maps link ID to base demand intensity in veh/h. Used for type \"peak\".",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "peak_duration_s": {
+                    "description": "PeakDurationS is the peak phase duration in seconds. Used for type \"peak\".",
+                    "type": "number"
+                },
+                "peak_factor": {
+                    "description": "PeakFactor is the demand multiplier at peak. Defaults to 1.3 when 0. Used for type \"peak\".",
+                    "type": "number"
+                },
+                "ramp_down_s": {
+                    "description": "RampDownS is the ramp-down phase duration in seconds. Used for type \"peak\".",
+                    "type": "number"
+                },
+                "ramp_up_s": {
+                    "description": "RampUpS is the ramp-up phase duration in seconds. Used for type \"peak\".",
+                    "type": "number"
+                },
+                "rates": {
+                    "description": "Rates maps link ID to constant demand intensity in veh/h. Used for type \"constant\".",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "type": {
+                    "description": "Type is the demand model: \"constant\" or \"peak\".",
+                    "type": "string"
+                }
+            }
+        },
+        "dto.MPDrainDTO": {
+            "type": "object",
+            "properties": {
+                "rates": {
+                    "description": "Rates maps link ID to drain intensity in veh/h. Used for type \"rate\".",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "type": {
+                    "description": "Type is the drain model: \"auto\", \"none\", or \"rate\".",
+                    "type": "string"
+                }
+            }
+        },
+        "dto.MPEvaluationDTO": {
+            "type": "object",
+            "properties": {
+                "per_intersection": {
+                    "description": "PerIntersection contains per-intersection stage selection statistics.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MPIntersectionStatsDTO"
+                    }
+                },
+                "per_link": {
+                    "description": "PerLink contains per-link queue statistics (road segments only).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MPLinkStatsDTO"
+                    }
+                },
+                "total_delay_veh_s": {
+                    "description": "TotalDelayVehS is the total accumulated queue (veh * s) summed over all road\nlinks and all simulation steps (sum of queue_i * delta_t at each step).",
+                    "type": "number"
+                }
+            }
+        },
+        "dto.MPIntersectionConfigDTO": {
+            "type": "object",
+            "properties": {
+                "group_connectors": {
+                    "description": "GroupConnectors maps signal group ID to the meso connector link IDs it controls.\nJSON keys are group IDs as strings (e.g. \"0\", \"1\").",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    }
+                },
+                "junction": {
+                    "description": "Junction is the full signal plan for this intersection.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.JunctionDTO"
+                        }
+                    ]
+                },
+                "macro_node_id": {
+                    "description": "MacroNodeID is the macro-graph node ID identifying this intersection.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.MPIntersectionStatsDTO": {
+            "type": "object",
+            "properties": {
+                "macro_node_id": {
+                    "description": "MacroNodeID identifies the intersection.",
+                    "type": "integer"
+                },
+                "stage_fractions": {
+                    "description": "StageFractions maps stage ID to the fraction of steps it was selected [0, 1].\nJSON keys are stage IDs as strings.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                }
+            }
+        },
+        "dto.MPLinkDTO": {
+            "type": "object",
+            "properties": {
+                "capacity": {
+                    "description": "Capacity is the saturation flow in veh/h.",
+                    "type": "integer"
+                },
+                "id": {
+                    "description": "ID is the unique link identifier.",
+                    "type": "integer"
+                },
+                "is_connection": {
+                    "description": "IsConnection marks whether this link connects two other mesoscopic links.",
+                    "type": "boolean"
+                },
+                "lanes": {
+                    "description": "Lanes is the number of lanes (road segments).",
+                    "type": "integer"
+                },
+                "length_meters": {
+                    "description": "LengthMeters is the link length in meters (road segments).",
+                    "type": "number"
+                },
+                "macro_node": {
+                    "description": "MacroNode is the parent macro-node ID (connector links only).",
+                    "type": "integer"
+                },
+                "movement_meso_link_income": {
+                    "description": "MovementMesoLinkIncome is the incoming mesoscopic link identifier (connector links only).",
+                    "type": "integer"
+                },
+                "movement_meso_link_outcome": {
+                    "description": "MovementMesoLinkOutcome is the outgoing mesoscopic link identifier (connector links only).",
+                    "type": "integer"
+                },
+                "source_node": {
+                    "description": "SourceNode is the source meso node ID.",
+                    "type": "integer"
+                },
+                "target_node": {
+                    "description": "TargetNode is the target meso node ID.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.MPLinkStatsDTO": {
+            "type": "object",
+            "properties": {
+                "avg_queue_veh": {
+                    "description": "AvgQueueVeh is the time-averaged queue length in vehicles.",
+                    "type": "number"
+                },
+                "link_id": {
+                    "description": "LinkID is the meso link identifier.",
+                    "type": "integer"
+                },
+                "max_queue_veh": {
+                    "description": "MaxQueueVeh is the peak queue length in vehicles.",
+                    "type": "number"
+                }
+            }
+        },
+        "dto.MPNetworkDTO": {
+            "type": "object",
+            "properties": {
+                "links": {
+                    "description": "Links is the list of meso links (road segments and connectors).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MPLinkDTO"
+                    }
+                }
+            }
+        },
+        "dto.MPProposalDTO": {
+            "type": "object",
+            "properties": {
+                "junction": {
+                    "description": "Junction is the updated signal plan with redistributed green times.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.JunctionDTO"
+                        }
+                    ]
+                },
+                "macro_node_id": {
+                    "description": "MacroNodeID identifies the intersection.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.MPRunRequest": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config holds simulation parameters.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.MPSimConfigDTO"
+                        }
+                    ]
+                },
+                "coordinated_corridors": {
+                    "description": "CoordinatedCorridors contains directed road-link paths, each with at least\nthree links and assigned signal-controlled movements between them.\nRequired when config.alpha > 0; reverse direction needs its own path.",
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    }
+                },
+                "demand": {
+                    "description": "Demand defines the traffic input per entry link.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.MPDemandDTO"
+                        }
+                    ]
+                },
+                "drain": {
+                    "description": "Drain controls how vehicles leave the network at boundary exits.\nOmit or set type to \"auto\" for the default behaviour (zero queue each step).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.MPDrainDTO"
+                        }
+                    ]
+                },
+                "initial_queues": {
+                    "description": "InitialQueues sets starting queue length (vehicles) per link ID. Optional.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "intersections": {
+                    "description": "Intersections defines the signal configuration and group-to-connector mapping.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MPIntersectionConfigDTO"
+                    }
+                },
+                "network": {
+                    "description": "Network is the meso-level graph (road segments + connector links).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.MPNetworkDTO"
+                        }
+                    ]
+                }
+            }
+        },
+        "dto.MPRunResponse": {
+            "type": "object",
+            "properties": {
+                "evaluation": {
+                    "description": "Evaluation contains simulation metrics measured over the full SimTime.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.MPEvaluationDTO"
+                        }
+                    ]
+                },
+                "proposal": {
+                    "description": "Proposal contains re-synthesized signal timings based on MP stage fractions.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MPProposalDTO"
+                    }
+                }
+            }
+        },
+        "dto.MPSimConfigDTO": {
+            "type": "object",
+            "properties": {
+                "alpha": {
+                    "description": "Alpha scales the experimental bonus on coordinated_corridors (>= 0).\nZero disables the bonus. This is not the paper's per-step coordination weight.",
+                    "type": "number"
+                },
+                "delta_t": {
+                    "description": "DeltaT is the simulation step duration in seconds. Defaults to 5.0 if not set.",
+                    "type": "number"
+                },
+                "sim_time": {
+                    "description": "SimTime is the total simulation duration in seconds. Must be > 0.",
+                    "type": "number"
+                }
+            }
+        },
+        "dto.SignalGroupDTO": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "Signal group identifier",
+                    "type": "integer"
+                },
+                "signals": {
+                    "description": "List of signals that define the group's state sequence within the phase",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.SignalDTO"
+                    }
+                },
+                "total_seconds": {
+                    "description": "Total duration of the group in seconds, calculated from the signals",
+                    "type": "integer"
                 }
             }
         }

@@ -7,6 +7,10 @@ type MPRunRequest struct {
 	Network MPNetworkDTO `json:"network"`
 	// Intersections defines the signal configuration and group-to-connector mapping.
 	Intersections []MPIntersectionConfigDTO `json:"intersections"`
+	// CoordinatedCorridors contains directed road-link paths, each with at least
+	// three links and assigned signal-controlled movements between them.
+	// Required when config.alpha > 0; reverse direction needs its own path.
+	CoordinatedCorridors [][]int `json:"coordinated_corridors,omitempty"`
 	// Demand defines the traffic input per entry link.
 	Demand MPDemandDTO `json:"demand"`
 	// Drain controls how vehicles leave the network at boundary exits.
@@ -109,7 +113,8 @@ type MPSimConfigDTO struct {
 	DeltaT float64 `json:"delta_t"`
 	// SimTime is the total simulation duration in seconds. Must be > 0.
 	SimTime float64 `json:"sim_time"`
-	// Alpha is the Smoothing-MP coordination coefficient (>= 0). 0 = standard MP.
+	// Alpha scales the experimental bonus on coordinated_corridors (>= 0).
+	// Zero disables the bonus. This is not the paper's per-step coordination weight.
 	Alpha float64 `json:"alpha"`
 }
 
