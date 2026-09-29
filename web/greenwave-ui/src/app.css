@@ -1,2 +1,468 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
+
+:root {
+	font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+	color: #1e293b;
+	background: #eef2f6;
+}
+button,
+a,
+input,
+select,
+summary {
+	-webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled),
+summary {
+	cursor: pointer;
+}
+button:disabled {
+	cursor: not-allowed;
+}
+:focus-visible {
+	outline: 2px solid #0d9488;
+	outline-offset: 3px;
+}
+.app-shell {
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.app-content {
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.workspace-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 20px;
+	background: #fff;
+	border-bottom: 1px solid #dce3ec;
+	position: relative;
+	z-index: 30;
+	flex: none;
+}
+.workspace-brand {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 17px;
+	font-weight: 750;
+	letter-spacing: -0.5px;
+	color: #0f766e;
+	text-decoration: none;
+}
+.workspace-brand span {
+	font-size: 23px;
+}
+.workspace-nav {
+	display: flex;
+	padding: 3px;
+	background: #f1f5f9;
+	border-radius: 8px;
+	gap: 3px;
+}
+.workspace-nav a {
+	padding: 7px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	border-radius: 6px;
+	color: #64748b;
+}
+.workspace-nav a[aria-current='page'] {
+	background: white;
+	box-shadow: 0 1px 3px #0f172a15;
+	color: #0f766e;
+}
+.workspace-project-title {
+	font-size: 13px;
+	color: #475569;
+	max-width: 190px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.workspace-save {
+	font-size: 11px;
+	color: #64748b;
+	margin-right: auto;
+}
+.workspace-save::before {
+	content: '';
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: #0d9488;
+	margin-right: 6px;
+}
+.workspace-save.save-error {
+	color: #b91c1c;
+}
+.workspace-save.save-error::before {
+	background: #b91c1c;
+}
+.workspace-actions,
+.workspace-history,
+.ui-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.workspace-history {
+	padding: 0 8px;
+	border-inline: 1px solid #e2e8f0;
+}
+.ui-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	border: 1px solid #d7e0e8;
+	border-radius: 7px;
+	background: white;
+	padding: 7px 11px;
+	min-height: 34px;
+	font-size: 12px;
+	font-weight: 550;
+	line-height: 1.4;
+	color: #334155;
+	text-decoration: none;
+}
+.ui-button:hover:not(:disabled) {
+	background: #f1f5f9;
+	border-color: #aabaca;
+}
+.ui-button:disabled {
+	opacity: 0.45;
+}
+.ui-primary {
+	background: #0f766e;
+	color: white;
+	border-color: #0f766e;
+}
+.ui-primary:hover:not(:disabled) {
+	background: #115e59;
+	border-color: #115e59;
+}
+.ui-accent {
+	background: #edf9f6;
+	color: #0f766e;
+	border-color: #c6e6dd;
+}
+.ui-count {
+	background: #d4eee6;
+	min-width: 20px;
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-size: 11px;
+}
+.ui-eyebrow {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: #64748b;
+	margin-bottom: 4px;
+}
+.ui-warning {
+	font-size: 12px;
+	line-height: 1.5;
+	color: #92400e;
+	background: #fffbeb;
+	padding: 9px 11px;
+	border-radius: 6px;
+}
+.workspace-menu-anchor {
+	position: relative;
+}
+.workspace-menu {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	width: 310px;
+	max-width: calc(100vw - 24px);
+	padding: 6px;
+	background: white;
+	border: 1px solid #dce3ec;
+	border-radius: 10px;
+	box-shadow: 0 12px 35px #0f172a24;
+	max-height: 70dvh;
+	overflow: auto;
+}
+.workspace-menu button {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 11px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+.workspace-menu button:hover:not(:disabled) {
+	background: #f0fdfa;
+}
+.workspace-menu button:disabled {
+	opacity: 0.45;
+}
+.workspace-menu strong,
+.workspace-menu small {
+	display: block;
+}
+.workspace-menu small {
+	margin-top: 4px;
+	font-size: 11px;
+	color: #64748b;
+	line-height: 1.5;
+}
+.workspace-menu details {
+	border-top: 1px solid #e2e8f0;
+	margin-top: 5px;
+	padding-top: 5px;
+}
+.workspace-menu summary {
+	padding: 10px;
+	font-size: 12px;
+	color: #64748b;
+}
+.workspace-menu p {
+	padding: 0 10px 8px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: #64748b;
+}
+.workspace-alert {
+	background: #fff1f2;
+	border-bottom: 1px solid #fecdd3;
+	color: #9f1239;
+	font-size: 13px;
+	padding: 9px 20px;
+	display: flex;
+	gap: 15px;
+	justify-content: space-between;
+	flex: none;
+}
+.workspace-alert button {
+	text-decoration: underline;
+	flex: none;
+}
+.workspace-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background: #0f172a75;
+	padding: 18px;
+}
+.workspace-dialog {
+	background: white;
+	border-radius: 14px;
+	padding: 25px;
+	max-width: 520px;
+	max-height: 90dvh;
+	overflow: auto;
+	box-shadow: 0 20px 80px #0003;
+}
+.workspace-dialog h2,
+.corridor-picker h2 {
+	font-size: 22px;
+	font-weight: 650;
+}
+.workspace-dialog > p:not(.ui-eyebrow) {
+	font-size: 13px;
+	line-height: 1.6;
+	margin-top: 14px;
+}
+.workspace-dialog .ui-actions {
+	margin-top: 22px;
+	justify-content: flex-end;
+}
+.corridor-overlay {
+	justify-content: flex-end;
+	padding: 12px;
+}
+.corridor-picker {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 480px;
+	max-width: 100%;
+	background: #f8fafc;
+	border-radius: 12px;
+	padding: 24px;
+	box-shadow: 0 20px 80px #0003;
+}
+.corridor-picker header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+.corridor-picker > p {
+	font-size: 13px;
+	color: #64748b;
+	line-height: 1.6;
+	margin: 14px 0 20px;
+}
+.corridor-options {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 3px;
+}
+.corridor-option {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 15px;
+	border-radius: 10px;
+	border: 1px solid #dce3ec;
+	background: #fff;
+	margin-bottom: 10px;
+}
+.corridor-option:hover {
+	border-color: #0d9488;
+}
+.corridor-option[aria-pressed='true'] {
+	border-color: #0d9488;
+	background: #f0fdfa;
+}
+.corridor-option strong {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 14px;
+}
+.corridor-option strong span {
+	font-size: 10px;
+	color: #0f766e;
+	background: #ccfbf1;
+	padding: 3px 6px;
+	border-radius: 4px;
+}
+.corridor-option small {
+	display: block;
+	color: #64748b;
+	font-size: 12px;
+	margin: 8px 0;
+}
+.route-sequence {
+	display: block;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #475569;
+}
+.corridor-option .ui-warning {
+	display: block;
+	margin-top: 10px;
+}
+.corridor-picker footer {
+	display: flex;
+	gap: 8px;
+	padding-top: 16px;
+}
+@media (max-width: 1150px) {
+	.workspace-project-title {
+		display: none;
+	}
+}
+@media (max-width: 850px) {
+	.workspace-toolbar {
+		padding: 9px 12px;
+		gap: 8px;
+	}
+	.workspace-actions {
+		width: 100%;
+	}
+	.workspace-actions > :last-child {
+		margin-left: auto;
+	}
+	.workspace-menu {
+		left: 0;
+		right: auto;
+	}
+	.workspace-save {
+		margin-left: auto;
+		margin-right: 0;
+	}
+}
+@media (max-width: 480px) {
+	.workspace-brand {
+		font-size: 15px;
+	}
+	.workspace-save {
+		font-size: 10px;
+	}
+	.workspace-nav a {
+		padding: 6px 8px;
+	}
+	.workspace-history {
+		padding: 0 5px;
+		gap: 4px;
+	}
+	.workspace-actions {
+		gap: 5px;
+	}
+	.workspace-actions .ui-button {
+		padding: 7px 8px;
+	}
+	.workspace-overlay {
+		padding: 8px;
+	}
+	.corridor-picker {
+		padding: 16px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+	}
+}
+
+@media (max-width: 480px) {
+	.workspace-save {
+		font-size: 0;
+	}
+	.workspace-save::before {
+		margin: 0;
+	}
+	.workspace-actions {
+		flex-wrap: nowrap;
+		gap: 4px;
+	}
+	.workspace-history {
+		padding: 0 4px;
+		gap: 3px;
+	}
+	.workspace-history .ui-button {
+		font-size: 0;
+		min-width: 27px;
+		padding: 5px;
+	}
+	.workspace-history .ui-button::before {
+		content: '↶';
+		font-size: 17px;
+	}
+	.workspace-history .ui-button:last-child::before {
+		content: '↷';
+	}
+	.workspace-menu-anchor {
+		position: static;
+	}
+	.workspace-menu {
+		left: 12px;
+		right: 12px;
+		top: calc(100% + 4px);
+		width: auto;
+	}
+}

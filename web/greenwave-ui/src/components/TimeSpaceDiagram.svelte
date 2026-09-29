@@ -3,6 +3,7 @@
   import { createEventDispatcher } from 'svelte';
 
   import * as d3 from 'd3';
+  import { diagramLayout } from '$lib/utils/diagram-layout.js';
   import { corridorGroupId, corridorTimelineRows } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
@@ -17,16 +18,23 @@
   export let reverseThroughWaves = [];
   export let showWaves = false;
   export let showOffsets = false;
+  export let overview = false;
+  export let zoom = 1;
+  export let timeZoom = 1;
   
   const dispatch = createEventDispatcher();
 
   let svg;
+  let ruler;
   let container;
   let width = 700;
   let height = 400;
   let isDragging = false; 
 
-  const margin = { top: 44, right: 30, bottom: 40, left: 60 };
+  const margin = { top: 62, right: 70, bottom: 46, left: 65 };
+  let distanceMinimum = 0;
+  let distanceMaximum = 100;
+  let coincident = false;
   let chartWidth = width - margin.left - margin.right;
   let chartHeight = height - margin.top - margin.bottom;
   
@@ -59,7 +67,7 @@
       ...junction,
       total_duration: calculateTotalDuration(junction),
       group_id: corridorGroupId(junction, groupIds),
-      timelineRows: corridorTimelineRows(junction, groupIds, reverseGroupIds, direction)
+      timelineRows: corridorTimelineRows(junction, groupIds, reverseGroupIds, direction).map(row => ({ ...row, offset: row.offset * 1.8 }))
     }));
     
     // Calculate max time domain
@@ -71,9 +79,18 @@
       .range([0, chartWidth]);
     
     const yScale = d3.scaleLinear()
-      .domain([0, Math.max(...junctionsWithDuration.map(j => j.point.y)) + 50])
+      .domain([distanceMinimum, distanceMaximum])
       .range([chartHeight, 0]);
     
+    const rulerChart = d3.select(ruler);
+    rulerChart.selectAll('*').remove();
+    rulerChart.append('g').attr('transform', `translate(${margin.left},0)`)
+      .call(d3.axisBottom(xScale).ticks(Math.max(4, chartWidth / 90)));
+    rulerChart.append('text').attr('x', 8).attr('y', 16).attr('fill', '#64748b').attr('font-size', 10).text('Time (s)');
+    chart.append('g').attr('class', 'time-grid').selectAll('line').data(xScale.ticks()).join('line')
+      .attr('x1', xScale).attr('x2', xScale).attr('y1', 0).attr('y2', chartHeight)
+      .attr('stroke', '#e9eef3').attr('stroke-dasharray', '3,4');
+
     // Draw axes
     chart.append("g")
       .attr("transform", `translate(0,${chartHeight})`)
@@ -86,7 +103,7 @@
       .text("Time (seconds)");
     
     chart.append("g")
-      .call(d3.axisLeft(yScale))
+      .call(d3.axisLeft(yScale).ticks(Math.min(40, Math.max(4, chartHeight / 80))))
       .append("text")
       .attr("transform", "rotate(-90)")
       .attr("y", -45)
@@ -180,10 +197,10 @@
     // Draw junction labels with duration
     const junctionLabels = junctionGroups.append("text")
       .attr("x", 0)
-      .attr("y", d => d.timelineRows.length > 1 ? -36 : -27)
+      .attr("y", d => d.timelineRows.length > 1 ? -47 : -32)
       .attr("text-anchor", "start")
-      .attr("font-size", "10px")
-      .attr("font-weight", "bold")
+      .attr("font-size", "12px")
+      .attr("font-weight", "600")
       .attr("fill", "#333")
       .text(d => `${d.label || `J${d.id}`}, ${d.total_duration}s${d.cycle[0].signal_groups.length > 1 ? (d.group_id === null ? ', choose group' : `, G${d.group_id}`) : ''}`);
 
@@ -274,12 +291,12 @@
                 .attr('class', `signal-line-${junction.id}`)
                 .attr('x1', xScale(from)).attr('x2', xScale(to))
                 .attr('y1', y + row.offset).attr('y2', y + row.offset)
-                .attr('stroke', getSignalColor(signal.color)).attr('stroke-width', 4);
+                .attr('stroke', getSignalColor(signal.color)).attr('stroke-width', 6);
               line.append('title').text(`${row.label}: ${signal.color}, ${signal.duration} s`);
               if (interactive) {
                 line.style('cursor', 'pointer')
-                  .on('mouseover', function() { d3.select(this).attr('stroke-width', 8); })
-                  .on('mouseout', function() { d3.select(this).attr('stroke-width', 4); })
+                  .on('mouseover', function() { d3.select(this).attr('stroke-width', 10); })
+                  .on('mouseout', function() { d3.select(this).attr('stroke-width', 6); })
                   .on('click', () => handleSignalClick(junction, phase, signal));
               }
             }
@@ -289,7 +306,7 @@
       }
       if (direction === 'bidirectional') {
         container.append('text').attr('x', chartWidth).attr('y', y + row.offset - 3)
-          .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', '#334155')
+          .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#334155')
           .attr('stroke', 'white').attr('stroke-width', 3).attr('paint-order', 'stroke')
           .style('pointer-events', 'none').text(row.groupId === null ? 'Choose group' : row.label);
       }
@@ -299,7 +316,7 @@
   function drawPhases(chart, junctionsWithDuration, xScale, yScale) {
     junctionsWithDuration.forEach((junction) => {
       let currentTime = junction.offset; // Start at the junction's offset
-      const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
+      const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 20 : 0);
 
       junction.cycle.forEach((phase, phaseIdx) => {
         // Calculate phase duration from the first signal group (all groups are synchronized)
@@ -377,8 +394,8 @@
       
       const j1 = junctionsWithDuration[segmentIdx];
       const j2 = junctionsWithDuration[segmentIdx + 1];
-      const y1 = yScale(j1.point.y);
-      const y2 = yScale(j2.point.y);
+      const y1 = yScale(j1.point.y) + j1.timelineRows.at(0).offset;
+      const y2 = yScale(j2.point.y) + j2.timelineRows.at(0).offset;
       
       segmentWaves.forEach(wave => {
         const startJ1 = wave.interval_jun_one.start;
@@ -417,7 +434,7 @@
       wave.intervals.forEach((interval, junctionIdx) => {
         if (junctionIdx < junctionsWithDuration.length) {
           const junction = junctionsWithDuration[junctionIdx];
-          const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
+          const y = yScale(junction.point.y) + junction.timelineRows.at(0).offset;
 
           starts.push([xScale(interval.start), y]);
           ends.push([xScale(interval.end), y]);
@@ -450,8 +467,8 @@
       // Reverse direction: map segment index to actual junctions (from last to first)
       const j1 = junctionsWithDuration[numJunctions - 1 - segmentIdx];
       const j2 = junctionsWithDuration[numJunctions - 2 - segmentIdx];
-      const y1 = yScale(j1.point.y);
-      const y2 = yScale(j2.point.y);
+      const y1 = yScale(j1.point.y) + j1.timelineRows.at(-1).offset;
+      const y2 = yScale(j2.point.y) + j2.timelineRows.at(-1).offset;
 
       segmentWaves.forEach(wave => {
         const startJ1 = wave.interval_jun_one.start;
@@ -493,7 +510,7 @@
         const junctionIdx = numJunctions - 1 - idx;
         if (junctionIdx >= 0 && junctionIdx < numJunctions) {
           const junction = junctionsWithDuration[junctionIdx];
-          const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 10 : 0);
+          const y = yScale(junction.point.y) + junction.timelineRows.at(-1).offset;
 
           starts.push([xScale(interval.start), y]);
           ends.push([xScale(interval.end), y]);
@@ -533,15 +550,25 @@
   $: groupIds, reverseGroupIds, direction, greenWaves, throughWaves, reverseGreenWaves, reverseThroughWaves, showWaves, wavesAreOutdated, updateChart();
   
   function updateSize() {
-    if (container) {
-      width = container.clientWidth;
-      height = container.clientHeight;
-      // Recalculate derived dimensions so every D3 call (scales, axes, wave polygons)
-      // uses the correct pixel measurements for this container size.
-      chartWidth = width - margin.left - margin.right;
-      chartHeight = height - margin.top - margin.bottom;
-      updateChart();
-    }
+    if (!container || isDragging) return;
+    const layout = diagramLayout(junctions, container.clientWidth, container.clientHeight, { overview, zoom, timeZoom });
+    width = layout.width;
+    height = layout.height;
+    distanceMinimum = layout.minimum;
+    distanceMaximum = layout.maximum;
+    coincident = layout.coincident;
+    chartWidth = width - margin.left - margin.right;
+    chartHeight = height - margin.top - margin.bottom;
+    updateChart();
+  }
+  $: junctions, overview, zoom, timeZoom, updateSize();
+
+  export function scrollToViewport({ vertical, horizontal }) {
+    if (!container) return;
+    const top = vertical * (container.scrollHeight - container.clientHeight);
+    const left = horizontal * (container.scrollWidth - container.clientWidth);
+    if (Math.abs(container.scrollTop - top) > 1) container.scrollTop = top;
+    if (Math.abs(container.scrollLeft - left) > 1) container.scrollLeft = left;
   }
 
   function handleSignalClick(junction, phase, signal) {
@@ -550,24 +577,23 @@
 
   onMount(() => {
     updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(container);
+    return () => observer.disconnect();
   });
 </script>
 
-<div bind:this={container} class="diagram-container w-full h-full relative">
-  <!-- SVG fills the container absolutely  no flex space consumed, no layout impact -->
-  <div class="absolute inset-0 overflow-hidden">
-    <svg bind:this={svg} {width} {height} style="display:block"></svg>
-  </div>
-
+<!-- Keyboard focus enables native scrolling of the diagram. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div bind:this={container} class="diagram-container" on:scroll={() => dispatch('viewportScroll', { vertical: container.scrollTop / Math.max(1, container.scrollHeight - container.clientHeight), horizontal: container.scrollLeft / Math.max(1, container.scrollWidth - container.clientWidth) })} role="region" aria-label={interactive ? 'Scrollable input time-distance diagram' : 'Scrollable result time-distance diagram'} tabindex="0">
+  {#if coincident}<p class="coincident-note">Some junctions have the same distance and their signals overlap. Edit their distances to separate them.</p>{/if}
+  <svg bind:this={ruler} {width} height={26} class="diagram-ruler" aria-hidden="true"></svg>
+  <svg bind:this={svg} {width} {height} style="display:block" aria-label="Time in seconds and distance in meters"></svg>
 </div>
 
 <style>
-  .diagram-container {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    position: relative;
-  }
+  .diagram-container { width: 100%; height: 100%; min-height: 0; position: relative; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .diagram-ruler { position: sticky; top: 0; z-index: 2; display: block; background: #fff; border-bottom: 1px solid #e2e8f0; }
+  .coincident-note { position: sticky; top: 0; left: 0; z-index: 1; font-size: 12px; color: #92400e; background: #fffbeb; padding: 8px 12px; }
+  @media (max-width: 900px) { .diagram-container { overscroll-behavior: auto; } }
 </style>

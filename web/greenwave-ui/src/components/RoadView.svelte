@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { diagramLayout } from '$lib/utils/diagram-layout.js';
   import { corridorTimelineRows } from '$lib/utils/junction-program.js';
 
   export let junctions = [];
@@ -17,15 +18,18 @@
   function updateSize() {
     if (container) {
       width = container.clientWidth || 400;
-      height = container.clientHeight || 400;
+      height = diagramLayout(junctions, width, container.clientHeight).height;
     }
   }
+
+  $: junctions, updateSize();
 
   onMount(() => {
     updateSize();
     sized = true;
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(container);
+    return () => observer.disconnect();
   });
 
   const SIGNAL_BAR_W = 100;
@@ -103,13 +107,15 @@
   const roadX = ml;
 </script>
 
-<div bind:this={container} class="w-full h-full relative">
+<!-- Keyboard focus enables native scrolling of the diagram. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div bind:this={container} class="w-full h-full relative overflow-auto" role="region" aria-label="Static signal strip preview" tabindex="0">
   {#if junctions.length === 0}
     <div class="flex items-center justify-center h-full text-gray-400 text-sm">
       No junctions to display
     </div>
   {:else if sized}
-    <div class="absolute inset-0 overflow-hidden">
+    <div>
     <svg {width} {height} style="display:block">
 
       <!-- Road -->

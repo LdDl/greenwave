@@ -213,7 +213,7 @@
     const ys = $networkNodes.map(n => n.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
-    scale = Math.max(0.1, Math.min(2, Math.max(1, width - 120) / Math.max(100, maxX - minX), Math.max(1, height - 120) / Math.max(100, maxY - minY)));
+    scale = Math.max(0.1, Math.min(2, Math.max(1, width - 190) / Math.max(100, maxX - minX), Math.max(1, height - 170) / Math.max(100, maxY - minY)));
     tx = width / 2 - (minX + maxX) * scale / 2;
     ty = height / 2 - (minY + maxY) * scale / 2;
   }
@@ -431,20 +431,24 @@
           >
             <circle
               cx={node.x} cy={node.y}
-              r={NODE_R / scale}
+              r={Math.min(NODE_R, Math.max(5, scale * 32)) / scale}
               fill={nodeFill}
               stroke={nodeStroke}
               stroke-width={2 / scale}
             />
+            <title>{node.label}</title>
+            {#if scale >= 0.4 || selectedNodeId === node.id || isHlFrom || isHlTo}
             <text
-              x={node.x} y={node.y}
+              x={node.x} y={node.y + 27 / scale}
               text-anchor="middle"
               dominant-baseline="central"
               font-size={11 / scale}
               font-weight="600"
               fill={labelColor}
+              stroke="white" stroke-width={4 / scale} paint-order="stroke"
               pointer-events="none"
             >{node.label}</text>
+            {/if}
           </g>
         {/each}
       </g>
@@ -462,7 +466,7 @@
     <!-- Mode hint overlay -->
     {#if mode === 'select' && $networkNodes.length > 0}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-gray-700/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">
-        {interactionHint}
+        {scale < 0.4 ? 'Zoom in to see junction names. Select a node to see its details.' : interactionHint}
       </div>
     {:else if mode === 'edge' && edgeFromId === null}
       <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none shadow">

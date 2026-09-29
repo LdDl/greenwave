@@ -36,6 +36,31 @@ const streets = [
 	{ name: 'Turgenev Street', nodes: 'n k o', lanes: 2 }
 ];
 
+const authors = [
+	'Pushkin',
+	'Nekrasov',
+	'Tolstoy',
+	'Krylov',
+	'Lermontov',
+	'Gogol',
+	'Chekhov',
+	'Turgenev',
+	'Dostoevsky',
+	'Goncharov',
+	'Bunin',
+	'Kuprin',
+	'Leskov',
+	'Saltykov-Shchedrin',
+	'Griboyedov',
+	'Ostrovsky',
+	'Tyutchev',
+	'Fet',
+	'Blok',
+	'Yesenin',
+	'Akhmatova',
+	'Tsvetaeva'
+];
+
 const groups = [
 	{ id: 10, label: 'Eastbound through / right', phase: 0 },
 	{ id: 20, label: 'Westbound through / right', phase: 0 },
@@ -77,7 +102,7 @@ export function rectangularDemoProject() {
 	const ids = Object.fromEntries(Object.keys(layout).map((letter, index) => [letter, index]));
 	project.junctions = Object.entries(layout).map(([letter, [x, y]], index) => {
 		project.positions[ids[letter]] = { x, y };
-		return { id: ids[letter], label: letter.toUpperCase(), offset: (index * 37) % 120, cycle: [] };
+		return { id: ids[letter], label: authors[index], offset: (index * 37) % 120, cycle: [] };
 	});
 	for (const street of streets) {
 		const path = street.nodes.split(' ');

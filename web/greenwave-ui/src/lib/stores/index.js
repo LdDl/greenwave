@@ -5,6 +5,8 @@ import { DEMO_DATA } from '../utils/demo-input.js';
 import { originalGreenWaves, originalThroughWaves, originalReverseGreenWaves, originalReverseThroughWaves, showGreenWaves, waveCalculationPositions, lastCalculatedSpeed } from './greenwave';
 import { optimizedGroupIds, optimizedReverseGroupIds, optimizedDirection, optimizedJunctions, optimizedOffsets, optimizedGreenWaves, optimizedThroughWaves, optimizedReverseGreenWaves, optimizedReverseThroughWaves, optimizedWaveCalculationPositions, optimizedLastCalculatedSpeed, optimizedInputRevision } from './optimization';
 import { validateInput, validateResults } from './invalidation';
+import { optimizedCorridorName, analysisMode } from './workspace.js';
+import { lastOptimizationReport } from './optimization';
 
 // UI state stores
 export const isLoading = writable(false);
@@ -23,7 +25,9 @@ export function resetToEmpty() {
   clearCalculatedData();
 }
 
-function clearCalculatedData() {
+export function clearCalculatedData() {
+  lastOptimizationReport.set(null);
+  analysisMode.set('input');
   // Clear API results
   originalGreenWaves.set([]);
   originalThroughWaves.set([]);
@@ -36,6 +40,7 @@ function clearCalculatedData() {
   // Clear last calculated speed
   lastCalculatedSpeed.set(null);
   optimizedJunctions.set([]);
+  optimizedCorridorName.set('');
   optimizedGroupIds.set({});
   optimizedReverseGroupIds.set({});
   optimizedDirection.set('forward');

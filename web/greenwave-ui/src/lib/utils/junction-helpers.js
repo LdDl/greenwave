@@ -33,11 +33,13 @@ export function validateJunctionCycles(junctions) {
 // Apply offsets to junctions
 // Returns a new array of deep copied junctions with offsets applied
 export function applyOffsetsToJunctions(junctions, offsets) {
+  if (!Array.isArray(offsets) || offsets.length !== junctions.length || !offsets.every(Number.isFinite)) {
+    throw new Error('The optimizer returned invalid offsets. Run Optimize again.');
+  }
   return junctions.map((junction, index) => {
-    const updatedJunction = JSON.parse(JSON.stringify(junction)); // Deep copy
-    // Round offsets to nearest integer
-    const roundedOffset = Math.round(offsets[index] || 0);
-    updatedJunction.offset = roundedOffset;
+    const updatedJunction = structuredClone(junction);
+    // The API evaluates candidates with Go int(offset), which truncates toward zero.
+    updatedJunction.offset = Math.trunc(offsets[index]);
     return updatedJunction;
   });
 }
