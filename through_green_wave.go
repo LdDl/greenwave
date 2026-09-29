@@ -1,11 +1,15 @@
 package greenwave
 
-import "math"
+import (
+	"math"
+
+	"github.com/LdDl/greenwave/greeninterval"
+)
 
 // ThroughGreenWave represents a green wave that passes through a series of green intervals between traffic lights.
 type ThroughGreenWave struct {
 	// Intervals of green lights that form the green wave
-	intervals []*GreenInterval
+	intervals []*greeninterval.GreenInterval
 	// Number of junctions which could be passed through
 	depth int
 	// Bandwidth of the green wave, which is the minimum duration of the green intervals
@@ -14,7 +18,7 @@ type ThroughGreenWave struct {
 
 // NewThroughGreenWave creates a new ThroughGreenWave from a slice of GreenInterval.
 // It calculates the minimum bandwidth of the green wave, which is the shortest duration of the green intervals.
-func NewThroughGreenWave(intervals []*GreenInterval) *ThroughGreenWave {
+func NewThroughGreenWave(intervals []*greeninterval.GreenInterval) *ThroughGreenWave {
 	minBandWidth := math.Inf(1)
 	for _, interval := range intervals {
 		bandWidth := interval.End - interval.Start
@@ -43,6 +47,6 @@ func (tgw *ThroughGreenWave) Bandwidth() float64 {
 }
 
 // GetIntervals returns the intervals of the green wave.
-func (tgw *ThroughGreenWave) GetIntervals() []*GreenInterval {
+func (tgw *ThroughGreenWave) GetIntervals() []*greeninterval.GreenInterval {
 	return tgw.intervals
 }

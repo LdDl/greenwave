@@ -1,0 +1,794 @@
+{
+  "version": 1,
+  "type": "input",
+  "description": "Uncoordinated urban corridor: four junctions, 120 s cycle, 36 km/h. No green waves exist at the initial offsets [0,45,90,45]. Use Optimize to search for coordination. Reference offsets [0,9,19,30] give full-corridor bands of 28 s forward and 20 s reverse. G10: forward through, G20: reverse through, G30: protected left turn, G40: cross street. Phase 2 serves only G30 while both through groups are red.",
+  "desiredSpeed": 36,
+  "desiredIntensity": 1200,
+  "direction": "bidirectional",
+  "groupIds": {
+    "0": 10,
+    "1": 10,
+    "2": 10,
+    "3": 10
+  },
+  "reverseGroupIds": {
+    "0": 20,
+    "1": 20,
+    "2": 20,
+    "3": 20
+  },
+  "junctions": [
+    {
+      "id": 0,
+      "label": "Pushkin Street",
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 52
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 60
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 20
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 85
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 35
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 20
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 27
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 10
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 15
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "label": "Nekrasov Street",
+      "point": {
+        "x": 0,
+        "y": 90
+      },
+      "offset": 45,
+      "cycle": [
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 32
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 50
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 42
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 22
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 18
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 85
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 69
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 11
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 10
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 15
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Tolstoy Street",
+      "point": {
+        "x": 0,
+        "y": 190
+      },
+      "offset": 90,
+      "cycle": [
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 28
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 54
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 22
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 24
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 36
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 85
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 51
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 29
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 10
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 15
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "label": "Krylov Street",
+      "point": {
+        "x": 0,
+        "y": 300
+      },
+      "offset": 45,
+      "cycle": [
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 31
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 51
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 23
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 59
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 85
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 36
+                },
+                {
+                  "color": "GREEN",
+                  "duration": 44
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 10
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 15
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 10,
+              "label": "Forward through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 20,
+              "label": "Reverse through",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 30,
+              "label": "Protected left turn",
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            },
+            {
+              "id": 40,
+              "label": "Cross street",
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 15
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

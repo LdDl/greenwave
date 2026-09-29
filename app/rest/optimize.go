@@ -8,6 +8,7 @@ import (
 
 	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -25,6 +26,12 @@ type OptimizeRequest struct {
 	OptimizerParams map[string]interface{} `json:"optimizer_params"`
 	// Direction for optimization: "forward" (default) or "bidirectional"
 	Direction string `json:"direction"`
+	// GroupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
+	// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
+	// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
+	GroupIDs map[int]junction.GroupID `json:"group_ids"`
+	// ReverseGroupIDs selects the return group per junction; missing entries use GroupIDs.
+	ReverseGroupIDs map[int]junction.GroupID `json:"reverse_group_ids,omitempty"`
 }
 
 // OptimizeResponse represents the response structure for optimization requests.
@@ -111,14 +118,19 @@ func RequestOptimize() func(ctx echo.Context) error {
 			})
 		}
 
+		forwardGroups, reverseGroups, err := coordinationGroups(requestData.Junctions, requestData.GroupIDs, requestData.ReverseGroupIDs)
+		if err != nil {
+			return ctx.JSON(400, echo.Map{"Error": err.Error()})
+		}
+
 		// Convert DTOs to domain objects
-		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
+		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}
 
 		// Create optimizer based on type
-		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, requestData.DesiredSpeedKmh, requestData.OptimizerParams, optimizationMode)
+		optimizer, err := createOptimizer(requestData.OptimizerType, junctions, forwardGroups, reverseGroups, requestData.DesiredSpeedKmh, requestData.OptimizerParams, optimizationMode)
 		if err != nil {
 			return ctx.JSON(400, echo.Map{
 				"Error": err.Error(),
@@ -128,11 +140,11 @@ func RequestOptimize() func(ctx echo.Context) error {
 		// Run optimization
 		bestOffsets := optimizer.Optimize()
 		// Apply best offsets to junctions
-		for i, junction := range junctions {
-			junction.SetOffset(int(bestOffsets[i]))
+		for i, jun := range junctions {
+			jun.SetOffset(int(bestOffsets[i]))
 		}
 		// Calculate green waves with optimized offsets
-		greenWaves := greenwave.FindGreenWaves(junctions, requestData.DesiredSpeedKmh)
+		greenWaves := greenwave.FindGreenWaves(junctions, forwardGroups, requestData.DesiredSpeedKmh)
 		throughGreenWaves := greenwave.MergeGreenWaves(greenWaves)
 
 		optimizerExtra := OptimizerExtra{}
@@ -153,7 +165,7 @@ func RequestOptimize() func(ctx echo.Context) error {
 		// If bidirectional, also calculate reverse waves
 		if optimizationMode == greenwave.OPTIMIZATION_BIDIRECTIONAL {
 			reversedJunctions := greenwave.ReverseJunctions(junctions)
-			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.DesiredSpeedKmh)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, reverseGroups, requestData.DesiredSpeedKmh)
 			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
 
 			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)
@@ -164,18 +176,20 @@ func RequestOptimize() func(ctx echo.Context) error {
 	}
 }
 
-// createOptimizer creates an optimizer based on the specified type and parameters
-func createOptimizer(optimizerType string, junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
+// createOptimizer creates an optimizer based on the specified type and parameters.
+// groupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
+func createOptimizer(optimizerType string, junctions []*junction.Junction, groupIDs, reverseGroupIDs map[int]junction.GroupID, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	switch strings.ToLower(optimizerType) {
 	case "genetic":
-		return createGeneticOptimizer(junctions, speedKmh, params, optimizationMode)
+		return createGeneticOptimizer(junctions, groupIDs, reverseGroupIDs, speedKmh, params, optimizationMode)
 	default:
 		return nil, fmt.Errorf("unsupported optimizer type: %s", optimizerType)
 	}
 }
 
-// createGeneticOptimizer creates a genetic algorithm optimizer with flexible parameters
-func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
+// createGeneticOptimizer creates a genetic algorithm optimizer with flexible parameters.
+// groupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
+func createGeneticOptimizer(junctions []*junction.Junction, groupIDs, reverseGroupIDs map[int]junction.GroupID, speedKmh float64, params map[string]interface{}, optimizationMode greenwave.OptimizationMode) (greenwave.Optimizer, error) {
 	// Helper function to get parameter with default value
 	getParam := func(key string, defaultValue interface{}) interface{} {
 		if val, exists := params[key]; exists {
@@ -267,6 +281,7 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 
 	return greenwave.NewOptimizerGenetic(
 		junctions,
+		groupIDs,
 		speedKmh,
 		populationSize,
 		generations,
@@ -274,5 +289,6 @@ func createGeneticOptimizer(junctions []*greenwave.Junction, speedKmh float64, p
 		tournamentSize,
 		crossoverType,
 		optimizationMode,
+		greenwave.WithReverseGroupIDs(reverseGroupIDs),
 	), nil
 }

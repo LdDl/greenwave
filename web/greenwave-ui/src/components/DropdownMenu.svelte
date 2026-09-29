@@ -49,7 +49,7 @@
 
   {#if isOpen}
     <div
-      class="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50"
+      class="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-40"
       role="menu"
       tabindex="-1"
       on:click|stopPropagation={() => {}}

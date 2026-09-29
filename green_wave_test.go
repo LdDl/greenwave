@@ -3,19 +3,21 @@ package greenwave
 import (
 	"testing"
 
+	"github.com/LdDl/greenwave/greeninterval"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 	// Case 1
-	greenIntervalsOne := []*GreenInterval{
-		NewGreenInterval(0, 0, 30),
-		NewGreenInterval(1, 50, 70),
+	greenIntervalsOne := []*greeninterval.GreenInterval{
+		greeninterval.New(0, 0, 30),
+		greeninterval.New(1, 50, 70),
 	}
 
-	greenIntervalsTwo := []*GreenInterval{
-		NewGreenInterval(0, 20, 55),
-		NewGreenInterval(1, 70, 80),
+	greenIntervalsTwo := []*greeninterval.GreenInterval{
+		greeninterval.New(0, 20, 55),
+		greeninterval.New(1, 70, 80),
 	}
 
 	distanceMeters := 200.0
@@ -23,14 +25,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 
 	correctGreenWaves := []*GreenWave{
 		NewGreenWave(
-			NewGreenInterval(0, 2, 30),
-			NewGreenInterval(0, 20, 48),
+			greeninterval.New(0, 2, 30),
+			greeninterval.New(0, 20, 48),
 			distanceMeters,
 			travelTimeSeconds,
 		),
 		NewGreenWave(
-			NewGreenInterval(1, 52, 62),
-			NewGreenInterval(1, 70, 80),
+			greeninterval.New(1, 52, 62),
+			greeninterval.New(1, 70, 80),
 			distanceMeters,
 			travelTimeSeconds,
 		),
@@ -43,14 +45,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 	}
 
 	// Case 2
-	greenIntervalsOne = []*GreenInterval{
-		NewGreenInterval(0, 20, 55),
-		NewGreenInterval(1, 70, 80),
+	greenIntervalsOne = []*greeninterval.GreenInterval{
+		greeninterval.New(0, 20, 55),
+		greeninterval.New(1, 70, 80),
 	}
 
-	greenIntervalsTwo = []*GreenInterval{
-		NewGreenInterval(0, 45, 55),
-		NewGreenInterval(1, 62, 80),
+	greenIntervalsTwo = []*greeninterval.GreenInterval{
+		greeninterval.New(0, 45, 55),
+		greeninterval.New(1, 62, 80),
 	}
 
 	distanceMeters = 250.0
@@ -58,14 +60,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 
 	correctGreenWaves = []*GreenWave{
 		NewGreenWave(
-			NewGreenInterval(0, 22.5, 32.5),
-			NewGreenInterval(0, 45, 55),
+			greeninterval.New(0, 22.5, 32.5),
+			greeninterval.New(0, 45, 55),
 			distanceMeters,
 			travelTimeSeconds,
 		),
 		NewGreenWave(
-			NewGreenInterval(0, 39.5, 55),
-			NewGreenInterval(1, 62, 77.5),
+			greeninterval.New(0, 39.5, 55),
+			greeninterval.New(1, 62, 77.5),
 			distanceMeters,
 			travelTimeSeconds,
 		),
@@ -78,14 +80,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 	}
 
 	// Case 3
-	greenIntervalsOne = []*GreenInterval{
-		NewGreenInterval(0, 45, 55),
-		NewGreenInterval(1, 62, 80),
+	greenIntervalsOne = []*greeninterval.GreenInterval{
+		greeninterval.New(0, 45, 55),
+		greeninterval.New(1, 62, 80),
 	}
 
-	greenIntervalsTwo = []*GreenInterval{
-		NewGreenInterval(0, 40, 55),
-		NewGreenInterval(1, 65, 85),
+	greenIntervalsTwo = []*greeninterval.GreenInterval{
+		greeninterval.New(0, 40, 55),
+		greeninterval.New(1, 65, 85),
 	}
 
 	distanceMeters = 150.0
@@ -93,14 +95,14 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 
 	correctGreenWaves = []*GreenWave{
 		NewGreenWave(
-			NewGreenInterval(0, 51.5, 55.0),
-			NewGreenInterval(1, 65, 68.5),
+			greeninterval.New(0, 51.5, 55.0),
+			greeninterval.New(1, 65, 68.5),
 			distanceMeters,
 			travelTimeSeconds,
 		),
 		NewGreenWave(
-			NewGreenInterval(1, 62, 71.5),
-			NewGreenInterval(1, 75.5, 85),
+			greeninterval.New(1, 62, 71.5),
+			greeninterval.New(1, 75.5, 85),
 			distanceMeters,
 			travelTimeSeconds,
 		),
@@ -114,21 +116,28 @@ func TestFindGreenWavesBetweenIntervals(t *testing.T) {
 }
 
 func TestFindGreenWaves(t *testing.T) {
-	junctions := basicTestJuntions()
+	junctions := junction.BasicTestJunctions()
 	desiredSpeedKmh := 40.0
-	greenWaves := FindGreenWaves(junctions, desiredSpeedKmh)
+	// Pick group for each junction (in this case, we know that all junctions have group #0)
+	groupIDs := map[int]junction.GroupID{
+		100500: 0,
+		42:     0,
+		78:     0,
+		256:    0,
+	}
+	greenWaves := FindGreenWaves(junctions, groupIDs, desiredSpeedKmh)
 	correctGreenWaves := [][]*GreenWave{
 		// Segment 0
 		{
 			NewGreenWave(
-				NewGreenInterval(0, 2, 30),
-				NewGreenInterval(0, 20, 48),
+				greeninterval.New(0, 2, 30),
+				greeninterval.New(0, 20, 48),
 				200,
 				18.0,
 			),
 			NewGreenWave(
-				NewGreenInterval(1, 52, 62),
-				NewGreenInterval(1, 70, 80),
+				greeninterval.New(1, 52, 62),
+				greeninterval.New(1, 70, 80),
 				200,
 				18.0,
 			),
@@ -136,14 +145,14 @@ func TestFindGreenWaves(t *testing.T) {
 		// Segment 1
 		{
 			NewGreenWave(
-				NewGreenInterval(0, 22.5, 32.5),
-				NewGreenInterval(0, 45, 55),
+				greeninterval.New(0, 22.5, 32.5),
+				greeninterval.New(0, 45, 55),
 				250,
 				22.5,
 			),
 			NewGreenWave(
-				NewGreenInterval(0, 39.5, 55),
-				NewGreenInterval(1, 62, 77.5),
+				greeninterval.New(0, 39.5, 55),
+				greeninterval.New(1, 62, 77.5),
 				250,
 				22.5,
 			),
@@ -151,14 +160,14 @@ func TestFindGreenWaves(t *testing.T) {
 		// Segment 2
 		{
 			NewGreenWave(
-				NewGreenInterval(0, 51.5, 55.0),
-				NewGreenInterval(1, 65, 68.5),
+				greeninterval.New(0, 51.5, 55.0),
+				greeninterval.New(1, 65, 68.5),
 				150,
 				13.5,
 			),
 			NewGreenWave(
-				NewGreenInterval(1, 62, 71.5),
-				NewGreenInterval(1, 75.5, 85),
+				greeninterval.New(1, 62, 71.5),
+				greeninterval.New(1, 75.5, 85),
 				150,
 				13.5,
 			),

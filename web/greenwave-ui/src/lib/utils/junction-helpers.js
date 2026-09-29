@@ -1,9 +1,11 @@
 // lib/utils/junction-helpers.js
 
-// Calculate total duration for a junction
+// Calculate total duration for a junction.
+// Uses the first signal group as the reference (all groups are synchronized).
 export function calculateTotalDuration(junction) {
   return junction.cycle.reduce((total, phase) => {
-    return total + phase.signals.reduce((phaseTotal, signal) => {
+    const signals = phase.signal_groups[0].signals;
+    return total + signals.reduce((phaseTotal, signal) => {
       return phaseTotal + signal.duration;
     }, 0);
   }, 0);
@@ -31,11 +33,13 @@ export function validateJunctionCycles(junctions) {
 // Apply offsets to junctions
 // Returns a new array of deep copied junctions with offsets applied
 export function applyOffsetsToJunctions(junctions, offsets) {
+  if (!Array.isArray(offsets) || offsets.length !== junctions.length || !offsets.every(Number.isFinite)) {
+    throw new Error('The optimizer returned invalid offsets. Run Optimize again.');
+  }
   return junctions.map((junction, index) => {
-    const updatedJunction = JSON.parse(JSON.stringify(junction)); // Deep copy
-    // Round offsets to nearest integer
-    const roundedOffset = Math.round(offsets[index] || 0);
-    updatedJunction.offset = roundedOffset;
+    const updatedJunction = structuredClone(junction);
+    // The API evaluates candidates with Go int(offset), which truncates toward zero.
+    updatedJunction.offset = Math.trunc(offsets[index]);
     return updatedJunction;
   });
 }

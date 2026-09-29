@@ -1,0 +1,1001 @@
+{
+  "format": "greenwave-project",
+  "version": 1,
+  "name": "Smoothing MP: through and protected turns",
+  "junctions": [
+    {
+      "id": 50,
+      "label": "Pushkin",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "label": "Nekrasov",
+      "offset": 35,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main through / right"
+            },
+            {
+              "id": 1,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Main protected left"
+            },
+            {
+              "id": 2,
+              "signals": [
+                {
+                  "color": "RED",
+                  "duration": 25,
+                  "min_duration": 0,
+                  "max_duration": 100
+                }
+              ],
+              "label": "Side through"
+            },
+            {
+              "id": 3,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 20,
+                  "min_duration": 5,
+                  "max_duration": 60
+                },
+                {
+                  "color": "YELLOW",
+                  "duration": 3,
+                  "min_duration": 3,
+                  "max_duration": 3
+                },
+                {
+                  "color": "RED",
+                  "duration": 2,
+                  "min_duration": 2,
+                  "max_duration": 2
+                }
+              ],
+              "label": "Side protected left"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "label": "Pushkin west entry",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "label": "Pushkin north entry",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "label": "Nekrasov north entry",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "label": "Pushkin west exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "label": "Pushkin north exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "label": "Nekrasov east exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "label": "Nekrasov north exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "label": "Pushkin left exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 118,
+      "label": "Nekrasov left exit",
+      "offset": 0,
+      "cycle": [
+        {
+          "id": 0,
+          "signal_groups": [
+            {
+              "id": 0,
+              "signals": [
+                {
+                  "color": "GREEN",
+                  "duration": 30
+                },
+                {
+                  "color": "RED",
+                  "duration": 20
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "positions": {
+    "50": {
+      "x": 400,
+      "y": 400
+    },
+    "60": {
+      "x": 800,
+      "y": 400
+    },
+    "101": {
+      "x": 0,
+      "y": 400
+    },
+    "102": {
+      "x": 400,
+      "y": 0
+    },
+    "104": {
+      "x": 800,
+      "y": 0
+    },
+    "105": {
+      "x": 400,
+      "y": 800
+    },
+    "106": {
+      "x": 0,
+      "y": 650
+    },
+    "107": {
+      "x": 1200,
+      "y": 400
+    },
+    "108": {
+      "x": 800,
+      "y": 800
+    },
+    "109": {
+      "x": 150,
+      "y": 900
+    },
+    "118": {
+      "x": 1100,
+      "y": 900
+    }
+  },
+  "roads": [
+    {
+      "id": 1,
+      "from": 101,
+      "to": 50,
+      "lengthMeters": 250,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 2,
+      "from": 102,
+      "to": 50,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 3,
+      "from": 50,
+      "to": 60,
+      "lengthMeters": 350,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 4,
+      "from": 104,
+      "to": 60,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 5,
+      "from": 50,
+      "to": 105,
+      "lengthMeters": 250,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 6,
+      "from": 50,
+      "to": 106,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 7,
+      "from": 60,
+      "to": 107,
+      "lengthMeters": 250,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 8,
+      "from": 60,
+      "to": 108,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 9,
+      "from": 50,
+      "to": 109,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    },
+    {
+      "id": 18,
+      "from": 60,
+      "to": 118,
+      "lengthMeters": 200,
+      "lanes_fwd": 2,
+      "lanes_back": 0
+    }
+  ],
+  "movements": {
+    "50": {
+      "1_fwd_3_fwd": 0,
+      "1_fwd_6_fwd": 0,
+      "1_fwd_9_fwd": 1,
+      "2_fwd_5_fwd": 2,
+      "2_fwd_3_fwd": 3
+    },
+    "60": {
+      "3_fwd_7_fwd": 0,
+      "3_fwd_8_fwd": 0,
+      "3_fwd_18_fwd": 1,
+      "4_fwd_7_fwd": 2,
+      "4_fwd_8_fwd": 3
+    }
+  },
+  "corridors": [
+    {
+      "id": 0,
+      "name": "Pushkin to Nekrasov",
+      "nodeIds": [
+        101,
+        50,
+        60,
+        107
+      ],
+      "desiredSpeed": 40,
+      "desiredIntensity": 1800,
+      "direction": "forward",
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "automatic": false,
+      "groupIds": {
+        "50": 0,
+        "60": 0,
+        "101": 0,
+        "107": 0
+      }
+    }
+  ],
+  "activeCorridorId": 0,
+  "mpScenario": {
+    "alpha": 0.5,
+    "deltaT": 1,
+    "simTime": 1200,
+    "storageModel": "point_queue",
+    "minGreenS": 5,
+    "maxGreenS": 45,
+    "clearanceS": 5,
+    "boundaryNodeIds": [
+      101,
+      102,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      118
+    ],
+    "coordinatedCorridorIds": [
+      0
+    ],
+    "entryRates": {
+      "1:fwd": 850,
+      "2:fwd": 250,
+      "4:fwd": 300
+    },
+    "turningRatios": {
+      "50:1_fwd_3_fwd": 0.65,
+      "50:1_fwd_6_fwd": 0.15,
+      "50:1_fwd_9_fwd": 0.2,
+      "50:2_fwd_5_fwd": 0.8,
+      "50:2_fwd_3_fwd": 0.2,
+      "60:3_fwd_7_fwd": 0.65,
+      "60:3_fwd_8_fwd": 0.15,
+      "60:3_fwd_18_fwd": 0.2,
+      "60:4_fwd_7_fwd": 0.8,
+      "60:4_fwd_8_fwd": 0.2
+    },
+    "saturationFlows": {
+      "50:1_fwd_3_fwd": 1800,
+      "50:1_fwd_6_fwd": 600,
+      "50:1_fwd_9_fwd": 900,
+      "50:2_fwd_5_fwd": 1800,
+      "50:2_fwd_3_fwd": 900,
+      "60:3_fwd_7_fwd": 1800,
+      "60:3_fwd_8_fwd": 600,
+      "60:3_fwd_18_fwd": 900,
+      "60:4_fwd_7_fwd": 1800,
+      "60:4_fwd_8_fwd": 900
+    },
+    "initialMovementQueues": {
+      "50:1_fwd_3_fwd": 7.800000000000001,
+      "50:1_fwd_6_fwd": 1.7999999999999998,
+      "50:1_fwd_9_fwd": 2.4000000000000004,
+      "50:2_fwd_5_fwd": 3.2,
+      "50:2_fwd_3_fwd": 0.8,
+      "60:3_fwd_7_fwd": 3.25,
+      "60:3_fwd_8_fwd": 0.75,
+      "60:3_fwd_18_fwd": 1,
+      "60:4_fwd_7_fwd": 5.6000000000000005,
+      "60:4_fwd_8_fwd": 1.4000000000000001
+    }
+  }
+}

@@ -1,8 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import { junctions, desiredSpeed, desiredFlow } from './core';
+import { desiredFlow } from './core';
 import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
-import { resultsInvalidated } from './signals';
-import { resultsInvalidationReasons, isResultsInvalidated } from '$lib/stores/invalidation';
+import { resultsInvalidationReasons, isResultsInvalidated } from './invalidation-state.js';
 
 // Optimized waves (forward direction)
 export const optimizedGreenWaves = writable([]);
@@ -12,12 +11,17 @@ export const optimizedReverseGreenWaves = writable([]);
 export const optimizedReverseThroughWaves = writable([]);
 export const optimizedOffsets = writable([]);
 export const optimizedJunctions = writable([]);
+export const optimizedGroupIds = writable({});
+export const optimizedReverseGroupIds = writable({});
+export const optimizedDirection = writable('forward');
 export const optimizationHistory = writable([]);
 export const isOptimizing = writable(false);
 
 // Track the state of junctions and speed when optimization was last performed
 export const optimizedWaveCalculationPositions = writable([]);
 export const optimizedLastCalculatedSpeed = writable(null);
+export const optimizedInputRevision = writable(null);
+export const lastOptimizationReport = writable(null);
 
 // Derived store to check if optimized results are outdated
 export const optimizedResultsAreOutdated = derived(
@@ -32,7 +36,7 @@ export const optimizedResultsAreOutdated = derived(
 
 // Actual flow (vehicles per second)
 export const actualFlowOptimized = derived(
-  [optimizedThroughWaves, junctions, desiredFlow],
+  [optimizedThroughWaves, optimizedJunctions, desiredFlow],
   ([$optimizedThroughWaves, $junctions, $desiredFlow]) => {
     if ($optimizedThroughWaves.length === 0 || $junctions.length === 0) return 0;
 
@@ -61,7 +65,7 @@ export const actualIntensityOptimized = derived(
 
 // Actual flow for reverse direction (vehicles per second)
 export const actualReverseFlowOptimized = derived(
-  [optimizedReverseThroughWaves, junctions, desiredFlow],
+  [optimizedReverseThroughWaves, optimizedJunctions, desiredFlow],
   ([$optimizedReverseThroughWaves, $junctions, $desiredFlow]) => {
     if ($optimizedReverseThroughWaves.length === 0 || $junctions.length === 0) return 0;
 

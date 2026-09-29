@@ -1,8 +1,6 @@
-package greenwave
+package junction
 
-import (
-	"github.com/LdDl/greenwave/color"
-)
+import "github.com/LdDl/greenwave/color"
 
 // Signal represents a traffic light signal with its duration and color.
 // Also it includes minimum and maximum duration threshold for the signal which could be usefull during optimizations of traffic light timings.
