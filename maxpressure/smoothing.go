@@ -6,8 +6,8 @@ import (
 	"github.com/LdDl/go-gmns/gmns"
 )
 
-// SmoothingConfig holds parameters for the Smoothing-MP coordination boost
-// from Xu et al. (2024).
+// SmoothingConfig holds parameters for an experimental coordination boost
+// inspired by Smoothing-MP (Xu et al., 2024).
 //
 // The boost for a connector (u,d) when the upstream intersection just served
 // a movement into link u is:
@@ -16,7 +16,8 @@ import (
 //
 // where Q_{u,d} is the saturation flow (capacity) of the connector.
 // Alpha = 0 reduces to standard max-pressure.
-// Stability is preserved when xi_{u,d} <= Q_{u,d}^2 (i.e. Alpha <= Q_{u,d}).
+// The paper's stability guarantee has not been established for this normalized,
+// finite-storage model without explicit turning proportions.
 type SmoothingConfig struct {
 	Alpha float64 // dimensionless coordination coefficient (>= 0)
 }
@@ -95,8 +96,7 @@ func (net *Network) IsUpstreamServed(connectorID gmns.LinkID) bool {
 	return false
 }
 
-// SmoothedMovementWeight computes the Smoothing-MP weight for a connector
-// following Xu et al. (2024), eq. 13:
+// SmoothedMovementWeight computes the prototype's coordination weight:
 //
 //	w_smooth = Q * w + xi * c
 //

@@ -245,38 +245,9 @@ func (opt *MPOptimizer) Step() []StepResult {
 	}
 
 	// 4. Discharge vehicles through active connectors
-	linkDelta := make(map[gmns.LinkID]float64)
-	for nid, sgID := range phaseDecisions {
-		inter := net.Intersections[nid]
-		for i := range inter.Stages {
-			if inter.Stages[i].ID != sgID {
-				continue
-			}
-			for _, cid := range inter.Stages[i].ConnectorIDs {
-				link, ok := net.Meso.Links[cid]
-				if !ok {
-					continue
-				}
-				upID := link.MovementMesoLinkIncome()
-				downID := link.MovementMesoLinkOutcome()
-				if upID < 0 || downID < 0 {
-					continue
-				}
-				maxDischarge := net.SatFlow(cid) * dt / 3600.0
-				discharge := maxDischarge
-				if upQueue := net.Queues[upID]; discharge > upQueue {
-					discharge = upQueue
-				}
-				if discharge > 0 {
-					linkDelta[upID] -= discharge
-					linkDelta[downID] += discharge
-				}
-			}
-			break
-		}
-	}
+	linkDelta := net.dischargeDeltas(phaseDecisions, dt)
 
-	// 5. Apply queue updates
+	// 5. Apply bounded transfers, guarding against floating-point roundoff.
 	for lid, delta := range linkDelta {
 		net.Queues[lid] += delta
 		if net.Queues[lid] < 0 {
