@@ -33,7 +33,7 @@ func TestStepConservesVehiclesThroughActiveMovements(t *testing.T) {
 			wantQueues: map[gmns.LinkID]float64{1: 0, 2: 0.5, 3: 0.5},
 		},
 		{
-			name:       "shared queue is allocated in proportion to saturation flow",
+			name:       "initial queue follows explicitly supplied turning proportions",
 			queues:     map[gmns.LinkID]float64{1: 1, 2: 0, 3: 0},
 			movements:  []flowTestMovement{{100, 1, 2, 3600}, {101, 1, 3, 1800}},
 			activeIDs:  []gmns.LinkID{100, 101},
@@ -108,6 +108,7 @@ func TestStepConservesVehiclesThroughActiveMovements(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, alpha := range []float64{0, 1} {
 				net := NewNetwork(meso.NewNet())
+				net.FiniteStorage = true
 				for id, queue := range tt.queues {
 					net.Meso.Links[id] = segLink(id, 0, 1, 700, 1, 3600)
 					net.Queues[id] = queue
@@ -119,7 +120,14 @@ func TestStepConservesVehiclesThroughActiveMovements(t *testing.T) {
 					MacroNodeID: 50,
 					Stages:      []Stage{{ID: 0, ConnectorIDs: tt.activeIDs}},
 				}
-				opt := NewMPOptimizer(net, MPConfig{
+				totals := make(map[gmns.LinkID]float64)
+				for _, movement := range tt.movements {
+					totals[movement.upstream] += float64(movement.capacity)
+				}
+				for _, movement := range tt.movements {
+					net.TurningRatios[movement.id] = float64(movement.capacity) / totals[movement.upstream]
+				}
+				opt := mustMPOptimizer(t, net, MPConfig{
 					DeltaT:    2,
 					Drain:     NoDrain(),
 					Smoothing: SmoothingConfig{Alpha: alpha},

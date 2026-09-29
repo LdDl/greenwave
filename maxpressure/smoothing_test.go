@@ -90,6 +90,7 @@ func buildTwoIntersectionCorridor(t *testing.T) *Network {
 	}
 
 	require.NoError(t, net.SetCoordinatedCorridors([][]gmns.LinkID{{1, 5, 25}}))
+	fixtureMovementState(t, net)
 	return net
 }
 
@@ -112,8 +113,8 @@ func TestSmoothedMovementWeight_HasBoost(t *testing.T) {
 
 	assert.Greater(t, smoothed, standard)
 
-	// The legacy scoring convention uses xi = Alpha * SatFlow in veh/h.
-	expectedBoost := 1.0 * net.SatFlow(130)
+	// At dt=1, saturation 1800 veh/h gives Q=0.5 and Q^2=0.25.
+	expectedBoost := 0.25
 	assert.InDelta(t, expectedBoost, smoothed-standard, 0.1)
 }
 
@@ -127,10 +128,14 @@ func TestSmoothedMovementWeight_NoBoostAlphaZero(t *testing.T) {
 func TestSmoothedSelectPhase_BoostFlipsDecision(t *testing.T) {
 	net := buildTwoIntersectionCorridor(t)
 	interB := net.Intersections[60]
+	clear(net.MovementQueues)
+	net.MovementQueues[130] = 1
+	net.MovementQueues[134] = 1.25
 
 	stdPhase, _ := net.SelectPhase(interB)
-	smoothPhase, _ := net.SmoothedSelectPhase(interB, SmoothingConfig{Alpha: 1.5})
+	smoothPhase, _ := net.SmoothedSelectPhase(interB, SmoothingConfig{Alpha: 1})
 
+	assert.Equal(t, StageID(1), stdPhase)
 	assert.Equal(t, StageID(0), smoothPhase, "Smoothing-MP should pick EW to serve arriving platoon")
 	t.Logf("Standard MP: sg%d, Smoothing-MP: sg%d", stdPhase, smoothPhase)
 }
@@ -146,8 +151,8 @@ func TestServedLinks(t *testing.T) {
 }
 
 func TestOptimizer_StandardMP_SelectsEW(t *testing.T) {
-	net := buildIntersectionA()
-	opt := NewMPOptimizer(net, MPConfig{
+	net := buildIntersectionA(t)
+	opt := mustMPOptimizer(t, net, MPConfig{
 		DeltaT:    5.0,
 		Smoothing: SmoothingConfig{Alpha: 0},
 	})
@@ -158,8 +163,8 @@ func TestOptimizer_StandardMP_SelectsEW(t *testing.T) {
 }
 
 func TestOptimizer_QueuesNonNegative(t *testing.T) {
-	net := buildIntersectionA()
-	opt := NewMPOptimizer(net, MPConfig{
+	net := buildIntersectionA(t)
+	opt := mustMPOptimizer(t, net, MPConfig{
 		DeltaT:    5.0,
 		Smoothing: SmoothingConfig{Alpha: 0},
 	})
@@ -171,11 +176,11 @@ func TestOptimizer_QueuesNonNegative(t *testing.T) {
 }
 
 func TestOptimizer_IntersectionStateUpdated(t *testing.T) {
-	net := buildIntersectionA()
+	net := buildIntersectionA(t)
 	inter := net.Intersections[50]
 	inter.ActiveStage = 1
 
-	opt := NewMPOptimizer(net, MPConfig{
+	opt := mustMPOptimizer(t, net, MPConfig{
 		DeltaT:    5.0,
 		Smoothing: SmoothingConfig{Alpha: 0},
 	})
@@ -188,7 +193,7 @@ func TestOptimizer_IntersectionStateUpdated(t *testing.T) {
 
 func TestOptimizer_BoundaryDepartures(t *testing.T) {
 	net := buildTwoIntersectionCorridor(t)
-	opt := NewMPOptimizer(net, MPConfig{DeltaT: 5.0})
+	opt := mustMPOptimizer(t, net, MPConfig{DeltaT: 5.0})
 
 	assert.NotEmpty(t, opt.BoundaryDepartures())
 	t.Logf("Detected boundary departures: %v", opt.BoundaryDepartures())
@@ -196,7 +201,7 @@ func TestOptimizer_BoundaryDepartures(t *testing.T) {
 
 func TestOptimizer_MultiStep(t *testing.T) {
 	net := buildTwoIntersectionCorridor(t)
-	opt := NewMPOptimizer(net, MPConfig{
+	opt := mustMPOptimizer(t, net, MPConfig{
 		DeltaT:    5.0,
 		Smoothing: DefaultSmoothingConfig(),
 		Demand: ConstantDemand(map[gmns.LinkID]float64{
@@ -218,7 +223,7 @@ func TestOptimizer_MultiStep(t *testing.T) {
 
 func TestOptimizer_Run(t *testing.T) {
 	net := buildTwoIntersectionCorridor(t)
-	opt := NewMPOptimizer(net, MPConfig{
+	opt := mustMPOptimizer(t, net, MPConfig{
 		DeltaT:    5.0,
 		SimTime:   60.0,
 		Smoothing: DefaultSmoothingConfig(),

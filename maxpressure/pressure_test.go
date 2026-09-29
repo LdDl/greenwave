@@ -9,15 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// buildIntersectionA is a synthetic fixture for the legacy normalized pressure:
+// buildIntersectionA is a synthetic fixture with explicit 50/50 turning proportions:
 // intersection A (macroNode=50) with 4 approaches, 8 movements, 2 stages.
-func buildIntersectionA() *Network {
+func buildIntersectionA(t *testing.T) *Network {
+	t.Helper()
 	mn := meso.NewNet()
 
 	mn.Links[1] = segLink(1, 0, 10, 200, 2, 3600) // WA=>A (EB), K≈57
-	mn.Links[2] = segLink(2, 0, 10, 300, 2, 3600)  // B=>A  (WB), K≈86
-	mn.Links[3] = segLink(3, 0, 10, 200, 2, 3600)  // NA=>A (SB), K≈57
-	mn.Links[4] = segLink(4, 0, 10, 250, 2, 3600)  // C=>A  (NB), K≈71
+	mn.Links[2] = segLink(2, 0, 10, 300, 2, 3600) // B=>A  (WB), K≈86
+	mn.Links[3] = segLink(3, 0, 10, 200, 2, 3600) // NA=>A (SB), K≈57
+	mn.Links[4] = segLink(4, 0, 10, 250, 2, 3600) // C=>A  (NB), K≈71
 
 	mn.Links[5] = segLink(5, 10, 20, 300, 2, 3600) // A=>B  (EB dep), K≈86
 	mn.Links[6] = segLink(6, 10, 20, 200, 2, 3600) // A=>WA (WB dep), K≈57
@@ -52,35 +53,36 @@ func buildIntersectionA() *Network {
 		},
 	}
 
+	fixtureMovementState(t, net)
 	return net
 }
 
 func TestMovementWeight_EBT(t *testing.T) {
-	net := buildIntersectionA()
-	expected := 1800.0 * (15.0/(200.0*2/7.0) - 5.0/(300.0*2/7.0))
+	net := buildIntersectionA(t)
+	expected := 3.75
 	assert.InDelta(t, expected, net.MovementWeight(110), 0.1)
 }
 
 func TestMovementWeight_NBT(t *testing.T) {
-	net := buildIntersectionA()
-	expected := 1800.0 * (6.0/(250.0*2/7.0) - 4.0/(200.0*2/7.0))
+	net := buildIntersectionA(t)
+	expected := 1.5
 	assert.InDelta(t, expected, net.MovementWeight(122), 0.1)
 }
 
 func TestPhasePressure_P0_GreaterThan_P1(t *testing.T) {
-	net := buildIntersectionA()
+	net := buildIntersectionA(t)
 	inter := net.Intersections[50]
 
 	p0 := net.PhasePressure(&inter.Stages[0])
 	p1 := net.PhasePressure(&inter.Stages[1])
 
 	assert.Greater(t, p0, p1)
-	assert.InDelta(t, 927.0, p0, 100.0, "p0 (EW) should be ~927")
-	assert.InDelta(t, 409.0, p1, 100.0, "p1 (NS) should be ~409")
+	assert.InDelta(t, 11.5277777778, p0, 1e-9)
+	assert.InDelta(t, 6.4444444444, p1, 1e-9)
 }
 
 func TestSelectPhase_ChoosesP0(t *testing.T) {
-	net := buildIntersectionA()
+	net := buildIntersectionA(t)
 	inter := net.Intersections[50]
 
 	phase, pressure := net.SelectPhase(inter)
@@ -89,7 +91,7 @@ func TestSelectPhase_ChoosesP0(t *testing.T) {
 }
 
 func TestPhasePressures(t *testing.T) {
-	net := buildIntersectionA()
+	net := buildIntersectionA(t)
 	inter := net.Intersections[50]
 
 	pressures := net.PhasePressures(inter)

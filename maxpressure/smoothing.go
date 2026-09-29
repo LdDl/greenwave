@@ -7,18 +7,17 @@ import (
 )
 
 // SmoothingConfig holds parameters for an experimental coordination boost
-// inspired by Smoothing-MP (Xu et al., 2024).
+// based on Smoothing-MP (Xu et al., 2024).
 //
 // The boost for a corridor movement (u,d) whose configured predecessor had
 // green during the last completed step is:
 //
-//	xi_{u,d} = Alpha * Q_{u,d}
+//	xi_{u,d} = Alpha * Q_{u,d}^2
 //
-// Here Q_{u,d} is the connector's saturation flow in veh/h. This scaling of
-// Alpha is a project convention, not the paper's per-step capacity Q.
+// Q is the connector's per-step service capacity. Alpha lies in [0,1], scaling
+// the Q^2 reference bound discussed after equation (13).
 // Alpha = 0 reduces to standard max-pressure.
-// The paper's stability guarantee has not been established for this normalized,
-// finite-storage model without explicit turning proportions.
+// See PAPER_MODEL.md for the printed objective's ambiguity and extensions.
 type SmoothingConfig struct {
 	// Alpha scales the experimental coordination bonus; zero disables it.
 	Alpha float64
@@ -69,24 +68,25 @@ func (net *Network) IsUpstreamServed(connectorID gmns.LinkID) bool {
 //
 //	w_smooth = Q * w + xi * c
 //
-// where c = 1 if upstream served, 0 otherwise, and xi = Alpha * Q.
-// Since MovementWeight already returns Q * w (satflow × normalized pressure),
-// the boost simplifies to:
-//
-//	if upstream served: w_smooth = w_standard + Alpha * SatFlow
-//	otherwise:          w_smooth = w_standard
+// Here c is the previous corridor actuation and xi = Alpha * Q^2.
 func (net *Network) SmoothedMovementWeight(connectorID gmns.LinkID, cfg SmoothingConfig) float64 {
 	w := net.MovementWeight(connectorID)
 	if cfg.Alpha <= 0 || !net.IsUpstreamServed(connectorID) {
 		return w
 	}
-	return w + cfg.Alpha*net.SatFlow(connectorID)
+	q := net.ServiceCapacity(connectorID)
+	return w + cfg.Alpha*q*q
 }
 
 // SmoothedPhasePressure computes pressure for a phase with Smoothing-MP boost.
 func (net *Network) SmoothedPhasePressure(phase *Stage, cfg SmoothingConfig) float64 {
 	total := 0.0
+	seen := make(map[gmns.LinkID]bool)
 	for _, cid := range phase.ConnectorIDs {
+		if seen[cid] {
+			continue
+		}
+		seen[cid] = true
 		total += net.SmoothedMovementWeight(cid, cfg)
 	}
 	return total
@@ -94,6 +94,9 @@ func (net *Network) SmoothedPhasePressure(phase *Stage, cfg SmoothingConfig) flo
 
 // SmoothedSelectPhase returns the phase with maximum smoothed pressure.
 func (net *Network) SmoothedSelectPhase(inter *IntersectionState, cfg SmoothingConfig) (StageID, float64) {
+	if len(inter.Stages) == 0 {
+		return NoStage, 0
+	}
 	bestPhase := inter.Stages[0].ID
 	bestPressure := math.Inf(-1)
 	for i := range inter.Stages {

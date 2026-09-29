@@ -22,7 +22,7 @@ func TestCoordinationOnlyFollowsConfiguredMovements(t *testing.T) {
 
 	// Overlapping corridor declarations must not multiply a binary indicator.
 	require.NoError(t, net.SetCoordinatedCorridors([][]gmns.LinkID{{4, 5, 25}, {4, 5, 25}}))
-	assert.Equal(t, net.MovementWeight(130)+net.SatFlow(130), net.SmoothedMovementWeight(130, SmoothingConfig{Alpha: 1}))
+	assert.Equal(t, net.MovementWeight(130)+0.25, net.SmoothedMovementWeight(130, SmoothingConfig{Alpha: 1}))
 	require.NoError(t, net.SetCoordinatedCorridors(nil))
 	assert.False(t, net.IsUpstreamServed(130))
 	assert.Equal(t, net.MovementWeight(130), net.SmoothedMovementWeight(130, SmoothingConfig{Alpha: 1}))
@@ -35,10 +35,11 @@ func TestCoordinationUsesLastCompletedActuation(t *testing.T) {
 	}
 	assert.False(t, net.IsUpstreamServed(130), "zero-value stage ID is not actuation history")
 	assert.Empty(t, net.ServedLinks(net.Intersections[50]))
-	opt := NewMPOptimizer(net, MPConfig{DeltaT: 1, Drain: NoDrain(), Smoothing: SmoothingConfig{Alpha: 1}})
+	opt := mustMPOptimizer(t, net, MPConfig{DeltaT: 1, Drain: NoDrain(), Smoothing: SmoothingConfig{Alpha: 1}})
 
 	// Empty roads still have a selected green stage: Xu's indicator uses s, not y.
 	clear(net.Queues)
+	clear(net.MovementQueues)
 	first := opt.Step()
 	for _, result := range first {
 		assert.False(t, result.Boosted, "current-step decisions cannot influence each other")
@@ -48,7 +49,8 @@ func TestCoordinationUsesLastCompletedActuation(t *testing.T) {
 	assert.Zero(t, net.TotalQueueLength())
 
 	// Force A to switch away from the corridor while B still reads A's old signal.
-	net.Queues[3] = 40
+	net.MovementQueues[114] = 40
+	net.syncRoadQueues()
 	second := opt.Step()
 	for _, result := range second {
 		if result.IntersectionID == 60 {

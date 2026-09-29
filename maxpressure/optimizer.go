@@ -1,6 +1,10 @@
 package maxpressure
 
-import "github.com/LdDl/go-gmns/gmns"
+import (
+	"fmt"
+	"github.com/LdDl/go-gmns/gmns"
+	"math"
+)
 
 // DemandFunc returns traffic intensity (veh/h) for a given link at a given
 // simulation time (seconds). Called every step for every link that has demand.
@@ -94,212 +98,250 @@ func NoDrain() DrainFunc {
 func RateDrain(rates map[gmns.LinkID]float64) DrainFunc {
 	return func(linkID gmns.LinkID, queue float64, deltaT float64) float64 {
 		rate, ok := rates[linkID]
-		if !ok || rate <= 0 {
-			return queue // drain all for unspecified links
+		if !ok {
+			return queue
+		}
+		if rate <= 0 {
+			return 0
 		}
 		return rate * deltaT / 3600.0
 	}
 }
 
-// MPConfig holds configuration for the MP optimizer.
+// MPConfig defines a discrete simulation. FixedPrograms selects baseline replay.
 type MPConfig struct {
-	DeltaT    float64         // simulation step duration (seconds)
-	SimTime   float64         // total simulation time (seconds), 0 = unlimited
-	Smoothing SmoothingConfig // Smoothing-MP parameters
-	Demand    DemandFunc      // demand provider; nil = no demand
-	// Drain controls how boundary departure links are drained each step.
-	// nil = zero the queue (auto drain); use NoDrain() or RateDrain() for other behaviours.
-	Drain DrainFunc
+	DeltaT        float64
+	SimTime       float64
+	Smoothing     SmoothingConfig
+	Demand        DemandFunc
+	Drain         DrainFunc
+	FixedPrograms map[gmns.NodeID]*SignalProgram
 }
 
-// MPOptimizer runs max-pressure simulation on a Network.
+type VehicleBalance struct {
+	Initial         float64 `json:"initial_veh"`
+	Requested       float64 `json:"requested_veh"`
+	Admitted        float64 `json:"admitted_veh"`
+	Departed        float64 `json:"departed_veh"`
+	Remaining       float64 `json:"remaining_veh"`
+	BoundaryBacklog float64 `json:"boundary_backlog_veh"`
+	Error           float64 `json:"conservation_error_veh"`
+}
+
 type MPOptimizer struct {
-	Net    *Network
-	Config MPConfig
-
-	// Auto-detected boundary departure links (vehicles exit here).
-	boundaryDepartures []gmns.LinkID
-
-	// Current simulation time.
-	time float64
+	Net     *Network
+	Config  MPConfig
+	time    float64
+	balance VehicleBalance
+	err     error
 }
 
-// NewMPOptimizer creates an optimizer, auto-detects boundary departures.
-func NewMPOptimizer(net *Network, cfg MPConfig) *MPOptimizer {
-	opt := &MPOptimizer{
-		Net:    net,
-		Config: cfg,
+// NewMPOptimizer validates the model before any simulation work is performed.
+func NewMPOptimizer(net *Network, cfg MPConfig) (*MPOptimizer, error) {
+	if !finiteNonnegative(cfg.DeltaT) || cfg.DeltaT == 0 || !finiteNonnegative(cfg.SimTime) {
+		return nil, fmt.Errorf("delta_t must be positive and sim_time non-negative")
 	}
-	opt.boundaryDepartures = opt.detectBoundaryDepartures()
-	return opt
+	if !finiteNonnegative(cfg.Smoothing.Alpha) || cfg.Smoothing.Alpha > 1 {
+		return nil, fmt.Errorf("alpha must be between 0 and 1")
+	}
+	if err := net.prepare(cfg.DeltaT); err != nil {
+		return nil, err
+	}
+	if cfg.FixedPrograms != nil {
+		for _, id := range net.nodeIDs {
+			p := cfg.FixedPrograms[id]
+			if err := p.validate(net.Intersections[id]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	opt := &MPOptimizer{Net: net, Config: cfg}
+	opt.balance.Initial = net.TotalQueueLength() + net.BacklogTotal()
+	return opt, nil
 }
 
-// detectBoundaryDepartures finds links that receive traffic from connectors
-// (are someone's MovementMesoLinkOutcome) but no connector takes from them
-// (are nobody's MovementMesoLinkIncome). These are network exits.
-func (opt *MPOptimizer) detectBoundaryDepartures() []gmns.LinkID {
-	isOutcome := make(map[gmns.LinkID]bool)
-	isIncome := make(map[gmns.LinkID]bool)
-
-	for _, link := range opt.Net.Meso.Links {
-		if !link.IsConnection() {
-			continue
-		}
-		if id := link.MovementMesoLinkOutcome(); id >= 0 {
-			isOutcome[id] = true
-		}
-		if id := link.MovementMesoLinkIncome(); id >= 0 {
-			isIncome[id] = true
-		}
-	}
-
-	var departures []gmns.LinkID
-	for lid := range isOutcome {
-		if !isIncome[lid] {
-			departures = append(departures, lid)
-		}
-	}
-	return departures
-}
-
-// BoundaryDepartures returns the auto-detected exit links.
 func (opt *MPOptimizer) BoundaryDepartures() []gmns.LinkID {
-	return opt.boundaryDepartures
+	return append([]gmns.LinkID(nil), opt.Net.exitIDs...)
+}
+func (opt *MPOptimizer) Time() float64 { return opt.time }
+
+// Err reports an invalid value returned by a custom demand or drain provider.
+func (opt *MPOptimizer) Err() error { return opt.err }
+func (opt *MPOptimizer) Balance() VehicleBalance {
+	result := opt.balance
+	result.Remaining = opt.Net.TotalQueueLength()
+	result.BoundaryBacklog = opt.Net.BacklogTotal()
+	result.Error = result.Initial + result.Requested - result.Departed - result.Remaining - result.BoundaryBacklog
+	return result
 }
 
-// Time returns current simulation time in seconds.
-func (opt *MPOptimizer) Time() float64 {
-	return opt.time
-}
-
-// StepResult holds the outcome of one simulation step for an intersection.
 type StepResult struct {
 	IntersectionID gmns.NodeID
 	SelectedStage  StageID
 	Pressure       float64
-	// Boosted reports a coordination bonus in the selected stage's score.
-	Boosted bool
+	Boosted        bool
+	DurationS      float64
 }
 
-// Step runs one simulation step:
-//  1. Inject demand based on DemandFunc and current time.
-//  2. Drain boundary departures.
-//  3. Select signal group at each intersection (standard or Smoothing-MP).
-//  4. Discharge vehicles through active connectors.
-//  5. Update queues and intersection state.
-//  6. Advance time.
-func (opt *MPOptimizer) Step() []StepResult {
-	net := opt.Net
-	dt := opt.Config.DeltaT
+func (opt *MPOptimizer) stagePressure(stage *Stage) float64 {
+	return opt.Net.SmoothedPhasePressure(stage, opt.Config.Smoothing)
+}
 
-	// 1. Inject demand
-	if opt.Config.Demand != nil {
-		for lid := range net.Meso.Links {
-			rate := opt.Config.Demand(lid, opt.time) // veh/h
-			if rate > 0 {
-				inject := rate * dt / 3600.0
-				net.Queues[lid] += inject
-				if cap := net.StorageCapacity(lid); cap > 0 && net.Queues[lid] > cap {
-					net.Queues[lid] = cap
-				}
-			}
-		}
-	}
-
-	// 2. Drain boundary departures
-	for _, lid := range opt.boundaryDepartures {
-		if opt.Config.Drain == nil {
-			net.Queues[lid] = 0
+func (opt *MPOptimizer) selectStage(inter *IntersectionState, exclude StageID) StageID {
+	best, pressure := NoStage, math.Inf(-1)
+	for i := range inter.Stages {
+		stage := &inter.Stages[i]
+		if stage.ID == exclude || len(stage.ConnectorIDs) == 0 {
 			continue
 		}
-		remove := opt.Config.Drain(lid, net.Queues[lid], dt)
-		if remove > net.Queues[lid] {
-			remove = net.Queues[lid]
+		p := opt.stagePressure(stage)
+		if p > pressure || (p == pressure && (stage.ID == inter.ActiveStage && inter.started || best != inter.ActiveStage && stage.ID < best)) {
+			best, pressure = stage.ID, p
 		}
-		if remove < 0 {
-			remove = 0
-		}
-		net.Queues[lid] -= remove
 	}
+	return best
+}
 
-	// 3. Select signal groups
-	results := make([]StepResult, 0, len(net.Intersections))
-	phaseDecisions := make(map[gmns.NodeID]StageID, len(net.Intersections))
+func (opt *MPOptimizer) adaptiveStage(inter *IntersectionState) StageID {
+	if inter.started && opt.time < inter.clearanceUntil-1e-9 {
+		return NoStage
+	}
+	if inter.pendingStage != NoStage && inter.started && inter.clearanceUntil > 0 {
+		inter.ActiveStage = inter.pendingStage
+		inter.ActiveStageSince = opt.time
+		inter.pendingStage = NoStage
+		inter.clearanceUntil = 0
+		return inter.ActiveStage
+	}
+	best := opt.selectStage(inter, NoStage)
+	if !inter.started {
+		inter.started = true
+		inter.ActiveStage, inter.ActiveStageSince, inter.pendingStage = best, opt.time, NoStage
+		return best
+	}
+	dt := opt.Config.DeltaT
+	age := opt.time - inter.ActiveStageSince
+	if age+1e-9 < math.Ceil(inter.MinGreenS/dt)*dt {
+		return inter.ActiveStage
+	}
+	maxed := inter.MaxGreenS > 0 && age+1e-9 >= math.Floor(inter.MaxGreenS/dt)*dt
+	if maxed {
+		best = opt.selectStage(inter, inter.ActiveStage)
+	}
+	if best == inter.ActiveStage && !maxed {
+		return best
+	}
+	if best == NoStage {
+		best = inter.ActiveStage
+	}
+	clearance := math.Ceil(inter.ClearanceS/dt) * dt
+	if maxed && best == inter.ActiveStage {
+		clearance = math.Max(clearance, dt)
+	}
+	if clearance > 0 {
+		inter.pendingStage = best
+		inter.clearanceUntil = opt.time + clearance
+		return NoStage
+	}
+	inter.ActiveStage, inter.ActiveStageSince = best, opt.time
+	return best
+}
 
-	for nid, inter := range net.Intersections {
-		var selected StageID
-		var pressure float64
+// Step follows store-and-forward timing: decide from x(t), transfer y(t), then
+// admit demand into x(t+1). Arrivals cannot traverse two junctions in one step.
+func (opt *MPOptimizer) Step() []StepResult { return opt.step(opt.Config.DeltaT) }
 
-		if opt.Config.Smoothing.Alpha > 0 {
-			selected, pressure = net.SmoothedSelectPhase(inter, opt.Config.Smoothing)
-		} else {
-			selected, pressure = net.SelectPhase(inter)
+func (opt *MPOptimizer) step(dt float64) []StepResult {
+	net := opt.Net
+	if opt.err != nil {
+		return nil
+	}
+	demands := make(map[gmns.LinkID]float64)
+	for _, id := range net.entryIDs {
+		if opt.Config.Demand != nil {
+			demands[id] = opt.Config.Demand(id, opt.time) * dt / 3600
 		}
-
-		boosted := false
-		if opt.Config.Smoothing.Alpha > 0 {
-			for _, stage := range inter.Stages {
-				if stage.ID == selected {
-					for _, cid := range stage.ConnectorIDs {
-						if net.IsUpstreamServed(cid) && net.SatFlow(cid) > 0 {
-							boosted = true
-							break
-						}
-					}
-					break
+		if !finiteNonnegative(demands[id]) {
+			opt.err = fmt.Errorf("demand on road %d must be finite and non-negative", id)
+			return nil
+		}
+	}
+	results := []StepResult{}
+	service := make(map[gmns.LinkID]float64)
+	decisions := make(map[gmns.NodeID]StageID)
+	for _, id := range net.nodeIDs {
+		inter := net.Intersections[id]
+		if opt.Config.FixedPrograms != nil {
+			amounts, windows := opt.Config.FixedPrograms[id].service(opt.time, dt, id)
+			for cid, seconds := range amounts {
+				service[cid] = seconds
+			}
+			results = append(results, windows...)
+			decisions[id] = windows[len(windows)-1].SelectedStage
+			continue
+		}
+		selected := opt.adaptiveStage(inter)
+		result := StepResult{IntersectionID: id, SelectedStage: selected, DurationS: dt}
+		for i := range inter.Stages {
+			stage := &inter.Stages[i]
+			if stage.ID != selected {
+				continue
+			}
+			result.Pressure = opt.stagePressure(stage)
+			for _, cid := range stage.ConnectorIDs {
+				service[cid] = dt
+				if opt.Config.Smoothing.Alpha > 0 && net.IsUpstreamServed(cid) {
+					result.Boosted = true
 				}
 			}
+			break
 		}
-		phaseDecisions[nid] = selected
-		results = append(results, StepResult{
-			IntersectionID: nid,
-			SelectedStage:  selected,
-			Pressure:       pressure,
-			Boosted:        boosted,
-		})
+		results = append(results, result)
+		decisions[id] = selected
 	}
-
-	// 4. Discharge vehicles through active connectors
-	linkDelta := net.dischargeDeltas(phaseDecisions, dt)
-
-	// 5. Apply bounded transfers, guarding against floating-point roundoff.
-	for lid, delta := range linkDelta {
-		net.Queues[lid] += delta
-		if net.Queues[lid] < 0 {
-			net.Queues[lid] = 0
+	net.discharge(service)
+	for _, id := range net.exitIDs {
+		removed := net.Queues[id]
+		if opt.Config.Drain != nil {
+			amount := opt.Config.Drain(id, removed, dt)
+			if !finiteNonnegative(amount) {
+				opt.err = fmt.Errorf("drain on road %d must be finite and non-negative", id)
+				return nil
+			}
+			removed = math.Min(removed, amount)
 		}
-		if cap := net.StorageCapacity(lid); cap > 0 && net.Queues[lid] > cap {
-			net.Queues[lid] = cap
-		}
+		net.Queues[id] -= removed
+		opt.balance.Departed += removed
 	}
-
-	// Update intersection state
-	for nid, sgID := range phaseDecisions {
-		inter := net.Intersections[nid]
-		inter.PreviousStage = sgID
-		inter.HasPreviousStage = true
-		if sgID != inter.ActiveStage {
-			inter.ActiveStage = sgID
-			inter.ActiveStageSince = opt.time
+	for _, id := range net.entryIDs {
+		demand := demands[id]
+		opt.balance.Requested += demand
+		net.EntryBacklogs[id] += demand
+		admitted := net.EntryBacklogs[id]
+		if net.FiniteStorage {
+			admitted = math.Min(admitted, math.Max(0, net.StorageCapacity(id)-net.Queues[id]))
 		}
+		net.EntryBacklogs[id] -= admitted
+		net.addArrivals(id, admitted)
+		opt.balance.Admitted += admitted
 	}
-
-	// 6. Advance time
+	net.syncRoadQueues()
+	for _, id := range net.nodeIDs {
+		net.Intersections[id].PreviousStage = decisions[id]
+		net.Intersections[id].HasPreviousStage = true
+	}
 	opt.time += dt
-
 	return results
 }
 
-// Run executes the full simulation for SimTime seconds.
-// Returns results grouped by step.
+// Run includes the final partial step when the horizon is not divisible by dt.
 func (opt *MPOptimizer) Run() [][]StepResult {
-	if opt.Config.SimTime <= 0 {
-		return nil
+	results := [][]StepResult{}
+	for opt.time < opt.Config.SimTime-1e-9 {
+		results = append(results, opt.step(math.Min(opt.Config.DeltaT, opt.Config.SimTime-opt.time)))
+		if opt.err != nil {
+			break
+		}
 	}
-	steps := int(opt.Config.SimTime / opt.Config.DeltaT)
-	allResults := make([][]StepResult, 0, steps)
-	for i := 0; i < steps; i++ {
-		allResults = append(allResults, opt.Step())
-	}
-	return allResults
+	return results
 }

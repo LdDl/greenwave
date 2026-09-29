@@ -81,8 +81,7 @@ func TestStagesFromJunction_NoGreenGroup(t *testing.T) {
 
 	stages := StagesFromJunction(jun, groupConnectors)
 
-	assert.Len(t, stages, 1)
-	assert.Empty(t, stages[0].ConnectorIDs)
+	assert.Empty(t, stages)
 }
 
 func TestStagesFromJunction_UnmappedGroup(t *testing.T) {

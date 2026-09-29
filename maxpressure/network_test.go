@@ -7,6 +7,7 @@ import (
 	"github.com/LdDl/go-gmns/gmns/types"
 	"github.com/LdDl/go-gmns/meso"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // segLink creates a non-connector meso link (road segment).
@@ -59,4 +60,27 @@ func TestTotalQueueLength(t *testing.T) {
 	net.Queues[2] = 5
 
 	assert.Equal(t, 15.0, net.TotalQueueLength())
+}
+
+func mustMPOptimizer(t *testing.T, net *Network, cfg MPConfig) *MPOptimizer {
+	t.Helper()
+	opt, err := NewMPOptimizer(net, cfg)
+	require.NoError(t, err)
+	return opt
+}
+
+func fixtureMovementState(t *testing.T, net *Network) {
+	t.Helper()
+	outgoing := make(map[gmns.LinkID][]gmns.LinkID)
+	for id, link := range net.Meso.Links {
+		if link.IsConnection() {
+			outgoing[link.MovementMesoLinkIncome()] = append(outgoing[link.MovementMesoLinkIncome()], id)
+		}
+	}
+	for _, ids := range outgoing {
+		for _, id := range ids {
+			net.TurningRatios[id] = 1 / float64(len(ids))
+		}
+	}
+	require.NoError(t, net.prepare(1))
 }

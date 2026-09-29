@@ -1,5 +1,7 @@
 package dto
 
+import "github.com/LdDl/greenwave/maxpressure"
+
 // MPRunRequest is the request body for POST /maxpressure/run.
 // swagger:model
 type MPRunRequest struct {
@@ -18,6 +20,12 @@ type MPRunRequest struct {
 	Drain MPDrainDTO `json:"drain"`
 	// InitialQueues sets starting queue length (vehicles) per link ID. Optional.
 	InitialQueues map[int]float64 `json:"initial_queues"`
+	// TurningRatios maps connector IDs to arrival proportions; every branching road must sum to 1.
+	TurningRatios map[int]float64 `json:"turning_ratios"`
+	// InitialMovementQueues supplies separate queues by connector ID, instead of road totals.
+	InitialMovementQueues map[int]float64 `json:"initial_movement_queues,omitempty"`
+	// InitialBacklogs supplies queues outside entry roads.
+	InitialBacklogs map[int]float64 `json:"initial_backlogs,omitempty"`
 	// Config holds simulation parameters.
 	Config MPSimConfigDTO `json:"config"`
 }
@@ -65,6 +73,11 @@ type MPIntersectionConfigDTO struct {
 	// GroupConnectors maps signal group ID to the meso connector link IDs it controls.
 	// JSON keys are group IDs as strings (e.g. "0", "1").
 	GroupConnectors map[int][]int `json:"group_connectors"`
+	// Timing is an optional practical extension. Omitted values use 5/60/5 seconds.
+	// Explicit zeros disable the respective bound, for the paper's ideal controller.
+	MinGreenS  *float64 `json:"min_green_s,omitempty"`
+	MaxGreenS  *float64 `json:"max_green_s,omitempty"`
+	ClearanceS *float64 `json:"clearance_s,omitempty"`
 }
 
 // MPDemandDTO specifies the traffic demand injected into the network.
@@ -109,63 +122,32 @@ type MPDrainDTO struct {
 // MPSimConfigDTO holds max-pressure simulation parameters.
 // swagger:model
 type MPSimConfigDTO struct {
-	// DeltaT is the simulation step duration in seconds. Defaults to 5.0 if not set.
+	// DeltaT is the simulation step duration in seconds. Defaults to 1.0 if not set.
 	DeltaT float64 `json:"delta_t"`
 	// SimTime is the total simulation duration in seconds. Must be > 0.
 	SimTime float64 `json:"sim_time"`
-	// Alpha scales the experimental bonus on coordinated_corridors (>= 0).
-	// Zero disables the bonus. This is not the paper's per-step coordination weight.
+	// StorageModel is "point_queue" (default, Xu) or "finite_storage" (extension).
+	StorageModel string `json:"storage_model"`
+	// Alpha lies in [0,1]; the coordination weight is Alpha * Q^2, Q in veh/step.
 	Alpha float64 `json:"alpha"`
 }
 
-// MPRunResponse is the response from POST /maxpressure/run.
+// MPRunResponse compares controllers under identical demand and initial state.
 // swagger:model
 type MPRunResponse struct {
-	// Evaluation contains simulation metrics measured over the full SimTime.
-	Evaluation MPEvaluationDTO `json:"evaluation"`
-	// Proposal contains re-synthesized signal timings based on MP stage fractions.
-	Proposal []MPProposalDTO `json:"proposal"`
+	ModelVersion       int                     `json:"model_version"`
+	Evaluation         *maxpressure.Evaluation `json:"evaluation"`
+	Baseline           *maxpressure.Evaluation `json:"baseline"`
+	StandardMP         *maxpressure.Evaluation `json:"standard_mp"`
+	ProposalEvaluation *maxpressure.Evaluation `json:"proposal_evaluation"`
+	Proposal           []MPProposalDTO         `json:"proposal"`
+	ProposalAccepted   bool                    `json:"proposal_accepted"`
+	Warnings           []string                `json:"warnings"`
 }
 
-// MPEvaluationDTO aggregates simulation performance metrics.
-// swagger:model
-type MPEvaluationDTO struct {
-	// TotalDelayVehS is the total accumulated queue (veh * s) summed over all road
-	// links and all simulation steps (sum of queue_i * delta_t at each step).
-	TotalDelayVehS float64 `json:"total_delay_veh_s"`
-	// PerLink contains per-link queue statistics (road segments only).
-	PerLink []MPLinkStatsDTO `json:"per_link"`
-	// PerIntersection contains per-intersection stage selection statistics.
-	PerIntersection []MPIntersectionStatsDTO `json:"per_intersection"`
-}
-
-// MPLinkStatsDTO reports average and peak queue for one road link.
-// swagger:model
-type MPLinkStatsDTO struct {
-	// LinkID is the meso link identifier.
-	LinkID int `json:"link_id"`
-	// AvgQueueVeh is the time-averaged queue length in vehicles.
-	AvgQueueVeh float64 `json:"avg_queue_veh"`
-	// MaxQueueVeh is the peak queue length in vehicles.
-	MaxQueueVeh float64 `json:"max_queue_veh"`
-}
-
-// MPIntersectionStatsDTO reports stage selection fractions for one intersection.
-// swagger:model
-type MPIntersectionStatsDTO struct {
-	// MacroNodeID identifies the intersection.
-	MacroNodeID int `json:"macro_node_id"`
-	// StageFractions maps stage ID to the fraction of steps it was selected [0, 1].
-	// JSON keys are stage IDs as strings.
-	StageFractions map[int]float64 `json:"stage_fractions"`
-}
-
-// MPProposalDTO contains synthesized signal timings for one intersection.
-// Green times are redistributed proportionally to stage selection fractions.
+// MPProposalDTO contains a fixed program evaluated separately from adaptive MP.
 // swagger:model
 type MPProposalDTO struct {
-	// MacroNodeID identifies the intersection.
-	MacroNodeID int `json:"macro_node_id"`
-	// Junction is the updated signal plan with redistributed green times.
-	Junction JunctionDTO `json:"junction"`
+	MacroNodeID int         `json:"macro_node_id"`
+	Junction    JunctionDTO `json:"junction"`
 }

@@ -20,8 +20,12 @@ type StageID int
 // that can be served simultaneously at an intersection.
 type Stage struct {
 	ID           StageID
-	ConnectorIDs []gmns.LinkID // meso connector link IDs belonging to this stage
+	ConnectorIDs []gmns.LinkID
+	PhaseID      int
 }
+
+// NoStage denotes a clearance interval with no actuated movements.
+const NoStage StageID = -1
 
 // IntersectionState holds runtime state for a signalized intersection.
 type IntersectionState struct {
@@ -38,16 +42,32 @@ type IntersectionState struct {
 	PreviousStage StageID
 	// HasPreviousStage distinguishes a recorded actuation from a zero-value ID.
 	HasPreviousStage bool
+	started          bool
+	pendingStage     StageID
+	clearanceUntil   float64
 }
 
 // Network wraps a meso.Net and adds queue lengths + phase assignments
 // for max-pressure control. The meso graph already contains all topology
 // (segments, connectors, upstream/downstream references).
 type Network struct {
-	Meso           *meso.Net
-	Queues         map[gmns.LinkID]float64
+	Meso   *meso.Net
+	Queues map[gmns.LinkID]float64
+	// MovementQueues is authoritative; Queues exposes aggregated road occupancy.
+	MovementQueues map[gmns.LinkID]float64
+	TurningRatios  map[gmns.LinkID]float64
+	EntryBacklogs  map[gmns.LinkID]float64
 	Intersections  map[gmns.NodeID]*IntersectionState
 	VehicleLengthM float64
+	FiniteStorage  bool
+	initialized    bool
+	stepSeconds    float64
+	outgoing       map[gmns.LinkID][]gmns.LinkID
+	roadIDs        []gmns.LinkID
+	movementIDs    []gmns.LinkID
+	entryIDs       []gmns.LinkID
+	exitIDs        []gmns.LinkID
+	nodeIDs        []gmns.NodeID
 
 	coordinationPredecessors map[gmns.LinkID][]gmns.LinkID
 }
@@ -57,8 +77,12 @@ func NewNetwork(mesoNet *meso.Net) *Network {
 	return &Network{
 		Meso:           mesoNet,
 		Queues:         make(map[gmns.LinkID]float64),
+		MovementQueues: make(map[gmns.LinkID]float64),
+		TurningRatios:  make(map[gmns.LinkID]float64),
+		EntryBacklogs:  make(map[gmns.LinkID]float64),
 		Intersections:  make(map[gmns.NodeID]*IntersectionState),
 		VehicleLengthM: DEFAULT_VEHICLE_LENGTH,
+		stepSeconds:    1,
 	}
 }
 
@@ -112,6 +136,12 @@ func (net *Network) SatFlow(linkID gmns.LinkID) float64 {
 // TotalQueueLength returns sum of all queues in the network.
 func (net *Network) TotalQueueLength() float64 {
 	total := 0.0
+	if len(net.roadIDs) > 0 {
+		for _, id := range net.roadIDs {
+			total += net.Queues[id]
+		}
+		return total
+	}
 	for _, q := range net.Queues {
 		total += q
 	}

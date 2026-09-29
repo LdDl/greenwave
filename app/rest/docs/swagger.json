@@ -131,7 +131,7 @@
         },
         "/api/maxpressure/run": {
             "post": {
-                "description": "Runs a Smoothing-MP simulation on a meso network and returns\nevaluation metrics and a synthesized signal timing proposal.",
+                "description": "Model version 2 uses explicit turning proportions and per-movement queues. Adaptive and fixed-plan metrics are evaluated separately.",
                 "consumes": [
                     "application/json"
                 ],
@@ -141,7 +141,7 @@
                 "tags": [
                     "MaxPressure"
                 ],
-                "summary": "Run max-pressure simulation",
+                "summary": "Compare movement-queue max-pressure controllers",
                 "parameters": [
                     {
                         "description": "MP simulation request",
@@ -166,10 +166,10 @@
                             "$ref": "#/definitions/codes.Error400"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
-                            "$ref": "#/definitions/codes.Error500"
+                            "$ref": "#/definitions/codes.Error400"
                         }
                     }
                 }
@@ -550,6 +550,26 @@
                 }
             }
         },
+        "dto.SignalGroupDTO": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "Signal group identifier",
+                    "type": "integer"
+                },
+                "signals": {
+                    "description": "List of signals that define the group's state sequence within the phase",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.SignalDTO"
+                    }
+                },
+                "total_seconds": {
+                    "description": "Total duration of the group in seconds, calculated from the signals",
+                    "type": "integer"
+                }
+            }
+        },
         "dto.MPDemandDTO": {
             "type": "object",
             "properties": {
@@ -608,32 +628,12 @@
                 }
             }
         },
-        "dto.MPEvaluationDTO": {
-            "type": "object",
-            "properties": {
-                "per_intersection": {
-                    "description": "PerIntersection contains per-intersection stage selection statistics.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.MPIntersectionStatsDTO"
-                    }
-                },
-                "per_link": {
-                    "description": "PerLink contains per-link queue statistics (road segments only).",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.MPLinkStatsDTO"
-                    }
-                },
-                "total_delay_veh_s": {
-                    "description": "TotalDelayVehS is the total accumulated queue (veh * s) summed over all road\nlinks and all simulation steps (sum of queue_i * delta_t at each step).",
-                    "type": "number"
-                }
-            }
-        },
         "dto.MPIntersectionConfigDTO": {
             "type": "object",
             "properties": {
+                "clearance_s": {
+                    "type": "number"
+                },
                 "group_connectors": {
                     "description": "GroupConnectors maps signal group ID to the meso connector link IDs it controls.\nJSON keys are group IDs as strings (e.g. \"0\", \"1\").",
                     "type": "object",
@@ -655,23 +655,13 @@
                 "macro_node_id": {
                     "description": "MacroNodeID is the macro-graph node ID identifying this intersection.",
                     "type": "integer"
-                }
-            }
-        },
-        "dto.MPIntersectionStatsDTO": {
-            "type": "object",
-            "properties": {
-                "macro_node_id": {
-                    "description": "MacroNodeID identifies the intersection.",
-                    "type": "integer"
                 },
-                "stage_fractions": {
-                    "description": "StageFractions maps stage ID to the fraction of steps it was selected [0, 1].\nJSON keys are stage IDs as strings.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
-                    }
+                "max_green_s": {
+                    "type": "number"
+                },
+                "min_green_s": {
+                    "description": "Timing is an optional practical extension. Omitted values use 5/60/5 seconds.\nExplicit zeros disable the respective bound, for the paper's ideal controller.",
+                    "type": "number"
                 }
             }
         },
@@ -720,23 +710,6 @@
                 }
             }
         },
-        "dto.MPLinkStatsDTO": {
-            "type": "object",
-            "properties": {
-                "avg_queue_veh": {
-                    "description": "AvgQueueVeh is the time-averaged queue length in vehicles.",
-                    "type": "number"
-                },
-                "link_id": {
-                    "description": "LinkID is the meso link identifier.",
-                    "type": "integer"
-                },
-                "max_queue_veh": {
-                    "description": "MaxQueueVeh is the peak queue length in vehicles.",
-                    "type": "number"
-                }
-            }
-        },
         "dto.MPNetworkDTO": {
             "type": "object",
             "properties": {
@@ -753,15 +726,9 @@
             "type": "object",
             "properties": {
                 "junction": {
-                    "description": "Junction is the updated signal plan with redistributed green times.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/dto.JunctionDTO"
-                        }
-                    ]
+                    "$ref": "#/definitions/dto.JunctionDTO"
                 },
                 "macro_node_id": {
-                    "description": "MacroNodeID identifies the intersection.",
                     "type": "integer"
                 }
             }
@@ -803,6 +770,22 @@
                         }
                     ]
                 },
+                "initial_backlogs": {
+                    "description": "InitialBacklogs supplies queues outside entry roads.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "initial_movement_queues": {
+                    "description": "InitialMovementQueues supplies separate queues by connector ID, instead of road totals.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
                 "initial_queues": {
                     "description": "InitialQueues sets starting queue length (vehicles) per link ID. Optional.",
                     "type": "object",
@@ -825,25 +808,48 @@
                             "$ref": "#/definitions/dto.MPNetworkDTO"
                         }
                     ]
+                },
+                "turning_ratios": {
+                    "description": "TurningRatios maps connector IDs to arrival proportions; every branching road must sum to 1.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
                 }
             }
         },
         "dto.MPRunResponse": {
             "type": "object",
             "properties": {
+                "baseline": {
+                    "$ref": "#/definitions/maxpressure.Evaluation"
+                },
                 "evaluation": {
-                    "description": "Evaluation contains simulation metrics measured over the full SimTime.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/dto.MPEvaluationDTO"
-                        }
-                    ]
+                    "$ref": "#/definitions/maxpressure.Evaluation"
+                },
+                "model_version": {
+                    "type": "integer"
                 },
                 "proposal": {
-                    "description": "Proposal contains re-synthesized signal timings based on MP stage fractions.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.MPProposalDTO"
+                    }
+                },
+                "proposal_accepted": {
+                    "type": "boolean"
+                },
+                "proposal_evaluation": {
+                    "$ref": "#/definitions/maxpressure.Evaluation"
+                },
+                "standard_mp": {
+                    "$ref": "#/definitions/maxpressure.Evaluation"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             }
@@ -852,36 +858,146 @@
             "type": "object",
             "properties": {
                 "alpha": {
-                    "description": "Alpha scales the experimental bonus on coordinated_corridors (>= 0).\nZero disables the bonus. This is not the paper's per-step coordination weight.",
+                    "description": "Alpha lies in [0,1]; the coordination weight is Alpha * Q^2, Q in veh/step.",
                     "type": "number"
                 },
                 "delta_t": {
-                    "description": "DeltaT is the simulation step duration in seconds. Defaults to 5.0 if not set.",
+                    "description": "DeltaT is the simulation step duration in seconds. Defaults to 1.0 if not set.",
                     "type": "number"
                 },
                 "sim_time": {
                     "description": "SimTime is the total simulation duration in seconds. Must be > 0.",
                     "type": "number"
+                },
+                "storage_model": {
+                    "description": "StorageModel is \"point_queue\" (default, Xu) or \"finite_storage\" (extension).",
+                    "type": "string"
                 }
             }
         },
-        "dto.SignalGroupDTO": {
+        "maxpressure.Evaluation": {
             "type": "object",
             "properties": {
-                "id": {
-                    "description": "Signal group identifier",
-                    "type": "integer"
+                "boundary_wait_veh_s": {
+                    "type": "number"
                 },
-                "signals": {
-                    "description": "List of signals that define the group's state sequence within the phase",
+                "duration_s": {
+                    "type": "number"
+                },
+                "per_intersection": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.SignalDTO"
+                        "$ref": "#/definitions/maxpressure.IntersectionStats"
                     }
                 },
-                "total_seconds": {
-                    "description": "Total duration of the group in seconds, calculated from the signals",
+                "per_link": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/maxpressure.QueueStats"
+                    }
+                },
+                "per_movement": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/maxpressure.QueueStats"
+                    }
+                },
+                "samples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/maxpressure.SimulationSample"
+                    }
+                },
+                "total_delay_veh_s": {
+                    "type": "number"
+                },
+                "vehicle_balance": {
+                    "$ref": "#/definitions/maxpressure.VehicleBalance"
+                }
+            }
+        },
+        "maxpressure.IntersectionStats": {
+            "type": "object",
+            "properties": {
+                "clearance_s": {
+                    "type": "number"
+                },
+                "macro_node_id": {
                     "type": "integer"
+                },
+                "phase_green_seconds": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "stage_fractions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                }
+            }
+        },
+        "maxpressure.QueueStats": {
+            "type": "object",
+            "properties": {
+                "avg_queue_veh": {
+                    "type": "number"
+                },
+                "final_queue_veh": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_queue_veh": {
+                    "type": "number"
+                }
+            }
+        },
+        "maxpressure.SimulationSample": {
+            "type": "object",
+            "properties": {
+                "boundary_backlog_veh": {
+                    "type": "number"
+                },
+                "departed_veh": {
+                    "type": "number"
+                },
+                "queue_veh": {
+                    "type": "number"
+                },
+                "time_s": {
+                    "type": "number"
+                }
+            }
+        },
+        "maxpressure.VehicleBalance": {
+            "type": "object",
+            "properties": {
+                "admitted_veh": {
+                    "type": "number"
+                },
+                "boundary_backlog_veh": {
+                    "type": "number"
+                },
+                "conservation_error_veh": {
+                    "type": "number"
+                },
+                "departed_veh": {
+                    "type": "number"
+                },
+                "initial_veh": {
+                    "type": "number"
+                },
+                "remaining_veh": {
+                    "type": "number"
+                },
+                "requested_veh": {
+                    "type": "number"
                 }
             }
         }

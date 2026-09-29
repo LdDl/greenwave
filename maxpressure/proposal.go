@@ -1,215 +1,167 @@
 package maxpressure
 
 import (
+	"fmt"
 	"math"
+	"slices"
 
 	"github.com/LdDl/greenwave/color"
 	"github.com/LdDl/greenwave/junction"
 )
 
-// DefaultMinGreenS is the fallback minimum green time used in SynthesizeProposal
-// when a signal's MinDuration was not explicitly constrained.
 const DefaultMinGreenS = 5.0
 
-// phaseAnalysis holds the pre-computed structural properties of one junction phase
-// needed for green time redistribution in SynthesizeProposal.
-type phaseAnalysis struct {
-	// activeGrpIdx is the index of the signal group that has a GREEN signal in this phase.
-	// -1 if no group is active (no GREEN signal found).
-	activeGrpIdx int
-	// greenSigIdx is the index of the GREEN signal within the active group's Signals slice.
-	greenSigIdx int
-	// clearance is the total duration (seconds) of all non-GREEN signals in the active group
-	// (e.g. YELLOW + RED). This time is kept fixed during redistribution.
-	clearance float64
-	// minGreen is the minimum allowable green duration (seconds) for this phase.
-	// Derived from Signal.MinDuration if explicitly constrained, floored at DefaultMinGreenS.
-	minGreen float64
+type phaseAdjustment struct {
+	indices []int
+	width   int
+	minimum int
+	maximum int
 }
 
-// analyzePhase scans a phase and returns its structural properties for green time redistribution.
-// It finds the first signal group containing a GREEN or GREENPRIORITY signal (the "active" group),
-// computes the clearance (sum of all non-green signal durations in that group), and derives the
-// per-phase minimum green floor from Signal.MinDuration, bounded below by DefaultMinGreenS.
-func analyzePhase(phase *junction.Phase) phaseAnalysis {
-	pa := phaseAnalysis{activeGrpIdx: -1, greenSigIdx: -1, minGreen: DefaultMinGreenS}
-	for gi, sg := range phase.SignalGroups {
-		for si, sig := range sg.Signals {
-			if sig.Color != color.GREEN && sig.Color != color.GREENPRIORITY {
-				continue
-			}
-			pa.activeGrpIdx = gi
-			pa.greenSigIdx = si
-			for _, s := range sg.Signals {
-				if s.Color != color.GREEN && s.Color != color.GREENPRIORITY {
-					pa.clearance += float64(s.Duration)
-				}
-			}
-			// Use Signal.MinDuration as floor only when it was explicitly set to a value
-			// smaller than Duration (otherwise it equals Duration by default in NewSignal).
-			if sig.MinDuration > 0 && sig.MinDuration < sig.Duration {
-				pa.minGreen = math.Max(float64(sig.MinDuration), DefaultMinGreenS)
-			}
-			return pa
+// adjustableWindow locates a common green/red interval that can be resized in
+// every group together. Yellow and red-yellow intervals are never modified.
+func adjustableWindow(phase *junction.Phase) phaseAdjustment {
+	bounds := []int{0}
+	for _, group := range phase.SignalGroups {
+		elapsed := 0
+		for _, signal := range group.Signals {
+			elapsed += signal.Duration
+			bounds = append(bounds, elapsed)
 		}
 	}
-	return pa
+	slices.Sort(bounds)
+	bounds = slices.Compact(bounds)
+	best := phaseAdjustment{}
+	for i := 0; i+1 < len(bounds); i++ {
+		start, width := bounds[i], bounds[i+1]-bounds[i]
+		candidate := phaseAdjustment{width: width, minimum: 1 - width, maximum: math.MaxInt32}
+		green, allowed := false, true
+		for _, group := range phase.SignalGroups {
+			elapsed, index := 0, -1
+			for si, signal := range group.Signals {
+				if elapsed <= start && start < elapsed+signal.Duration {
+					index = si
+					break
+				}
+				elapsed += signal.Duration
+			}
+			if index < 0 {
+				allowed = false
+				break
+			}
+			signal := group.Signals[index]
+			if signal.Color != color.RED && !isGreen(signal.Color) {
+				allowed = false
+				break
+			}
+			green = green || isGreen(signal.Color)
+			candidate.indices = append(candidate.indices, index)
+			candidate.minimum = max(candidate.minimum, signal.MinDuration-signal.Duration)
+			candidate.maximum = min(candidate.maximum, signal.MaxDuration-signal.Duration)
+		}
+		if allowed && green && width > best.width {
+			best = candidate
+		}
+	}
+	return best
 }
 
-// SynthesizeProposal rebuilds a junction's green times using MP stage fractions.
-//
-// Algorithm:
-//  1. For each phase, find the active signal group (first group with a GREEN signal).
-//  2. Clearance per phase = sum of non-GREEN signal durations in the active group.
-//  3. minGreen per phase = Signal.MinDuration of the GREEN signal if MinDuration < Duration
-//     (explicitly constrained), otherwise DefaultMinGreenS.
-//  4. Available green time = total_cycle - sum(clearance_i).
-//  5. desired_green_i = fraction_i * availableGreen  (where fraction_i = counts_i / totalSteps).
-//  6. actual_green_i = max(desired_green_i, minGreen_i).
-//  7. If sum(actual_green_i) > availableGreen, scale down proportionally (keeping per-phase floors).
-//  8. Rebuild phases with new green durations; non-active groups adjusted to match total.
-func SynthesizeProposal(jun *junction.Junction, stageCounts map[StageID]int, totalSteps int) *junction.Junction {
-	analyses := make([]phaseAnalysis, len(jun.Cycle))
-	totalClearance := 0.0
-
-	for i, phase := range jun.Cycle {
-		analyses[i] = analyzePhase(phase)
-		totalClearance += analyses[i].clearance
+// SynthesizeProgram preserves the cycle, offset, group alignment and every
+// signal's explicit bounds. It is a fixed-plan heuristic evaluated separately
+// from the adaptive controller; no performance improvement is assumed.
+func SynthesizeProgram(jun *junction.Junction, phaseSeconds map[int]float64) (*junction.Junction, error) {
+	if jun == nil || len(jun.Cycle) == 0 {
+		return nil, fmt.Errorf("cannot synthesize an empty program")
 	}
+	if _, err := compileProgram(jun, nil, false); err != nil {
+		return nil, err
+	}
+	adjustments := make([]phaseAdjustment, len(jun.Cycle))
+	widths := make([]int, len(jun.Cycle))
+	budget, totalWeight := 0, 0.0
+	for i, phase := range jun.Cycle {
+		adjustments[i] = adjustableWindow(phase)
+		widths[i] = adjustments[i].width
+		budget += widths[i]
+		weight := phaseSeconds[phase.ID]
+		if !finiteNonnegative(weight) {
+			return nil, fmt.Errorf("phase weights must be finite and non-negative")
+		}
+		if widths[i] > 0 {
+			totalWeight += weight
+		}
+	}
+	if totalWeight > 0 {
+		target := make([]float64, len(widths))
+		assigned := 0
+		// Project proportional targets onto bounded integer durations with exact sum.
+		for i, phase := range jun.Cycle {
+			a := adjustments[i]
+			target[i] = phaseSeconds[phase.ID] / totalWeight * float64(budget)
+			widths[i] = a.width + a.minimum
+			if a.width == 0 {
+				widths[i] = 0
+			}
+			assigned += widths[i]
+		}
+		for assigned < budget {
+			best, gap := -1, math.Inf(-1)
+			for i, a := range adjustments {
+				if a.width == 0 || widths[i] >= a.width+a.maximum {
+					continue
+				}
+				distance := target[i] - float64(widths[i])
+				if distance > gap {
+					best, gap = i, distance
+				}
+			}
+			if best < 0 {
+				return nil, fmt.Errorf("signal bounds cannot preserve cycle duration")
+			}
+			widths[best]++
+			assigned++
+		}
+	}
+	phases := make([]*junction.Phase, len(jun.Cycle))
+	for i, phase := range jun.Cycle {
+		groups := make([]junction.SignalGroup, len(phase.SignalGroups))
+		delta := widths[i] - adjustments[i].width
+		for gi, group := range phase.SignalGroups {
+			signals := make([]*junction.Signal, len(group.Signals))
+			for si, original := range group.Signals {
+				signal := *original
+				if len(adjustments[i].indices) > 0 && si == adjustments[i].indices[gi] {
+					signal.Duration += delta
+				}
+				if signal.Duration < signal.MinDuration || signal.Duration > signal.MaxDuration {
+					return nil, fmt.Errorf("proposal violates signal bounds")
+				}
+				signals[si] = &signal
+			}
+			groups[gi] = junction.SignalGroup{ID: group.ID, Signals: signals}
+		}
+		phases[i] = junction.NewPhase(phase.ID, groups)
+	}
+	result := junction.NewJunction(phases, junction.WithID(jun.ID), junction.WithLabel(jun.Label), junction.WithPoint(jun.GetPoint()))
+	result.SetOffset(jun.GetOffset())
+	if result.GetTotalDuration() != jun.GetTotalDuration() {
+		return nil, fmt.Errorf("proposal changed cycle duration")
+	}
+	return result, nil
+}
 
-	totalCycle := float64(jun.GetTotalDuration())
-	availableGreen := totalCycle - totalClearance
-	if availableGreen <= 0 || totalSteps <= 0 {
+// SynthesizeProposal retains the older count-based Go entry point. New callers
+// should use SynthesizeProgram with phase green seconds and handle its error.
+func SynthesizeProposal(jun *junction.Junction, stageCounts map[StageID]int, totalSteps int) *junction.Junction {
+	weights := make(map[int]float64)
+	if totalSteps > 0 {
+		for stage, count := range stageCounts {
+			weights[int(stage)] = float64(count)
+		}
+	}
+	result, err := SynthesizeProgram(jun, weights)
+	if err != nil {
 		return jun
 	}
-
-	// Compute desired green times from stage fractions
-	greenTimes := make([]float64, len(jun.Cycle))
-	for i, phase := range jun.Cycle {
-		if analyses[i].activeGrpIdx < 0 {
-			continue
-		}
-		frac := float64(stageCounts[StageID(phase.ID)]) / float64(totalSteps)
-		g := frac * availableGreen
-		if g < analyses[i].minGreen {
-			g = analyses[i].minGreen
-		}
-		greenTimes[i] = g
-	}
-
-	// Scale down if sum exceeds availableGreen (keep relative ratios, floor at per-phase minGreen)
-	sum := 0.0
-	for _, g := range greenTimes {
-		sum += g
-	}
-	if sum > availableGreen+0.5 {
-		excess := sum - availableGreen
-		scalable := 0.0
-		for i, g := range greenTimes {
-			if analyses[i].activeGrpIdx >= 0 && g > analyses[i].minGreen {
-				scalable += g - analyses[i].minGreen
-			}
-		}
-		if scalable > 0 {
-			for i, g := range greenTimes {
-				if analyses[i].activeGrpIdx >= 0 && g > analyses[i].minGreen {
-					greenTimes[i] = g - excess*(g-analyses[i].minGreen)/scalable
-				}
-			}
-		}
-	}
-
-	// Round all green times to integers; then correct rounding drift so that
-	// the total cycle duration is preserved exactly.
-	newGreens := make([]int, len(jun.Cycle))
-	for i := range jun.Cycle {
-		if analyses[i].activeGrpIdx < 0 {
-			continue
-		}
-		newGreens[i] = int(math.Max(math.Round(greenTimes[i]), analyses[i].minGreen))
-	}
-	roundedSum := 0
-	for _, g := range newGreens {
-		roundedSum += g
-	}
-	if drift := int(availableGreen) - roundedSum; drift != 0 {
-		// Apply drift to the active phase with the largest green time.
-		maxIdx, maxVal := -1, -1
-		for i, g := range newGreens {
-			if analyses[i].activeGrpIdx >= 0 && g > maxVal {
-				maxIdx, maxVal = i, g
-			}
-		}
-		if maxIdx >= 0 {
-			adjusted := newGreens[maxIdx] + drift
-			if adjusted < int(analyses[maxIdx].minGreen) {
-				adjusted = int(analyses[maxIdx].minGreen)
-			}
-			newGreens[maxIdx] = adjusted
-		}
-	}
-
-	// Rebuild phases with updated durations
-	newPhases := make([]*junction.Phase, len(jun.Cycle))
-	for i, phase := range jun.Cycle {
-		pa := analyses[i]
-		if pa.activeGrpIdx < 0 {
-			newPhases[i] = phase
-			continue
-		}
-
-		newGreen := newGreens[i]
-		newPhaseDur := newGreen + int(math.Round(pa.clearance))
-
-		newSGs := make([]junction.SignalGroup, len(phase.SignalGroups))
-		for gi, sg := range phase.SignalGroups {
-			newSigs := make([]*junction.Signal, len(sg.Signals))
-			if gi == pa.activeGrpIdx {
-				// Update GREEN signal; keep YELLOW/RED as-is
-				for si, sig := range sg.Signals {
-					dur := sig.Duration
-					if si == pa.greenSigIdx {
-						dur = newGreen
-					}
-					newSigs[si] = &junction.Signal{
-						Duration:    dur,
-						MinDuration: sig.MinDuration,
-						MaxDuration: sig.MaxDuration,
-						Color:       sig.Color,
-					}
-				}
-			} else {
-				// Non-active group: adjust last signal to match new total phase duration
-				currentTotal := 0
-				for _, sig := range sg.Signals {
-					currentTotal += sig.Duration
-				}
-				diff := newPhaseDur - currentTotal
-				for si, sig := range sg.Signals {
-					dur := sig.Duration
-					if si == len(sg.Signals)-1 {
-						dur += diff
-						if dur < 0 {
-							dur = 0
-						}
-					}
-					newSigs[si] = &junction.Signal{
-						Duration:    dur,
-						MinDuration: sig.MinDuration,
-						MaxDuration: sig.MaxDuration,
-						Color:       sig.Color,
-					}
-				}
-			}
-			newSGs[gi] = junction.SignalGroup{ID: sg.ID, Signals: newSigs}
-		}
-		newPhases[i] = junction.NewPhase(phase.ID, newSGs)
-	}
-
-	pt := jun.GetPoint()
-	return junction.NewJunction(newPhases,
-		junction.WithID(jun.ID),
-		junction.WithLabel(jun.Label),
-		junction.WithPoint(pt),
-	)
+	return result
 }
