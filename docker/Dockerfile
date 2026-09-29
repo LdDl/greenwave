@@ -3,14 +3,14 @@ FROM docker.io/node:22-alpine AS ui-builder
 
 WORKDIR /build_ui
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Corepack uses the pnpm version pinned in package.json.
+RUN corepack enable
 
 # Copy package files
-COPY web/greenwave-ui/package.json web/greenwave-ui/pnpm-lock.yaml* ./
+COPY web/greenwave-ui/package.json web/greenwave-ui/pnpm-lock.yaml web/greenwave-ui/pnpm-workspace.yaml web/greenwave-ui/.npmrc ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY web/greenwave-ui/ ./
@@ -31,11 +31,15 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest
 
 COPY ./*.go ./
 COPY ./color ./color
+COPY ./geom ./geom
+COPY ./greeninterval ./greeninterval
+COPY ./junction ./junction
+COPY ./maxpressure ./maxpressure
 COPY ./app ./app
 COPY ./cmd/greenwave ./cmd/greenwave
 
 # Regenerate Swagger documentation just in case
-RUN swag init -g cmd/greenwave/main.go --output ./docs --outputTypes json
+RUN swag init -g cmd/greenwave/main.go --output ./app/rest/docs --outputTypes json
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o greenwave-server-app ./cmd/greenwave/main.go
 
