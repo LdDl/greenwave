@@ -13,6 +13,7 @@
 
 {#if $corridorsOpen}
 	<div
+		id="workspace-corridors"
 		class="workspace-overlay corridor-overlay"
 		role="dialog"
 		aria-modal="true"

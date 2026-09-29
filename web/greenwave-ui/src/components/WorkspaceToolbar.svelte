@@ -107,25 +107,26 @@
 	<a href="/" class="workspace-brand" aria-label="Greenwave home"
 		><span aria-hidden="true">▥</span> Greenwave</a
 	>
-	<nav aria-label="Workspace views" class="workspace-nav">
-		<a href="/network" aria-current={$page.url.pathname.startsWith('/network') ? 'page' : undefined}
-			>Network</a
+	<div class="workspace-navigation">
+		<nav aria-label="Workspace views" class="workspace-nav">
+			<a
+				href="/network"
+				aria-current={$page.url.pathname.startsWith('/network') ? 'page' : undefined}>Network</a
+			>
+			<a href="/" aria-current={$page.url.pathname === '/' ? 'page' : undefined}>Coordination</a>
+		</nav>
+		<button
+			class="ui-button ui-accent"
+			on:click={() => {
+				menu = '';
+				corridorsOpen.set(true);
+			}}
+			aria-haspopup="dialog"
+			aria-expanded={$corridorsOpen}
+			aria-controls="workspace-corridors"
+			>Corridors <span class="ui-count">{$corridorProject.corridors.length}</span></button
 		>
-		<a href="/" aria-current={$page.url.pathname === '/' ? 'page' : undefined}>Coordination</a>
-	</nav>
-	<div class="workspace-project-title" title={$corridorProject.name}>{$corridorProject.name}</div>
-	<span
-		class="workspace-save"
-		class:save-error={$corridorPersistence.state === 'error'}
-		role="status"
-		title={$corridorPersistence.message}
-	>
-		{$corridorPersistence.state === 'saved'
-			? 'Saved locally'
-			: $corridorPersistence.state === 'error'
-				? 'Save failed'
-				: 'Not saved yet'}
-	</span>
+	</div>
 	<div class="workspace-actions">
 		<div class="workspace-menu-anchor">
 			<button
@@ -212,15 +213,21 @@
 				title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button
 			>
 		</div>
-		<button
-			class="ui-button ui-accent"
-			on:click={() => {
-				menu = '';
-				corridorsOpen.set(true);
-			}}
-			aria-haspopup="dialog"
-			>Corridors <span class="ui-count">{$corridorProject.corridors.length}</span></button
+	</div>
+	<div class="workspace-project-info">
+		<div class="workspace-project-title" title={$corridorProject.name}>{$corridorProject.name}</div>
+		<span
+			class="workspace-save"
+			class:save-error={$corridorPersistence.state === 'error'}
+			role="status"
+			title={$corridorPersistence.message}
 		>
+			{$corridorPersistence.state === 'saved'
+				? 'Saved locally'
+				: $corridorPersistence.state === 'error'
+					? 'Save failed'
+					: 'Not saved yet'}
+		</span>
 	</div>
 	<input
 		bind:this={fileInput}
