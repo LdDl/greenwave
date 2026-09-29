@@ -6,6 +6,7 @@ import {
 } from './network-project.js';
 import { validateImportedConfig } from './export-import.js';
 import { corridorGroupId, reverseCorridorGroupId, programTimeline } from './junction-program.js';
+import { validateMPScenario } from './mp-scenario.js';
 
 export const SHARED_FORMAT = 'greenwave-project';
 export const SHARED_STORAGE_KEY = 'greenwave.project.v1';
@@ -378,6 +379,7 @@ export function parseSharedProject(value) {
 		corridorIds.add(route.id);
 	}
 	requireValue(corridorIds.has(data.activeCorridorId), 'Choose an existing active corridor.');
+	if (data.mpScenario !== undefined) validateMPScenario(data.mpScenario);
 	const graph = graphView(data);
 	for (const [key, assignments] of Object.entries(data.movements)) {
 		const node = data.junctions.find((node) => String(node.id) === key);

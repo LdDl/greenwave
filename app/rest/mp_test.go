@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/app/simulation"
 	"github.com/LdDl/greenwave/maxpressure"
 	"github.com/stretchr/testify/require"
 )
@@ -32,14 +33,12 @@ func TestMPComparisonReplaysProposalAndConservesDemand(t *testing.T) {
 	}
 	for i, proposal := range response.Proposal {
 		require.Equal(t, request.Intersections[i].Junction.Offset, proposal.Junction.Offset)
-		require.Equal(t, mpJunction(request.Intersections[i].Junction).GetTotalDuration(), proposal.Junction.TotalDuration)
+		require.Equal(t, dto.JunctionFromDTO(request.Intersections[i].Junction).GetTotalDuration(), proposal.Junction.TotalDuration)
 		request.Intersections[i].Junction = proposal.Junction
 	}
-	opt, _, err := buildMPRun(request, true, 0)
+	replayed, err := simulation.RunMaxPressure(context.Background(), request)
 	require.NoError(t, err)
-	replayed, err := opt.Evaluate(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, response.ProposalEvaluation, replayed)
+	require.Equal(t, response.ProposalEvaluation, replayed.Baseline)
 }
 
 func TestMPUnhelpfulProposalRetainsOriginalPrograms(t *testing.T) {

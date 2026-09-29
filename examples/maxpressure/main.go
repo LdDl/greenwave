@@ -1,52 +1,46 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http/httptest"
 	"os"
 
-	"github.com/LdDl/greenwave/app/rest"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/app/simulation"
 	"github.com/LdDl/greenwave/maxpressure"
-	"github.com/labstack/echo/v4"
 )
 
 //go:embed corridor.json
 var requestJSON []byte
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	printRequest := flag.Bool("request", false, "print the complete API request")
 	printJSON := flag.Bool("json", false, "print the complete comparison response")
 	flag.Parse()
 	if *printRequest {
-		fmt.Print(string(requestJSON))
-		return
+		_, err := os.Stdout.Write(requestJSON)
+		return err
 	}
-	// Exercise the actual HTTP handler in-process without needing a running server.
-	server := echo.New()
-	request := httptest.NewRequest("POST", "/api/maxpressure/run", bytes.NewReader(requestJSON))
-	request.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	recorder := httptest.NewRecorder()
-	if err := rest.RequestMPRun()(server.NewContext(request, recorder)); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	var request dto.MPRunRequest
+	if err := json.Unmarshal(requestJSON, &request); err != nil {
+		return err
 	}
-	if recorder.Code != 200 {
-		fmt.Fprintln(os.Stderr, recorder.Body.String())
-		os.Exit(1)
+	response, err := simulation.RunMaxPressure(context.Background(), request)
+	if err != nil {
+		return err
 	}
 	if *printJSON {
-		fmt.Print(recorder.Body.String())
-		return
-	}
-	var response dto.MPRunResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return json.NewEncoder(os.Stdout).Encode(response)
 	}
 	fmt.Printf("%-18s %14s %12s %12s %12s\n", "Controller", "Waiting veh*s", "Departed", "Remaining", "Backlog")
 	printEvaluation("Original program", response.Baseline)
@@ -57,6 +51,7 @@ func main() {
 	for _, warning := range response.Warnings {
 		fmt.Println(warning)
 	}
+	return nil
 }
 
 func printEvaluation(name string, e *maxpressure.Evaluation) {

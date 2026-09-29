@@ -60,10 +60,7 @@ func (opt *MPOptimizer) Evaluate(ctx context.Context) (*Evaluation, error) {
 	for _, id := range net.nodeIDs {
 		intersectionStats[id] = &IntersectionStats{NodeID: int(id), StageFractions: map[StageID]float64{}, PhaseSeconds: map[int]float64{}}
 	}
-	sample := func() {
-		e.Samples = append(e.Samples, SimulationSample{TimeS: opt.time, Queue: net.TotalQueueLength(), BoundaryBacklog: net.BacklogTotal(), Departed: opt.balance.Departed})
-	}
-	sample()
+	e.Samples = append(e.Samples, opt.sample())
 	stride := math.Max(opt.Config.DeltaT, opt.Config.SimTime/200)
 	nextSample := stride
 	for opt.time < opt.Config.SimTime-1e-9 {
@@ -104,7 +101,7 @@ func (opt *MPOptimizer) Evaluate(ctx context.Context) (*Evaluation, error) {
 			}
 		}
 		if opt.time >= nextSample-1e-9 || opt.time >= opt.Config.SimTime-1e-9 {
-			sample()
+			e.Samples = append(e.Samples, opt.sample())
 			nextSample = opt.time + stride
 		}
 	}
@@ -138,4 +135,13 @@ func (opt *MPOptimizer) Evaluate(ctx context.Context) (*Evaluation, error) {
 		e.PerIntersection = append(e.PerIntersection, *stats)
 	}
 	return e, nil
+}
+
+func (opt *MPOptimizer) sample() SimulationSample {
+	return SimulationSample{
+		TimeS:           opt.time,
+		Queue:           opt.Net.TotalQueueLength(),
+		BoundaryBacklog: opt.Net.BacklogTotal(),
+		Departed:        opt.balance.Departed,
+	}
 }

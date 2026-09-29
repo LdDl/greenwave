@@ -124,6 +124,9 @@
 				aria-current={$page.url.pathname.startsWith('/network') ? 'page' : undefined}>Network</a
 			>
 			<a href="/" aria-current={$page.url.pathname === '/' ? 'page' : undefined}>Coordination</a>
+			<a href="/pressure" aria-current={$page.url.pathname === '/pressure' ? 'page' : undefined}
+				>Max pressure</a
+			>
 		</nav>
 		<button
 			class="ui-button ui-accent"

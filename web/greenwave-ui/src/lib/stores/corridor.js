@@ -1,5 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
 import { readProgram } from '../utils/junction-program.js';
+import { validateMPScenario } from '../utils/mp-scenario.js';
+import { mpProgramUpdate } from '../utils/mp-network.js';
 import {
 	SHARED_STORAGE_KEY,
 	LEGACY_CORRIDOR_KEY,
@@ -308,6 +310,21 @@ export function createCorridorEditor() {
 		canvas,
 		snapshot: () => copy(current),
 		inputSnapshot: () => copy(get(input)),
+		setMPScenario(scenario) {
+			validateMPScenario(scenario);
+			change((document) => {
+				document.mpScenario = copy(scenario);
+			});
+		},
+		applyMPPrograms(proposals, expectedProject) {
+			if (JSON.stringify(current) !== expectedProject)
+				throw new Error(
+					'The project changed after simulation. Run MP again before applying programs.'
+				);
+			const next = mpProgramUpdate(current, proposals);
+			finish();
+			change((document) => Object.assign(document, next));
+		},
 		readLegacyNetwork() {
 			const saved = storage?.getItem(LEGACY_NETWORK_KEY);
 			if (saved === null || saved === undefined)

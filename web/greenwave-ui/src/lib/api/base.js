@@ -2,6 +2,7 @@
 // In production: use relative path (same origin)
 const DEV_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:36000';
 export const API_BASE = import.meta.env.DEV ? `${DEV_API_URL}/api/greenwave` : '/api/greenwave';
+export const MP_API_URL = import.meta.env.DEV ? `${DEV_API_URL}/api/maxpressure/run` : '/api/maxpressure/run';
 
 export class APIError extends Error {
   constructor(message, status, response) {
