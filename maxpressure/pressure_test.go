@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// buildIntersectionA builds the worked example from note6_smoothing_mp.tex:
-// Intersection A (macroNode=50) with 4 approaches, 8 movements, 2 signal groups.
+// buildIntersectionA is a synthetic fixture for the legacy normalized pressure:
+// intersection A (macroNode=50) with 4 approaches, 8 movements, 2 stages.
 func buildIntersectionA() *Network {
 	mn := meso.NewNet()
 

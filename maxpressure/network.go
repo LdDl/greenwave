@@ -34,7 +34,10 @@ type IntersectionState struct {
 
 	ActiveStage      StageID
 	ActiveStageSince float64
-	PreviousStage    StageID
+	// PreviousStage is the stage actuated during the last completed step.
+	PreviousStage StageID
+	// HasPreviousStage distinguishes a recorded actuation from a zero-value ID.
+	HasPreviousStage bool
 }
 
 // Network wraps a meso.Net and adds queue lengths + phase assignments
@@ -45,6 +48,8 @@ type Network struct {
 	Queues         map[gmns.LinkID]float64
 	Intersections  map[gmns.NodeID]*IntersectionState
 	VehicleLengthM float64
+
+	coordinationPredecessors map[gmns.LinkID][]gmns.LinkID
 }
 
 // NewNetwork creates a Network from an existing meso.Net.

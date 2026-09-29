@@ -11,7 +11,8 @@ import (
 
 // buildTwoIntersectionCorridor creates intersections A(50) and B(60)
 // connected by link 5 (A=>B, EB direction).
-func buildTwoIntersectionCorridor() *Network {
+func buildTwoIntersectionCorridor(t *testing.T) *Network {
+	t.Helper()
 	mn := meso.NewNet()
 
 	mn.Links[1] = segLink(1, 0, 10, 200, 2, 3600)  // WA=>A (EB)
@@ -73,8 +74,9 @@ func buildTwoIntersectionCorridor() *Network {
 			{ID: 0, ConnectorIDs: []gmns.LinkID{110, 111, 112, 113}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{114, 115, 116, 117}},
 		},
-		ActiveStage:   0,
-		PreviousStage: 0,
+		ActiveStage:      0,
+		PreviousStage:    0,
+		HasPreviousStage: true,
 	}
 	net.Intersections[60] = &IntersectionState{
 		MacroNodeID: 60,
@@ -82,25 +84,27 @@ func buildTwoIntersectionCorridor() *Network {
 			{ID: 0, ConnectorIDs: []gmns.LinkID{130, 131, 132, 133}},
 			{ID: 1, ConnectorIDs: []gmns.LinkID{134, 135, 136, 137}},
 		},
-		ActiveStage:   1,
-		PreviousStage: 1,
+		ActiveStage:      1,
+		PreviousStage:    1,
+		HasPreviousStage: true,
 	}
 
+	require.NoError(t, net.SetCoordinatedCorridors([][]gmns.LinkID{{1, 5, 25}}))
 	return net
 }
 
 func TestIsUpstreamServed_True(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	assert.True(t, net.IsUpstreamServed(130), "EBT at B should detect upstream served")
 }
 
 func TestIsUpstreamServed_False(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	assert.False(t, net.IsUpstreamServed(134), "SBT at B: boundary link, no upstream intersection")
 }
 
 func TestSmoothedMovementWeight_HasBoost(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	cfg := SmoothingConfig{Alpha: 1.0}
 
 	standard := net.MovementWeight(130)
@@ -108,20 +112,20 @@ func TestSmoothedMovementWeight_HasBoost(t *testing.T) {
 
 	assert.Greater(t, smoothed, standard)
 
-	// Xu et al. (2024) boost: xi = Alpha * SatFlow (constant, not queue-proportional)
+	// The legacy scoring convention uses xi = Alpha * SatFlow in veh/h.
 	expectedBoost := 1.0 * net.SatFlow(130)
 	assert.InDelta(t, expectedBoost, smoothed-standard, 0.1)
 }
 
 func TestSmoothedMovementWeight_NoBoostAlphaZero(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	standard := net.MovementWeight(130)
 	smoothed := net.SmoothedMovementWeight(130, SmoothingConfig{Alpha: 0})
 	assert.Equal(t, standard, smoothed)
 }
 
 func TestSmoothedSelectPhase_BoostFlipsDecision(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	interB := net.Intersections[60]
 
 	stdPhase, _ := net.SelectPhase(interB)
@@ -132,7 +136,7 @@ func TestSmoothedSelectPhase_BoostFlipsDecision(t *testing.T) {
 }
 
 func TestServedLinks(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	served := net.ServedLinks(net.Intersections[50])
 
 	for _, lid := range []gmns.LinkID{5, 6, 7, 8} {
@@ -177,12 +181,13 @@ func TestOptimizer_IntersectionStateUpdated(t *testing.T) {
 	})
 	opt.Step()
 
-	assert.Equal(t, StageID(1), inter.PreviousStage)
+	assert.Equal(t, StageID(0), inter.PreviousStage)
+	assert.True(t, inter.HasPreviousStage)
 	assert.Equal(t, StageID(0), inter.ActiveStage)
 }
 
 func TestOptimizer_BoundaryDepartures(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	opt := NewMPOptimizer(net, MPConfig{DeltaT: 5.0})
 
 	assert.NotEmpty(t, opt.BoundaryDepartures())
@@ -190,7 +195,7 @@ func TestOptimizer_BoundaryDepartures(t *testing.T) {
 }
 
 func TestOptimizer_MultiStep(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	opt := NewMPOptimizer(net, MPConfig{
 		DeltaT:    5.0,
 		Smoothing: DefaultSmoothingConfig(),
@@ -212,7 +217,7 @@ func TestOptimizer_MultiStep(t *testing.T) {
 }
 
 func TestOptimizer_Run(t *testing.T) {
-	net := buildTwoIntersectionCorridor()
+	net := buildTwoIntersectionCorridor(t)
 	opt := NewMPOptimizer(net, MPConfig{
 		DeltaT:    5.0,
 		SimTime:   60.0,

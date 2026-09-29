@@ -177,7 +177,8 @@ type StepResult struct {
 	IntersectionID gmns.NodeID
 	SelectedStage  StageID
 	Pressure       float64
-	Boosted        bool
+	// Boosted reports a coordination bonus in the selected stage's score.
+	Boosted bool
 }
 
 // Step runs one simulation step:
@@ -235,12 +236,26 @@ func (opt *MPOptimizer) Step() []StepResult {
 			selected, pressure = net.SelectPhase(inter)
 		}
 
+		boosted := false
+		if opt.Config.Smoothing.Alpha > 0 {
+			for _, stage := range inter.Stages {
+				if stage.ID == selected {
+					for _, cid := range stage.ConnectorIDs {
+						if net.IsUpstreamServed(cid) && net.SatFlow(cid) > 0 {
+							boosted = true
+							break
+						}
+					}
+					break
+				}
+			}
+		}
 		phaseDecisions[nid] = selected
 		results = append(results, StepResult{
 			IntersectionID: nid,
 			SelectedStage:  selected,
 			Pressure:       pressure,
-			Boosted:        opt.Config.Smoothing.Alpha > 0,
+			Boosted:        boosted,
 		})
 	}
 
@@ -261,7 +276,8 @@ func (opt *MPOptimizer) Step() []StepResult {
 	// Update intersection state
 	for nid, sgID := range phaseDecisions {
 		inter := net.Intersections[nid]
-		inter.PreviousStage = inter.ActiveStage
+		inter.PreviousStage = sgID
+		inter.HasPreviousStage = true
 		if sgID != inter.ActiveStage {
 			inter.ActiveStage = sgID
 			inter.ActiveStageSince = opt.time

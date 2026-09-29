@@ -9,17 +9,19 @@ import (
 // SmoothingConfig holds parameters for an experimental coordination boost
 // inspired by Smoothing-MP (Xu et al., 2024).
 //
-// The boost for a connector (u,d) when the upstream intersection just served
-// a movement into link u is:
+// The boost for a corridor movement (u,d) whose configured predecessor had
+// green during the last completed step is:
 //
 //	xi_{u,d} = Alpha * Q_{u,d}
 //
-// where Q_{u,d} is the saturation flow (capacity) of the connector.
+// Here Q_{u,d} is the connector's saturation flow in veh/h. This scaling of
+// Alpha is a project convention, not the paper's per-step capacity Q.
 // Alpha = 0 reduces to standard max-pressure.
 // The paper's stability guarantee has not been established for this normalized,
 // finite-storage model without explicit turning proportions.
 type SmoothingConfig struct {
-	Alpha float64 // dimensionless coordination coefficient (>= 0)
+	// Alpha scales the experimental coordination bonus; zero disables it.
+	Alpha float64
 }
 
 // DefaultSmoothingConfig returns a default configuration with Alpha=1.0.
@@ -27,10 +29,13 @@ func DefaultSmoothingConfig() SmoothingConfig {
 	return SmoothingConfig{Alpha: 1.0}
 }
 
-// ServedLinks returns downstream road link IDs that were served by the
-// given intersection in its previous phase.
+// ServedLinks returns roads with an actuated incoming movement in the last
+// completed step. A green signal does not imply positive discharged flow.
 func (net *Network) ServedLinks(inter *IntersectionState) map[gmns.LinkID]bool {
 	served := make(map[gmns.LinkID]bool)
+	if !inter.HasPreviousStage {
+		return served
+	}
 	for i := range inter.Stages {
 		if inter.Stages[i].ID != inter.PreviousStage {
 			continue
@@ -47,56 +52,20 @@ func (net *Network) ServedLinks(inter *IntersectionState) map[gmns.LinkID]bool {
 	return served
 }
 
-// IsUpstreamServed checks whether the upstream road link of a connector was
-// served by its upstream intersection in the previous step.
-//
-// Logic: for connector C at intersection J with upstream road link U,
-// scan all connectors in meso.Net that discharge into U. If any of them
-// belongs to a different intersection whose PreviousStage matches, return true.
+// IsUpstreamServed implements the corridor indicator from Xu et al. (2024),
+// section 3.5: c_jk(t+1) = s_ij(t). It tests actuation, not actual discharge.
+// With overlapping corridors, any actuated configured predecessor sets c=1.
 func (net *Network) IsUpstreamServed(connectorID gmns.LinkID) bool {
-	link, ok := net.Meso.Links[connectorID]
-	if !ok {
-		return false
-	}
-	upRoadID := link.MovementMesoLinkIncome()
-	if upRoadID < 0 {
-		return false
-	}
-	myMacroNode := link.MacroNode()
-
-	// Find any connector at a DIFFERENT intersection that discharges into upRoadID
-	for _, otherLink := range net.Meso.Links {
-		if !otherLink.IsConnection() {
-			continue
-		}
-		if otherLink.MacroNode() == myMacroNode {
-			continue // same intersection
-		}
-		if otherLink.MovementMesoLinkOutcome() != upRoadID {
-			continue
-		}
-		// Found a connector at upstream intersection that feeds into our approach.
-		// Check if that intersection's previous phase included it.
-		upInter, ok := net.Intersections[otherLink.MacroNode()]
-		if !ok {
-			continue
-		}
-		for i := range upInter.Stages {
-			if upInter.Stages[i].ID != upInter.PreviousStage {
-				continue
-			}
-			for _, pid := range upInter.Stages[i].ConnectorIDs {
-				if pid == otherLink.ID {
-					return true
-				}
-			}
-			break
+	for _, predecessor := range net.coordinationPredecessors[connectorID] {
+		if net.wasActuated(predecessor) {
+			return true
 		}
 	}
 	return false
 }
 
-// SmoothedMovementWeight computes the prototype's coordination weight:
+// SmoothedMovementWeight computes the prototype's candidate-stage bonus.
+// See PAPER_MODEL.md for the ambiguity in the printed objective (13).
 //
 //	w_smooth = Q * w + xi * c
 //
