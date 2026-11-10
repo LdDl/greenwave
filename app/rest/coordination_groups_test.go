@@ -3,6 +3,7 @@ package rest
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -139,6 +140,11 @@ func TestOptimizationReturnsBothGroupsAtOneSetOfOffsets(t *testing.T) {
 	callCoordinationAPI(t, RequestOptimize(), request, 200, &optimized)
 	require.Len(t, optimized.BestOffsets, len(input.Junctions))
 	for i := range input.Junctions {
+		offset := optimized.BestOffsets[i]
+		require.Equal(t, math.Trunc(offset), offset)
+		require.GreaterOrEqual(t, offset, 0.0)
+		jun := dto.JunctionFromDTO(input.Junctions[i])
+		require.Less(t, offset, float64(jun.GetTotalDuration()))
 		input.Junctions[i].Offset = int(optimized.BestOffsets[i])
 	}
 	var extracted GreenWavesResponse

@@ -35,7 +35,7 @@ type OptimizeRequest struct {
 // OptimizeResponse represents the response structure for optimization requests.
 // swagger:model
 type OptimizeResponse struct {
-	// Contains the optimal offsets for each junction
+	// Applied offsets in whole seconds, normalized to [0, cycle duration) for each junction. These exact values are used for the returned waves.
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`

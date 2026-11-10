@@ -266,7 +266,8 @@ func (optga *OptimizerGenetic) mutate(individual *Individual, currentGeneration 
 	}
 }
 
-// Optimize runs the genetic algorithm to calculate the optimal offsets for the traffic lights
+// Optimize applies the best plan and returns its offsets in whole seconds,
+// normalized to each junction's cycle. The float64 return type is retained.
 func (optga *OptimizerGenetic) Optimize() []float64 {
 	// Generate the initial population
 	population := make([]*Individual, optga.populationSize)
@@ -335,7 +336,12 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 		zeroOffsets := make([]float64, len(optga.junctions))
 		return zeroOffsets
 	}
-	return bestIndividual.Offsets
+	bestOffsets := make([]float64, len(optga.junctions))
+	for i, jun := range optga.junctions {
+		jun.SetOffset(int(bestIndividual.Offsets[i]))
+		bestOffsets[i] = float64(jun.GetOffset())
+	}
+	return bestOffsets
 }
 
 // BestFitnessHistory returns the history of the best fitness values across generations

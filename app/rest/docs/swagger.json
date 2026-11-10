@@ -939,7 +939,7 @@
             "type": "object",
             "properties": {
                 "best_offsets": {
-                    "description": "Contains the optimal offsets for each junction",
+                    "description": "Applied offsets in whole seconds, normalized to [0, cycle duration) for each junction. These exact values are used for the returned waves.",
                     "type": "array",
                     "items": {
                         "type": "number"
