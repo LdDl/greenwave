@@ -1,38 +1,42 @@
-# sv
+# Greenwave UI
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Network editing, green-wave coordination and Max pressure in one Svelte app.
 
-## Creating a project
+- [Network editor](NETWORK_EDITOR.md): networks, junction programs and corridors.
+- [Max pressure](MAX_PRESSURE.md): traffic scenarios, control settings and results.
+- [Shared project model](EDITOR_MODEL.md): data format and editor internals.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Run locally
 
-```bash
-# create a new project in the current directory
-npx sv create
+Use Node.js 22 (22.12 or newer) and pnpm 10.13.1, pinned in `package.json`. The API requires Go 1.23.4 or newer.
 
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Start the API from the repository root:
 
 ```bash
-pnpm run dev
-
-# or start the server and open the app in a new browser tab
-pnpm run dev --open
+go run ./cmd/greenwave --conf ./cmd/greenwave/conf.toml
 ```
 
-## Building
-
-To create a production version of your app:
+In another terminal, also from the repository root:
 
 ```bash
-pnpm run build
+cd web/greenwave-ui
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-You can preview the production build with `pnpm run preview`.
+Open <http://localhost:5173>. The UI calls the API at `http://localhost:36000`. The supplied API configuration enables CORS.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+To use another API origin, run `VITE_API_URL=http://localhost:35000 pnpm dev`. This setting only affects development.
+
+## Check and build
+
+Run from `web/greenwave-ui`:
+
+```bash
+pnpm test
+pnpm check
+pnpm build
+```
+
+The static site is written to `build/`. Production requests use `/api/greenwave` and `/api/maxpressure` on the same origin. The [Docker image](../../README.md#docker) serves both the UI and API.
