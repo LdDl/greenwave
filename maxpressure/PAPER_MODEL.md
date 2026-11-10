@@ -1,77 +1,107 @@
-# Max-pressure model and original sources
+# Max-pressure control
 
-Model version 2 follows the movement-queue formulation in the original papers stored in `tex`. The implementation includes a documented interpretation of Xu's coordination objective and practical extensions. It does not claim an exact numerical reproduction of the paper's experiments or their stability guarantees.
+Each intersection chooses which movements get green from the queues around it. Standard MP balances upstream demand against downstream queues. Smoothing-MP adds priority along selected corridors based on the previous upstream green.
 
-| Source | Relevant formulation | Implementation |
-|:---|:---|:---|
-| Varaiya (2013), [PDF](../tex/varaiya2013.pdf), [publication](https://doi.org/10.1016/j.trc.2013.08.014), section 3.2, equations (21), (22) | Movement queues and downstream queues weighted by turning proportions | Independent movement queues and weighted downstream pressure |
-| Xu, Barman, Levin (2024), [PDF](../tex/xu_2024.pdf), [publication](https://doi.org/10.1016/j.trc.2024.104760), sections 3.2-3.5 | Movement conservation, explicit corridors, one-step actuation history and coordination bonus | Queue equations, corridor scope and signal history implemented; objective interpretation below |
-| Kouvelas et al. (2014), [PDF](../tex/Kouvelas_2014.pdf), [publication](https://doi.org/10.3141/2421-15), p. 134 | Normalized road queues, turning rates and green allocation | Reference for a different formulation; the former normalized-road approximation has been removed |
-| Liu and Gayah (2022), [PDF](../tex/Liu_2022.pdf), [preprint](https://arxiv.org/abs/2202.03290) | Delay-based MP | Separate controller, not implemented here |
+This describes model version 2. For setup and results in the UI, see [Max pressure](../web/greenwave-ui/MAX_PRESSURE.md). The [runnable example](../examples/maxpressure/README.md) includes API and editor inputs.
 
-The user's `note*.tex/pdf` files are not normative sources for these equations.
+## Standard MP
 
-## Movement state, pressure and units
+A movement `(i,j)` goes from directed road `i` to road `j`. Through traffic and turns have separate queues, even when they share an incoming road.
 
-A connector represents movement `(i,j)`: vehicles on directed road `i` intending to enter directed road `j`. Its queue is independent of other movements leaving the same road. In Xu (1)-(3), (12):
+| Symbol | Meaning |
+| --- | --- |
+| `x_ij` | Vehicles waiting for movement `(i,j)` |
+| `r_ij` | Share of arrivals on road `i` that will use movement `(i,j)` |
+| `Q_ij` | Movement capacity in vehicles per simulation step |
+| `s_ij` | 1 when the movement has green, otherwise 0 |
+
+[pressure.go](pressure.go) implements the movement weights from Varaiya (21)-(23) and Xu (12):
 
 ```text
 Q_ij = saturation_veh_per_hour * delta_t / 3600
-y_ij(t) = min(Q_ij * s_ij(t), x_ij(t))
-x_ij(t+1) = x_ij(t) - y_ij(t) + sum_h(y_hi(t)) * r_ij
-w_ij(t) = x_ij(t) - sum_k(r_jk * x_jk(t))
-ordinary_stage_score = sum_active(Q_ij * w_ij)
+w_ij = x_ij - sum_k(r_jk * x_jk)
+score(stage) = sum_(i,j in stage)(Q_ij * w_ij)
 ```
 
-At entry roads the arrival term is external demand multiplied by the turning proportions. All arrivals split across all outgoing movements, including red ones. Saturation flows do not determine turning proportions. Every branching road requires explicit non-negative proportions summing to one; a sole outgoing movement defaults to one. Fractional vehicles represent continuous flow.
+A larger upstream queue increases priority. A larger weighted downstream queue reduces it. For example, with `Q_ij = 1`, an upstream queue of 12 and weighted downstream queue of 5 contribute 7 to the stage score.
 
-`Network.MovementQueues` is authoritative after initialization. `Network.Queues` holds aggregate road occupancy and accepts initial road totals, split once by turning proportions. Do not supply both road and movement initial queues for the same road. After initialization, update movement queues rather than overwriting aggregate road queues. Boundary departures have an aggregate queue without outgoing movements.
+A stage contains movements that can receive green together. [CompileProgram](program.go) splits the supplied program at every signal boundary, preserving the green combinations actually present. Groups with non-overlapping green intervals stay in separate stages.
 
-Each step chooses from the start-of-step state, transfers traffic simultaneously, drains exits and admits external demand into the next state. An arrival cannot cross two controlled movements in one step. `Run` and `Evaluate` include a final partial step; service uses its actual duration and stage scoring uses the configured nominal step. This is a store-and-forward queueing model without travel times, trajectories, lane changing or individual vehicles.
+Each intersection selects the highest-scoring stage allowed by its timing constraints. Ties retain the active stage, then favor the smallest stage ID.
 
-## Coordination and the printed objective
+## Smoothing-MP
 
-Xu section 3.5 defines `c_jk(t+1) = s_ij(t)` on explicitly selected corridors. An upstream green counts even if no vehicle discharged. The indicator uses the previous completed step, not the current neighboring decision, and has no travel-time delay. A fresh simulation has no preceding actuation unless the Go caller supplies `PreviousStage` and `HasPreviousStage`.
-
-`SetCoordinatedCorridors` accepts directed road paths of at least three roads, such as `[1,3,7]`. This coordinates movement `(3,7)` with `(1,3)` and excludes side turns. Reverse travel needs a separate path. Unknown roads, disconnected paths and movements absent from control stages are rejected. Multiple configured predecessors combine using a binary OR; this overlap convention does not multiply the bonus.
-
-On page 6, printed equation (13) contains `xi_ij * c_ij(t)` without multiplying it by candidate actuation `s_ij(t)`. Since `c` is fixed by the preceding step, a literal additive term would be constant in the current maximization and could not alter stage selection. The implementation uses the candidate-stage interpretation of the stated prioritization intent:
+For consecutive roads `i, j, k`, Xu section 3.5 supplies the previous-green indicator. The implementation uses it in the following experimental score:
 
 ```text
+c_jk(t+1) = s_ij(t)
 xi_ij = alpha * Q_ij^2, alpha in [0,1]
-smoothed_stage_score = sum_active(Q_ij * w_ij + xi_ij * c_ij)
+smoothed_score(stage) = sum_(i,j in stage)(Q_ij * w_ij + xi_ij * c_ij)
 ```
 
-The scaling uses the suggested `Q^2` upper bound discussed after (13), with `Q` measured in vehicles per step. This replaces the former `alpha * saturation_veh_per_hour` convention. The candidate-stage interpretation still needs confirmation from author code or an erratum before claiming exact reproduction. No corresponding stability proof is claimed for this code or its extensions.
+An upstream green gives the next movement a bonus on the following step. This uses signal history, including green with an empty queue. There is no travel-time delay. API runs start without previous-green history. With `alpha = 0`, the score is Standard MP.
 
-## Timing and physical storage extensions
+[SetCoordinatedCorridors](coordination.go) takes directed road paths of at least three roads. `[1,3,7]` gives movement `(3,7)` priority after `(1,3)` had green. Reverse travel needs its own path. When several configured predecessors feed one movement, any previous green sets its indicator to 1.
 
-`CompileProgram` splits the supplied program at every signal boundary. Adaptive stages contain only movements whose green intervals actually overlap. Groups that turn green at different times within one phase are not combined into an unsafe union. Original phase IDs remain available for reporting and fixed-plan synthesis.
+[smoothing.go](smoothing.go) uses `alpha` to scale the `Q^2` reference discussed after Xu (13). `Q` uses the configured step duration, so changing `delta_t` also changes the bonus scale.
 
-Adaptive control enforces minimum green, maximum green and all-red clearance. Defaults in REST are 5/60/5 seconds. Explicit zero disables the respective bound. Minimum green and clearance round up to a whole number of steps; maximum green rounds down. Incompatible limits are rejected. Ties retain the active stage, then favor the smallest stage ID. With only one available stage, reaching maximum green inserts at least one all-red step before restarting it. This is not a controller-specific yellow transition sequence.
+Xu's printed equation (13) adds `xi_ij * c_ij(t)` without multiplying that term by the candidate signal `s_ij(t)`. With the indicator fixed by the previous step, that additive term cannot change the maximizing choice. The code sums the bonus only over movements green in the candidate stage. This is the project's interpretation of the coordination intent. Exact reproduction of the paper and its stability guarantees are not claimed for this implementation or its extensions.
 
-The default `point_queue` model has unlimited road storage. Optional `finite_storage` uses `length * lanes / 7` vehicles of storage and limits merging inflows proportionally to available receiving space. Blocked movement traffic remains upstream. Space freed by outgoing traffic becomes available for incoming transfers on the next step. Entry demand exceeding available space waits in a separate boundary backlog. Initial queues exceeding finite storage must be supplied differently, not silently clipped. These are engineering extensions, not Xu's point-queue assumptions.
+## From adaptive control to a fixed program
 
-Saturation is supplied per movement. Shared-lane service competition is not inferred from road lane counts; input capacities and stage assignments must describe the intended service model. The editor checks its geometric movement conflicts, while raw API clients provide their own feasible movement sets.
+Adaptive MP reacts to queues at each step and can change the order and duration of green stages. A fixed program repeats its phase sequence and offset. Compressing adaptive decisions into that repeating program can lose their benefit.
 
-## Fixed programs and comparable evaluation
+[RunMaxPressure](../app/simulation/mp.go) evaluates the original fixed program, Standard MP, Smoothing-MP and a fixed proposal from the same initial queues, demand and storage settings. Fixed replay uses the actual green intervals and offsets. Yellow, red and red-yellow provide no service.
 
-The API simulates four cases from independent copies of the same initial state, demand and storage model: the original fixed program, ordinary MP, smoothing-MP and a synthesized fixed program. Fixed replay integrates actual green windows and offsets across each step; yellow, red and red-yellow provide no service.
+[SynthesizeProgram](proposal.go) uses adaptive service seconds per original phase as weights. It reallocates a common green/red window in each phase, changes all groups consistently and respects signal bounds. Phase order, group structure, yellow/red-yellow durations, integer cycle length and offset are preserved. This synthesis is a project heuristic.
 
-Synthesis uses adaptive phase service durations as weights. It resizes one common green/red interval per phase, changes all groups consistently, respects every explicit signal bound, leaves yellow/red-yellow durations unchanged and preserves exact integer cycle length and offset. Omitted REST bounds permit green in `[min(5,current),cycle]` and red in `[0,cycle]`; omitted yellow/red-yellow bounds remain fixed. Explicit equal bounds remain fixed. This is a project heuristic, not a result proved in the paper.
+When REST bounds are omitted, green permits `[min(5,current),cycle]` seconds and red permits `[0,cycle]`. Yellow/red-yellow stay fixed. Explicit equal bounds fix a signal's duration.
 
-The candidate is replayed as a fixed program. It is accepted only if waiting decreases and departures do not decrease relative to the original fixed program, with tolerance `1e-6`. Otherwise the original programs and their evaluation are returned with `proposal_accepted=false`. Adaptive performance is never substituted for the fixed proposal's performance.
+The proposal is replayed independently and accepted only when:
 
-`Evaluate` requires a fresh optimizer. Waiting is the integral of start-of-step network queues plus external backlog, in vehicle-seconds. It is not microscopic travel delay. Results include road and movement average/maximum/final queues, phase service, all-red time, bounded queue samples and vehicle accounting:
+```text
+proposal_waiting < original_waiting - 1e-6
+proposal_departed >= original_departed - 1e-6
+```
+
+Otherwise the API returns the original programs and their evaluation with `proposal_accepted=false`. Better adaptive results alone do not make a fixed proposal acceptable.
+
+## Queueing model and limits
+
+For a full step with point queues, Xu (1)-(3) give the transferred vehicles `y_ij` and updated queue:
+
+```text
+y_ij(t) = min(Q_ij * s_ij(t), x_ij(t))
+x_ij(t+1) = x_ij(t) - y_ij(t) + r_ij * sum_h(y_hi(t))
+```
+
+At an entry, external arrivals replace the upstream-flow sum. Turning shares split arrivals across all outgoing movements, including red ones. Branching roads require explicit shares summing to one. A sole outgoing movement defaults to one. Shares stay fixed during a run, while demand can vary with time. Fractional vehicles represent continuous flow.
+
+Each step selects signals from its starting queues, transfers traffic simultaneously, drains exits and admits external demand. Arrivals cannot cross two controlled movements in one step. The final partial step uses its actual duration for service and waiting.
+
+| Feature | Implementation |
+| --- | --- |
+| Signal timing | Minimum green, maximum green and all-red clearance. REST defaults are 5/60/5 seconds. Zero disables the respective bound. Minimum green and clearance round up to whole steps, maximum green rounds down. |
+| One available stage | Reaching maximum green inserts at least one all-red step before restarting it. |
+| Point queues | Unlimited road storage. |
+| Finite storage | Capacity is `length * lanes / vehicle_length`, with a default vehicle length of 7 m. Merging inflows share receiving space proportionally. Blocked traffic stays upstream, and unadmitted entry demand waits outside. Space freed by departures is available to internal transfers on the next step. |
+| Movement capacity | Uses per-movement saturation flows. Xu (3) uses `Q_ij = min(Q_i,Q_j)` from adjoining link capacities. Shared-lane competition is not inferred from lane counts. |
+
+Timing constraints, finite storage and fixed-program synthesis are extensions to the paper model. Road travel times, vehicle trajectories and lane changes are absent, so queue improvements do not establish a stop-free green wave. API callers supply feasible movement sets. The editor also checks geometric movement conflicts.
+
+`Network.MovementQueues` holds the movement state, while `Network.Queues` mirrors road totals. Initial road totals are split once by turning shares. Road and movement initial queues cannot both be supplied for the same road. Initial queues above finite storage are rejected.
+
+[Evaluate](evaluation.go) integrates start-of-step network queues plus external backlog in vehicle-seconds. It requires a fresh optimizer. Vehicle accounting follows:
 
 ```text
 initial + requested = departed + remaining_in_network + boundary_backlog
 ```
 
-`admitted` separately reports boundary admissions during the run. Invalid custom demand/drain results halt a Go optimizer with `Err()`. The API validates topology, assignment, proportions, program consistency, limits, numerical inputs and request size; context cancellation stops evaluations.
+`admitted` separately counts traffic admitted during the run. REST responses carry `model_version: 2` and separate adaptive results from the fixed-program evaluation.
 
-## Compatibility and verification
+## References
 
-REST responses now contain `model_version: 2`. Clients must consume `baseline`, `standard_mp`, `evaluation`, `proposal_evaluation`, `proposal_accepted` and the vehicle balance fields. Branching networks must provide `turning_ratios`; `alpha` is now restricted to `[0,1]` and has changed scale. Default `delta_t` is one second. Positive alpha requires explicit `coordinated_corridors`. Go callers must handle the error returned by `NewMPOptimizer`.
-
-Regression tests cover red left-turn queues, weighted downstream pressure, simultaneous diverging/merging transfers, finite storage and boundary backlog, conservation, offsets and partial steps, non-overlapping group greens, timing constraints, corridor history, fixed-plan bounds and independent replay. [The runnable example](../examples/maxpressure/README.md) calls `app/simulation.RunMaxPressure`, the same Go function used by the REST handler, and provides both API and shared-editor JSON inputs. The REST handler handles HTTP decoding and responses; scenario validation, model construction and controller comparison live in `app/simulation`. Demand and drain profiles use named methods, and evaluation records snapshots through `MPOptimizer.sample`. [The editor guide](../web/greenwave-ui/MAX_PRESSURE.md) describes the complete user workflow.
+1. Varaiya, P. (2013). [Max pressure control of a network of signalized intersections](https://doi.org/10.1016/j.trc.2013.08.014), section 3.2, equations (21)-(23). Movement queues and pressure-based selection. [PDF](../tex/varaiya2013.pdf).
+2. Xu, T., Barman, S., Levin, M.W. (2024). [Smoothing-MP: A novel max-pressure signal control considering signal coordination to smooth traffic in urban networks](https://doi.org/10.1016/j.trc.2024.104760), sections 3.3 and 3.5. Queue evolution and corridor coordination, with the objective interpretation described above. [PDF](../tex/xu_2024.pdf).
+3. Kouvelas, A., Lioris, J., Fayazi, S.A., Varaiya, P. (2014). [Maximum pressure controller for stabilizing queues in signalized arterial networks](https://doi.org/10.3141/2421-15). Related formulation using normalized road queues. [PDF](../tex/Kouvelas_2014.pdf).
+4. Liu, H., Gayah, V.V. (2022). [A novel max pressure algorithm based on traffic delay](https://arxiv.org/abs/2202.03290). Related controller using delay measurements. [PDF](../tex/Liu_2022.pdf).
