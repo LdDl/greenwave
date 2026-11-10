@@ -1,7 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
 import { readProgram } from '../utils/junction-program.js';
-import { validateMPScenario } from '../utils/mp-scenario.js';
-import { mpProgramUpdate } from '../utils/mp-network.js';
+import { activeMPScenario, validateMPScenario, validateMPScenarios } from '../utils/mp-scenario.js';
+import { mpProgramUpdate, mpScenario } from '../utils/mp-network.js';
 import {
 	SHARED_STORAGE_KEY,
 	LEGACY_CORRIDOR_KEY,
@@ -151,6 +151,19 @@ export function createCorridorEditor() {
 			future = [];
 		}
 		publish(next);
+	}
+	function editMPScenarios(mutator) {
+		change((document) => {
+			if (!document.mpScenarios) {
+				document.mpScenarios = [
+					{ id: 0, name: 'Default scenario', settings: mpScenario(document) }
+				];
+				document.activeMPScenarioId = 0;
+				delete document.mpScenario;
+			}
+			mutator(document);
+			validateMPScenarios(document);
+		});
 	}
 	function begin() {
 		if (!transaction) transaction = current;
@@ -313,7 +326,40 @@ export function createCorridorEditor() {
 		setMPScenario(scenario) {
 			validateMPScenario(scenario);
 			change((document) => {
-				document.mpScenario = copy(scenario);
+				if (document.mpScenarios) activeMPScenario(document).settings = copy(scenario);
+				else document.mpScenario = copy(scenario);
+			});
+		},
+		duplicateMPScenario() {
+			editMPScenarios((document) => {
+				const selected = activeMPScenario(document);
+				let number = 2;
+				const base = selected.name.slice(0, 100);
+				let name = `${base} copy`;
+				while (document.mpScenarios.some((item) => item.name.toLowerCase() === name.toLowerCase()))
+					name = `${base} copy ${number++}`;
+				const id = nextId(document.mpScenarios);
+				document.mpScenarios.push({ id, name, settings: copy(mpScenario(document)) });
+				document.activeMPScenarioId = id;
+			});
+		},
+		selectMPScenario(id) {
+			editMPScenarios((document) => {
+				document.activeMPScenarioId = id;
+			});
+		},
+		renameMPScenario(name) {
+			editMPScenarios((document) => {
+				activeMPScenario(document).name = name.trim();
+			});
+		},
+		removeMPScenario() {
+			editMPScenarios((document) => {
+				if (document.mpScenarios.length === 1) throw new Error('Keep at least one MP scenario.');
+				document.mpScenarios = document.mpScenarios.filter(
+					(item) => item.id !== document.activeMPScenarioId
+				);
+				document.activeMPScenarioId = document.mpScenarios[0].id;
 			});
 		},
 		applyMPPrograms(proposals, expectedProject) {

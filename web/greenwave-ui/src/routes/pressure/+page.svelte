@@ -4,11 +4,22 @@
 	import { pressureResult } from '$lib/stores/pressure.js';
 	import { MP_API_URL } from '$lib/api/base.js';
 	import { buildMPRequest, mpScenario, mpTopology } from '$lib/utils/mp-network.js';
+	import { activeMPScenario, mpScenarios } from '$lib/utils/mp-scenario.js';
+	import MPTurningMovements from '../../components/MPTurningMovements.svelte';
 
 	let tab = 'traffic';
 	let busy = false;
 	let error = '';
 	let abort;
+	let invalidTraffic = new Set();
+	$: scenarios = mpScenarios($corridorProject);
+	$: selectedScenario = activeMPScenario($corridorProject);
+	$: entryRoads = topology.roads.filter((road) => road.entry);
+	$: exitRoads = topology.roads.filter((road) => road.exit);
+	$: excludedRoads = $corridorProject.roads.filter(
+		(road) =>
+			scenario.boundaryNodeIds.includes(road.from) && scenario.boundaryNodeIds.includes(road.to)
+	);
 	$: scenario = mpScenario($corridorProject);
 	$: topology = mpTopology($corridorProject, scenario);
 	$: signature = JSON.stringify($corridorProject);
@@ -48,6 +59,25 @@
 		} catch (cause) {
 			error = cause.message;
 		}
+	}
+	function editScenario(action, event) {
+		try {
+			action();
+			error = '';
+		} catch (cause) {
+			error = cause.message;
+			if (event) event.currentTarget.value = selectedScenario.name;
+		}
+	}
+	function trafficValidity(id, event) {
+		const next = new Set(invalidTraffic);
+		if (event.detail.invalid) next.add(id);
+		else next.delete(id);
+		invalidTraffic = next;
+	}
+	function changeTraffic(event) {
+		const { map, values } = event.detail;
+		save({ ...scenario, [map]: { ...scenario[map], ...values } });
 	}
 	function number(key, event) {
 		if (event.currentTarget.value === '' || !event.currentTarget.validity.valid) {
@@ -100,7 +130,13 @@
 				throw new Error(
 					'This server uses an older MP model. Restart the backend with the updated code.'
 				);
-			pressureResult.set({ signature: snapshot, response: result, labels, applied: false });
+			pressureResult.set({
+				signature: snapshot,
+				scenarioName: activeMPScenario(project).name,
+				response: result,
+				labels,
+				applied: false
+			});
 			tab = 'results';
 		} catch (cause) {
 			if (cause.name !== 'AbortError') error = cause.message;
@@ -129,6 +165,8 @@
 	onDestroy(() => abort?.abort());
 </script>
 
+<svelte:window on:beforeunload={() => corridorEditor.finish()} />
+
 <svelte:head><title>Max pressure | Greenwave</title></svelte:head>
 
 <div class="mp-workspace">
@@ -139,7 +177,11 @@
 		</div>
 		<div class="actions">
 			{#if busy}<button class="ui-button" on:click={() => abort?.abort()}>Cancel</button>{/if}
-			<button class="ui-button ui-accent" on:click={run} disabled={busy || !!checks}>
+			<button
+				class="ui-button ui-accent"
+				on:click={run}
+				disabled={busy || !!checks || invalidTraffic.size > 0}
+			>
 				{busy ? 'Simulating…' : 'Run comparison'}</button
 			>
 		</div>
@@ -159,6 +201,54 @@
 		{#if error}<p class="notice danger" role="alert">{error}</p>{/if}
 		{#if checks}<p class="notice warning">{checks}</p>{/if}
 		{#if tab === 'traffic'}
+			<section aria-label="Traffic scenario">
+				<h2>Traffic scenario</h2>
+				<p class="hint">
+					Compare morning, evening or other traffic assumptions on the same network. Each scenario
+					stores its own boundaries, demand, turning shares, queues and control settings. Roads,
+					signal groups and fixed programs are shared; applying a program changes them for every
+					scenario.
+				</p>
+				<div class="scenario-controls">
+					<label
+						>Active scenario<select
+							value={selectedScenario.id}
+							on:change={(event) =>
+								editScenario(() =>
+									corridorEditor.selectMPScenario(Number(event.currentTarget.value))
+								)}
+							>{#each scenarios as item (item.id)}<option value={item.id}>{item.name}</option
+								>{/each}</select
+						></label
+					>
+					<label
+						>Scenario name<input
+							type="text"
+							maxlength="120"
+							value={selectedScenario.name}
+							on:change={(event) =>
+								editScenario(
+									() => corridorEditor.renameMPScenario(event.currentTarget.value),
+									event
+								)}
+						/></label
+					>
+					<button
+						class="ui-button"
+						on:click={() => editScenario(() => corridorEditor.duplicateMPScenario())}
+						>Duplicate scenario</button
+					>
+					<button
+						class="ui-button delete-scenario"
+						disabled={scenarios.length < 2}
+						on:click={() => editScenario(() => corridorEditor.removeMPScenario())}
+						>Delete scenario</button
+					>
+				</div>
+				<p class="hint">
+					Changes are saved with the project. Undo restores edits and deleted scenarios.
+				</p>
+			</section>
 			<section>
 				<h2>Control settings</h2>
 				<div class="settings">
@@ -254,9 +344,10 @@
 			<section>
 				<h2>Network boundaries</h2>
 				<p class="hint">
-					Selected nodes supply and remove traffic. Their signal programs are excluded from this
-					simulation. End nodes are selected initially; add approach roads in Network to simulate
-					their traffic lights too.
+					Select external entry and exit nodes. A road from a boundary into the network gets an
+					Entry demand field; traffic reaching a boundary leaves the model. Boundary signals are not
+					simulated. To include an end intersection's traffic lights, add an approach road and use
+					its outer endpoint as the boundary.
 				</p>
 				<div class="choices">
 					{#each $corridorProject.junctions as node (node.id)}<label
@@ -267,10 +358,31 @@
 							/>{node.label}</label
 						>{/each}
 				</div>
+				<p class="hint" aria-live="polite">
+					{scenario.boundaryNodeIds.length} boundary nodes · {topology.intersections.length} controlled
+					intersections · {entryRoads.length} entries · {exitRoads.length} exits.
+				</p>
+				{#if exitRoads.length}<details class="boundary-exits">
+						<summary>Where traffic leaves the network</summary>
+						<ul>
+							{#each exitRoads as road (road.key)}<li>{road.label}</li>{/each}
+						</ul>
+					</details>{/if}
+				{#if excludedRoads.length}<p class="notice warning">
+						{excludedRoads.length} roads connect two boundary nodes and are outside this simulation:
+						{excludedRoads
+							.map(
+								(road) =>
+									`${$corridorProject.junctions.find((node) => node.id === road.from).label} ↔ ${$corridorProject.junctions.find((node) => node.id === road.to).label}`
+							)
+							.join(', ')}.
+					</p>{/if}
 				<h3>Coordinated corridors</h3>
 				<p class="hint">
-					Both directions are included for bidirectional corridors. Each path needs at least four
-					nodes, with assigned movements at its interior intersections.
+					These routes receive coordination priority in Smoothing-MP; the entire network is still
+					simulated. Both directions are included for bidirectional corridors. Each path needs at
+					least four nodes with assigned through movements. At α = 0, coordination priority is
+					disabled.
 				</p>
 				<div class="choices">
 					{#each $corridorProject.corridors as route (route.id)}<label
@@ -285,12 +397,14 @@
 			<section>
 				<h2>Entry demand</h2>
 				<p class="hint">
-					Constant demand in vehicles per hour, independent of corridor intensity. Initial
-					assumptions: 300 veh/h per entry, equal turning shares, 1800 veh/h per movement and empty
-					queues. Review these values for your network.
+					Demand is the number of vehicles wanting to enter per hour: 600 veh/h means an average of
+					10 per minute. Only roads from the selected boundaries into the network appear below.
+					Internal flows follow the turning shares automatically. These values are independent of
+					corridor intensity. New entries default to 300 veh/h; review them for your network. Stored
+					rates are kept when you deselect and reselect a boundary.
 				</p>
 				<div class="entries">
-					{#each topology.roads.filter((road) => road.entry) as road (road.key)}<label
+					{#each entryRoads as road (road.key)}<label
 							>{road.label}<input
 								aria-label={`Demand ${road.label}`}
 								type="number"
@@ -310,68 +424,18 @@
 					movement's service rate while green; account for shared lanes when setting it.
 				</p>
 				{#each topology.intersections as intersection (intersection.node.id)}
-					<details open>
-						<summary
-							>{intersection.node.label}
-							<span>{intersection.movements.length} movements</span></summary
-						>
-						<div class="table-scroll">
-							<table
-								class="movements-table"
-								aria-label={`Turning movements at ${intersection.node.label}`}
-							>
-								<colgroup>
-									<col />
-									<col class="group-column" />
-									<col class="share-column" />
-									<col class="capacity-column" />
-									<col class="queue-column" />
-								</colgroup>
-								<thead
-									><tr
-										><th>From → to</th><th>Group</th><th>Turn share, %</th><th>Saturation, veh/h</th
-										><th>Initial queue, veh</th></tr
-									></thead
-								><tbody>
-									{#each intersection.movements as movement (movement.key)}<tr
-											><th scope="row">{movement.label}</th><td>{movement.group}</td><td
-												><input
-													aria-label={`Turn share ${intersection.node.label} ${movement.label}`}
-													type="number"
-													min="0"
-													max="100"
-													step="any"
-													value={Number((movement.ratio * 100).toFixed(6))}
-													on:change={(event) => value('turningRatios', movement.key, event, 100)}
-												/></td
-											><td
-												><input
-													aria-label={`Saturation ${intersection.node.label} ${movement.label}`}
-													type="number"
-													min="1"
-													max="100000"
-													value={movement.saturation}
-													on:change={(event) => value('saturationFlows', movement.key, event)}
-												/></td
-											><td
-												><input
-													aria-label={`Initial queue ${intersection.node.label} ${movement.label}`}
-													type="number"
-													min="0"
-													max="1000000000"
-													step="any"
-													value={movement.queue}
-													on:change={(event) => value('initialMovementQueues', movement.key, event)}
-												/></td
-											></tr
-										>{/each}
-								</tbody>
-							</table>
-						</div>
-					</details>
+					<MPTurningMovements
+						{intersection}
+						on:change={changeTraffic}
+						on:validity={(event) => trafficValidity(intersection.node.id, event)}
+					/>
 				{/each}
 			</section>
 		{:else if $pressureResult}
+			<p class="notice">
+				Last comparison: {$pressureResult.scenarioName ?? 'Default scenario'}. Results describe this
+				scenario at the time of the run.
+			</p>
 			{#if $pressureResult.applied}<p class="notice">
 					The evaluated fixed programs were applied to the shared project. Undo restores the
 					previous programs. These results describe the input before application.
@@ -553,6 +617,28 @@
 		background: #ffffff;
 		max-width: 1500px;
 	}
+	.scenario-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: 12px;
+	}
+	.scenario-controls label {
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+	.delete-scenario {
+		color: #b91c1c;
+	}
+	.boundary-exits {
+		margin-bottom: 16px;
+		font-size: 13px;
+	}
+	.boundary-exits ul {
+		margin-top: 8px;
+		padding-left: 20px;
+		list-style: disc;
+	}
 	.settings {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -564,6 +650,7 @@
 		flex-direction: column;
 		gap: 7px;
 	}
+	input[type='text'],
 	input[type='number'],
 	select {
 		width: 100%;
@@ -618,12 +705,6 @@
 		cursor: pointer;
 		font-weight: 600;
 	}
-	summary span {
-		color: #52637a;
-		font-size: 12px;
-		font-weight: 400;
-		margin-left: 10px;
-	}
 	.table-scroll {
 		overflow: auto;
 		margin: 12px 0 18px;
@@ -647,32 +728,8 @@
 	tbody th {
 		font-weight: 400;
 	}
-	table input {
-		max-width: 140px;
-	}
 	thead {
 		color: #52637a;
-	}
-	.movements-table {
-		table-layout: fixed;
-		min-width: 760px;
-	}
-	.movements-table .group-column {
-		width: 80px;
-	}
-	.movements-table .share-column {
-		width: 144px;
-	}
-	.movements-table .capacity-column,
-	.movements-table .queue-column {
-		width: 172px;
-	}
-	.movements-table tbody th {
-		white-space: normal;
-		overflow-wrap: anywhere;
-	}
-	.movements-table input {
-		text-align: right;
 	}
 	.dot {
 		display: inline-block;

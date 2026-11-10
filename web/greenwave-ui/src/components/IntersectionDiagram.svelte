@@ -8,6 +8,7 @@
   export let hovGroupId = null;
   export let conflictSelection = [];
   export let groupColors = {};
+  export let movementLabels = {};
   export let emptyMessage = 'No roads connected. Draw road segments to this junction first.';
 
   const dispatch = createEventDispatcher();
@@ -370,7 +371,11 @@
     const forbidden = gids.length === 0;
     const color = forbidden ? '#94a3b8' : (groupColors[gids[0]] ?? gColor(gids[0]));
 
-    return { ...mov, path, arrow, gids, color, forbidden };
+    const midpoint = {
+      x: (p0.x + 3 * cp0.x + 3 * cp1.x + p1.x) / 8,
+      y: (p0.y + 3 * cp0.y + 3 * cp1.y + p1.y) / 8,
+    };
+    return { ...mov, path, arrow, midpoint, gids, color, forbidden };
   }).filter(Boolean);
 
   function gColor(id) { return GROUP_COLORS[id % GROUP_COLORS.length]; }
@@ -498,7 +503,7 @@
       <!-- Movement arcs: hit areas -->
       {#each movGeo as mg (mg.id)}
         <path d={mg.path} fill="none" stroke="transparent" stroke-width="16"
-          style="cursor:pointer" role="button" tabindex="0" aria-label={`${mg.inLabel} to ${mg.outLabel}`} aria-pressed={selMovId === mg.id}
+          style="cursor:pointer" role="button" tabindex="0" aria-label={`${mg.inLabel} to ${mg.outLabel}${movementLabels[mg.id] ? `: ${movementLabels[mg.id]}` : ''}`} aria-pressed={selMovId === mg.id}
           on:keydown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pointerMoved = false; selectArc(mg.id); } }}
           on:click|stopPropagation={() => selectArc(mg.id)}
           on:pointerenter={() => hovMovId = mg.id}
@@ -520,11 +525,17 @@
           opacity={mg.forbidden ? 0.45 : 1}
           stroke-linecap="round"
           pointer-events="none"/>
-        <polygon points={mg.arrow} fill={mg.color}
+        <polygon points={mg.arrow} fill={conflictSelection.includes(mg.id) ? '#dc2626' : mg.color}
           opacity={mg.forbidden ? 0.45 : 1} pointer-events="none"/>
       {/each}
 
       <circle cx={CENTER} cy={CENTER} r="3" fill="white" opacity="0.4"/>
+      {#each movGeo.filter(movement => movement.id === selMovId && movementLabels[movement.id]) as movement (movement.id)}
+        <text x={movement.midpoint.x} y={movement.midpoint.y - 10}
+          text-anchor="middle" font-size="12" font-weight="700" fill="#0f172a"
+          stroke="white" stroke-width="4" paint-order="stroke" pointer-events="none"
+        >{movementLabels[movement.id]}</text>
+      {/each}
     </svg>
   {/if}
 </div>

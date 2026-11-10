@@ -1,6 +1,6 @@
 import { graphView, parseSharedProject, programMovementConflicts } from './shared-project.js';
 import { intersectionTopology } from './network-project.js';
-import { validateMPScenario } from './mp-scenario.js';
+import { activeMPScenario, validateMPScenario } from './mp-scenario.js';
 
 const roadKey = (id, direction) => `${id}:${direction}`;
 const requireValue = (ok, message) => {
@@ -29,7 +29,7 @@ export function mpScenario(project) {
 		turningRatios: {},
 		saturationFlows: {},
 		initialMovementQueues: {},
-		...project.mpScenario
+		...activeMPScenario(project)?.settings
 	};
 }
 
@@ -76,6 +76,7 @@ export function mpTopology(project, scenario = mpScenario(project)) {
 			if (!incoming || !outgoing) continue;
 			const item = {
 				id: roads.length + movements.length + 1,
+				movementId: movement.id,
 				key: `${node.id}:${movement.id}`,
 				nodeId: node.id,
 				group,
@@ -86,7 +87,7 @@ export function mpTopology(project, scenario = mpScenario(project)) {
 			assigned.push(item);
 			movements.push(item);
 		}
-		intersections.push({ node, movements: assigned });
+		intersections.push({ node, movements: assigned, diagram: topology });
 		if (programMovementConflicts(node, topology, assignments).length) conflicts.push(node.label);
 	}
 	for (const movement of movements) {
@@ -96,7 +97,30 @@ export function mpTopology(project, scenario = mpScenario(project)) {
 		movement.queue = scenario.initialMovementQueues[movement.key] ?? 0;
 	}
 	for (const road of roads) road.rate = scenario.entryRates[road.key] ?? 300;
+	for (const intersection of intersections) {
+		intersection.approaches = roads
+			.filter((road) => road.to === intersection.node.id)
+			.map((road) => {
+				const turns = intersection.movements.filter((movement) => movement.incoming.id === road.id);
+				return { road, movements: turns, ...mpTurningTotal(turns) };
+			});
+	}
 	return { roads, movements, intersections, conflicts };
+}
+
+export function mpTurningTotal(movements) {
+	const total = movements.reduce((sum, movement) => sum + movement.ratio, 0);
+	const valid = movements.length > 0 && Math.abs(total - 1) < 1e-8;
+	const percent = Number((total * 100).toFixed(6));
+	const difference = Number((Math.abs(total - 1) * 100).toFixed(6));
+	const message = !movements.length
+		? 'No assigned outgoing movement. Assign a signal group in Network.'
+		: valid
+			? 'All incoming traffic is assigned.'
+			: total < 1
+				? `${difference}% of incoming traffic is unassigned.`
+				: `${difference}% too much traffic is assigned.`;
+	return { total, percent, valid, message };
 }
 
 export function buildMPRequest(project) {

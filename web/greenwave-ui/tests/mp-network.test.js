@@ -10,6 +10,130 @@ import {
 	SHARED_STORAGE_KEY
 } from '../src/lib/utils/shared-project.js';
 import { buildMPRequest, mpTopology, mpScenario } from '../src/lib/utils/mp-network.js';
+import { activeMPScenario, mpScenarios } from '../src/lib/utils/mp-scenario.js';
+
+test('turn totals identify the incomplete incoming road without mixing approaches or intersections', () => {
+	const project = rectangularDemoProject();
+	const initial = mpTopology(project);
+	const intersection = initial.intersections.find((item) =>
+		item.approaches.some((approach) => approach.movements.length > 1)
+	);
+	const approach = intersection.approaches.find((item) => item.movements.length > 1);
+	const movement = approach.movements[0];
+	project.mpScenario = {
+		...mpScenario(project),
+		turningRatios: { [movement.key]: movement.ratio - 0.1 }
+	};
+	const changed = mpTopology(project);
+	const invalid = changed.intersections
+		.flatMap((item) => item.approaches)
+		.filter((item) => !item.valid);
+	assert.equal(invalid.length, 1);
+	assert.equal(invalid[0].road.key, approach.road.key);
+	assert.equal(invalid[0].percent, 90);
+	assert.equal(invalid[0].message, '10% of incoming traffic is unassigned.');
+	assert.throws(() => buildMPRequest(project), /100%/);
+	project.mpScenario.turningRatios[movement.key] = movement.ratio + 0.1;
+	const excessive = mpTopology(project)
+		.intersections.flatMap((item) => item.approaches)
+		.find((item) => !item.valid);
+	assert.equal(excessive.percent, 110);
+	assert.equal(excessive.message, '10% too much traffic is assigned.');
+	for (const item of approach.movements)
+		delete project.movements[intersection.node.id][item.movementId];
+	const missing = mpTopology(project)
+		.intersections.flatMap((item) => item.approaches)
+		.find((item) => item.road.key === approach.road.key);
+	assert.equal(missing.percent, 0);
+	assert.equal(missing.valid, false);
+	assert.match(missing.message, /No assigned outgoing movement/);
+});
+
+test('named scenarios isolate demand and boundaries, preserve old input and survive storage and history', () => {
+	const values = new Map();
+	const storage = {
+		getItem: (key) => values.get(key) ?? null,
+		setItem: (key, value) => values.set(key, value)
+	};
+	const editor = createCorridorEditor();
+	editor.connectStorage(storage);
+	editor.replace(rectangularDemoProject());
+	const original = editor.snapshot();
+	const originalRequest = buildMPRequest(original);
+	editor.duplicateMPScenario();
+	assert.equal(mpScenarios(editor.snapshot()).length, 2);
+	assert.deepEqual(buildMPRequest(editor.snapshot()), originalRequest);
+	editor.renameMPScenario('Evening');
+	const eveningId = activeMPScenario(editor.snapshot()).id;
+	const entry = mpTopology(editor.snapshot()).roads.find((road) => road.entry);
+	editor.setMPScenario({
+		...mpScenario(editor.snapshot()),
+		entryRates: { [entry.key]: 950 },
+		alpha: 0
+	});
+	assert.equal(buildMPRequest(editor.snapshot()).demand.rates[entry.id], 950);
+	editor.selectMPScenario(0);
+	assert.deepEqual(buildMPRequest(editor.snapshot()), originalRequest);
+	editor.renameMPScenario('Morning');
+	assert.throws(() => editor.renameMPScenario('Evening'), /distinct MP scenario names/);
+	assert.throws(() => editor.selectMPScenario(9000), /existing MP scenario/);
+	editor.selectMPScenario(eveningId);
+	const beforeBoundaryChange = editor.snapshot();
+	editor.setMPScenario({ ...mpScenario(beforeBoundaryChange), boundaryNodeIds: [] });
+	assert.equal(mpTopology(editor.snapshot()).roads.filter((road) => road.entry).length, 0);
+	assert.equal(mpTopology(editor.snapshot()).intersections.length, original.junctions.length);
+	editor.undo();
+	assert.deepEqual(editor.snapshot(), beforeBoundaryChange);
+	assert.equal(
+		mpTopology(editor.snapshot()).roads.find((road) => road.key === entry.key).rate,
+		950
+	);
+	assert.deepEqual(editor.snapshot().junctions, original.junctions);
+	assert.deepEqual(editor.snapshot().roads, original.roads);
+	assert.deepEqual(editor.snapshot().corridors, original.corridors);
+	const reloaded = createCorridorEditor();
+	reloaded.connectStorage(storage);
+	assert.deepEqual(reloaded.snapshot(), editor.snapshot());
+	assert.deepEqual(parseSharedProject(JSON.stringify(editor.snapshot())), editor.snapshot());
+	editor.removeMPScenario();
+	assert.equal(activeMPScenario(editor.snapshot()).name, 'Morning');
+	assert.deepEqual(buildMPRequest(editor.snapshot()), originalRequest);
+	assert.throws(() => editor.removeMPScenario(), /at least one/);
+	editor.undo();
+	assert.deepEqual(editor.snapshot(), beforeBoundaryChange);
+	editor.redo();
+	assert.equal(mpScenarios(editor.snapshot()).length, 1);
+});
+
+test('legacy scenario conversion retains every setting and malformed collections fail before replacement', () => {
+	const project = rectangularDemoProject();
+	project.mpScenario = { ...mpScenario(project), alpha: 0.7, simTime: 300 };
+	const editor = createCorridorEditor();
+	editor.replace(project);
+	const before = editor.snapshot();
+	editor.renameMPScenario('Imported demand');
+	const converted = editor.snapshot();
+	assert.equal(converted.mpScenario, undefined);
+	assert.deepEqual(activeMPScenario(converted).settings, before.mpScenario);
+	assert.deepEqual(buildMPRequest(converted), buildMPRequest(before));
+	editor.undo();
+	assert.deepEqual(editor.snapshot(), before);
+	const malformed = [
+		{ ...converted, mpScenarios: [] },
+		{ ...converted, mpScenario: before.mpScenario },
+		{ ...converted, activeMPScenarioId: 99 },
+		{ ...converted, mpScenarios: [...converted.mpScenarios, converted.mpScenarios[0]] },
+		{
+			...converted,
+			mpScenarios: [{ id: 0, name: 'Bad', settings: { turningRatios: { any: -1 } } }]
+		},
+		{ ...before, activeMPScenarioId: 0 }
+	];
+	for (const input of malformed) {
+		assert.throws(() => editor.replace(input));
+		assert.deepEqual(editor.snapshot(), before);
+	}
+});
 
 test('directed network maps both corridor directions, all assigned turns and explicit boundaries', () => {
 	const project = rectangularDemoProject();
