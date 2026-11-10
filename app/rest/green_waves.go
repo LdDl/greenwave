@@ -7,6 +7,7 @@ import (
 
 	"github.com/LdDl/greenwave"
 	"github.com/LdDl/greenwave/app/rest/dto"
+	"github.com/LdDl/greenwave/junction"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -18,8 +19,12 @@ type GreenWavesRequest struct {
 	Junctions []dto.JunctionDTO `json:"junctions"`
 	// Desired speed in km/h for calculating green waves
 	DesiredSpeedKmh float64 `json:"desired_speed_kmh"`
-	// Direction for green wave calculation: "forward" (default) or "bidirectional"
-	Direction string `json:"direction"`
+	// Calculation direction. Defaults to forward. Both directions use one program and offset per junction.
+	Direction string `json:"direction" enums:"forward,bidirectional"`
+	// Forward signal group ID keyed by junction ID. Missing entries use group 0. Selected groups must exist in every phase.
+	GroupIDs map[int]junction.GroupID `json:"group_ids"`
+	// Optional reverse signal group ID keyed by junction ID. Missing entries use the forward group. Selected groups must exist in every phase.
+	ReverseGroupIDs map[int]junction.GroupID `json:"reverse_group_ids,omitempty"`
 }
 
 // GreenWavesResponse represents the response structure for green waves requests.
@@ -75,13 +80,18 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 			})
 		}
 
-		junctions := make([]*greenwave.Junction, len(requestData.Junctions))
+		forwardGroups, reverseGroups, err := coordinationGroups(requestData.Junctions, requestData.GroupIDs, requestData.ReverseGroupIDs)
+		if err != nil {
+			return ctx.JSON(400, echo.Map{"Error": err.Error()})
+		}
+
+		junctions := make([]*junction.Junction, len(requestData.Junctions))
 		for i, junctionDTO := range requestData.Junctions {
 			junctions[i] = dto.JunctionFromDTO(junctionDTO)
 		}
 
 		// Extract forward green waves
-		greenWaves := greenwave.FindGreenWaves(junctions, requestData.DesiredSpeedKmh)
+		greenWaves := greenwave.FindGreenWaves(junctions, forwardGroups, requestData.DesiredSpeedKmh)
 		throughGreenWaves := greenwave.MergeGreenWaves(greenWaves)
 
 		response := GreenWavesResponse{
@@ -94,7 +104,7 @@ func ExtractGreenWaves() func(ctx echo.Context) error {
 		// If bidirectional, also calculate reverse waves
 		if strings.ToLower(requestData.Direction) == "bidirectional" {
 			reversedJunctions := greenwave.ReverseJunctions(junctions)
-			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, requestData.DesiredSpeedKmh)
+			reverseGreenWaves := greenwave.FindGreenWaves(reversedJunctions, reverseGroups, requestData.DesiredSpeedKmh)
 			reverseThroughGreenWaves := greenwave.MergeGreenWaves(reverseGreenWaves)
 
 			response.ReverseGreenWaves = convertGreenWavesToDTO(reverseGreenWaves)

@@ -3,6 +3,8 @@ package greenwave
 import (
 	"math"
 	"math/rand/v2"
+
+	"github.com/LdDl/greenwave/junction"
 )
 
 // OptimizerGenetic implements a genetic algorithm for optimizing traffic light offsets
@@ -52,7 +54,7 @@ type Individual struct {
 // OptimizerGenetic is a genetic algorithm optimizer for traffic light offsets
 type OptimizerGenetic struct {
 	// contains the traffic junctions to optimize
-	junctions []*Junction
+	junctions []*junction.Junction
 	// speedKhm is the speed in kilometers per hour used for calculating offsets
 	speedKhm float64
 	// populationSize is the number of individuals in the population
@@ -71,22 +73,31 @@ type OptimizerGenetic struct {
 	crossoverFunc func(cycleLengths []float64, parent1, parent2 *Individual) *Individual
 	// cycleLengths contains the total duration of each junction in seconds
 	cycleLengths []float64
+	// groupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
+	// A junction may have multiple signal groups; only one group represents the through-movement per corridor.
+	groupIDs        map[int]junction.GroupID
+	reverseGroupIDs map[int]junction.GroupID
 	// bestFitenessHistory keeps track of the best fitness value in each generation
 	bestFitenessHistory []float64
 }
 
-// NewOptimizerGenetic creates a new instance of OptimizerGenetic with the provided parameters
-func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode) Optimizer {
+// NewOptimizerGenetic creates a new instance of OptimizerGenetic with the provided parameters.
+// groupIDs maps each junction ID to the signal group to use for green wave coordination in this corridor.
+// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
+// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
+func NewOptimizerGenetic(junctions []*junction.Junction, groupIDs map[int]junction.GroupID, speedKhm float64, populationSize int, generations int, mutationRate float64, tournamentSize int, crossoverType CrossoverType, optimizationMode OptimizationMode, options ...GeneticOption) Optimizer {
 	cycleLengths := make([]float64, len(junctions))
-	for i, junction := range junctions {
-		cycleLengths[i] = float64(junction.totalDuration)
+	for i, jun := range junctions {
+		cycleLengths[i] = float64(jun.GetTotalDuration())
 	}
 	crossoverFunc := blendCrossover
 	if crossoverType == CROSSOVER_UNIFORM {
 		crossoverFunc = uniformCrossover
 	}
-	return &OptimizerGenetic{
+	optimizer := &OptimizerGenetic{
 		junctions:           junctions,
+		groupIDs:            groupIDs,
+		reverseGroupIDs:     groupIDs,
 		speedKhm:            speedKhm,
 		populationSize:      populationSize,
 		generations:         generations,
@@ -97,6 +108,27 @@ func NewOptimizerGenetic(junctions []*Junction, speedKhm float64, populationSize
 		crossoverFunc:       crossoverFunc,
 		cycleLengths:        cycleLengths,
 		bestFitenessHistory: make([]float64, 0, generations),
+	}
+	for _, option := range options {
+		option(optimizer)
+	}
+	return optimizer
+}
+
+// GeneticOption configures optional genetic optimizer behavior.
+type GeneticOption func(*OptimizerGenetic)
+
+// WithReverseGroupIDs selects return groups. Missing entries use the forward group.
+func WithReverseGroupIDs(groups map[int]junction.GroupID) GeneticOption {
+	return func(optimizer *OptimizerGenetic) {
+		optimizer.reverseGroupIDs = make(map[int]junction.GroupID, len(optimizer.junctions))
+		for _, jun := range optimizer.junctions {
+			id, ok := groups[jun.ID]
+			if !ok {
+				id = optimizer.groupIDs[jun.ID]
+			}
+			optimizer.reverseGroupIDs[jun.ID] = id
+		}
 	}
 }
 
@@ -118,17 +150,17 @@ func (optga *OptimizerGenetic) createIndividual() *Individual {
 // EvaluateFitness calculates the fitness of an individual based on the traffic light offsets
 func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 	// Apply the offsets to the junctions
-	for i, junction := range optga.junctions {
-		junction.SetOffset(int(individual.Offsets[i]))
+	for i, jun := range optga.junctions {
+		jun.SetOffset(int(individual.Offsets[i]))
 	}
 
 	// Calculate forward fitness
-	forwardFitness := calculateDirectionalFitness(optga.junctions, optga.speedKhm)
+	forwardFitness := calculateDirectionalFitness(optga.junctions, optga.groupIDs, optga.speedKhm)
 
 	// If bidirectional mode, also calculate reverse fitness
 	if optga.optimizationMode == OPTIMIZATION_BIDIRECTIONAL {
 		reversedJunctions := ReverseJunctions(optga.junctions)
-		reverseFitness := calculateDirectionalFitness(reversedJunctions, optga.speedKhm)
+		reverseFitness := calculateDirectionalFitness(reversedJunctions, optga.reverseGroupIDs, optga.speedKhm)
 		// Combine forward and reverse fitness (equal weight)
 		return forwardFitness + reverseFitness
 	}
@@ -136,9 +168,10 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 	return forwardFitness
 }
 
-// calculateDirectionalFitness calculates fitness for a given direction (order of junctions)
-func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float64 {
-	greenWavs := FindGreenWaves(junctions, speedKhm)
+// calculateDirectionalFitness calculates fitness for a given direction (order of junctions).
+// groupIDs maps each junction ID to the signal group to use for green wave coordination in this corridor.
+func calculateDirectionalFitness(junctions []*junction.Junction, groupIDs map[int]junction.GroupID, speedKhm float64) float64 {
+	greenWavs := FindGreenWaves(junctions, groupIDs, speedKhm)
 	throughGreenWaves := MergeGreenWaves(greenWavs)
 	if len(throughGreenWaves) == 0 {
 		return 0.0 // No green waves found
@@ -157,9 +190,9 @@ func calculateDirectionalFitness(junctions []*Junction, speedKhm float64) float6
 
 // ReverseJunctions returns a new slice with junctions in reverse order
 // Note: it contains pointers to the same Junction objects
-func ReverseJunctions(junctions []*Junction) []*Junction {
+func ReverseJunctions(junctions []*junction.Junction) []*junction.Junction {
 	n := len(junctions)
-	reversed := make([]*Junction, n)
+	reversed := make([]*junction.Junction, n)
 	for i := 0; i < n; i++ {
 		reversed[i] = junctions[n-1-i]
 	}
@@ -233,6 +266,14 @@ func (optga *OptimizerGenetic) Optimize() []float64 {
 	for i := range population {
 		population[i] = optga.createIndividual()
 	}
+	// Keep the current plan as a candidate, with the first junction as the time origin.
+	currentOffsets := make([]float64, len(optga.junctions))
+	origin := optga.junctions[0].GetOffset()
+	for i, jun := range optga.junctions {
+		cycle := optga.cycleLengths[i]
+		currentOffsets[i] = math.Mod(math.Mod(float64(jun.GetOffset()-origin), cycle)+cycle, cycle)
+	}
+	population[0] = &Individual{Offsets: currentOffsets}
 
 	bestFitness := -1.0
 	var bestIndividual *Individual
