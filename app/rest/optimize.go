@@ -24,13 +24,11 @@ type OptimizeRequest struct {
 	OptimizerType string `json:"optimizer_type"`
 	// Contains parameters for the optimizer
 	OptimizerParams map[string]interface{} `json:"optimizer_params"`
-	// Direction for optimization: "forward" (default) or "bidirectional"
-	Direction string `json:"direction"`
-	// GroupIDs maps each junction ID to the signal group used for green wave coordination in this corridor.
-	// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
-	// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
+	// Calculation direction. Defaults to forward. Both directions use one program and offset per junction.
+	Direction string `json:"direction" enums:"forward,bidirectional"`
+	// Forward signal group ID keyed by junction ID. Missing entries use group 0. Selected groups must exist in every phase.
 	GroupIDs map[int]junction.GroupID `json:"group_ids"`
-	// ReverseGroupIDs selects the return group per junction; missing entries use GroupIDs.
+	// Optional reverse signal group ID keyed by junction ID. Missing entries use the forward group. Selected groups must exist in every phase.
 	ReverseGroupIDs map[int]junction.GroupID `json:"reverse_group_ids,omitempty"`
 }
 

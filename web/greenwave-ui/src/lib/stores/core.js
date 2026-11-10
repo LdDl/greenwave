@@ -12,4 +12,7 @@ export const optimizationDirection = corridorEditor.direction;
 export const desiredIntensity = corridorEditor.desiredIntensity;
 
 // Desired flow (vehicles per second)
-export const desiredFlow = derived(desiredIntensity, $desiredIntensity => $desiredIntensity / 3600);
+export const desiredFlow = derived(
+	desiredIntensity,
+	($desiredIntensity) => $desiredIntensity / 3600
+);

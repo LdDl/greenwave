@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/greenwave-ui/ ./
 
 # Build static files
-RUN pnpm build
+RUN pnpm exec svelte-kit sync && pnpm build
 
 # Stage 2: Build Go application
 FROM docker.io/golang:1.23-alpine AS go-builder
@@ -27,7 +27,7 @@ COPY go.mod go.sum ./
 
 RUN go mod download
 
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 COPY ./*.go ./
 COPY ./color ./color

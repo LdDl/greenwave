@@ -102,21 +102,21 @@ Storage failures leave editing available in memory and show an error. Export a c
 
 ## Keyboard and history
 
-| Action | Shortcut |
-| --- | --- |
-| Select tool | V |
-| Add junction tool | N |
-| Add road tool | R |
-| Fit network | F |
-| Delete selection from network | Delete or Backspace |
-| Cancel drawing or selection | Escape |
-| Undo | Ctrl/Cmd+Z |
-| Redo | Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y |
-| Pan focused canvas | Arrow keys |
-| Zoom focused canvas | + or - |
-| Place junction at canvas center in Junction mode | Enter |
-| Select focused junction or road | Enter or Space |
-| Move focused junction in Select mode | Arrow keys, Shift for a larger step |
+| Action                                           | Shortcut                            |
+| ------------------------------------------------ | ----------------------------------- |
+| Select tool                                      | V                                   |
+| Add junction tool                                | N                                   |
+| Add road tool                                    | R                                   |
+| Fit network                                      | F                                   |
+| Delete selection from network                    | Delete or Backspace                 |
+| Cancel drawing or selection                      | Escape                              |
+| Undo                                             | Ctrl/Cmd+Z                          |
+| Redo                                             | Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y      |
+| Pan focused canvas                               | Arrow keys                          |
+| Zoom focused canvas                              | + or -                              |
+| Place junction at canvas center in Junction mode | Enter                               |
+| Select focused junction or road                  | Enter or Space                      |
+| Move focused junction in Select mode             | Arrow keys, Shift for a larger step |
 
 Dragging pans the canvas in Select mode. The wheel and view buttons change zoom. Selecting two focused junctions in Road mode connects them. Shortcuts do not intercept text fields or operate behind dialogs. Both pages share up to 100 history steps. A drag is one step. Dialogs keep their own draft shortcuts. Project shortcuts do not act behind dialogs or intercept text fields.
 

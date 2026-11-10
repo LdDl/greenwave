@@ -147,8 +147,7 @@
 							fileInput.click();
 						}}
 						disabled={$isLoading}
-						><strong>Open JSON</strong><small>Open a saved project or corridor input</small
-						></button
+						><strong>Open JSON</strong><small>Open a saved project or corridor input</small></button
 					>
 					<button on:click={saveProject}
 						><strong>Save project as JSON</strong><small
@@ -161,8 +160,8 @@
 					<details>
 						<summary>API input</summary>
 						<p>
-							Export the active corridor for API integrations. Use "Save project as JSON" for
-							a complete backup.
+							Export the active corridor for API integrations. Use "Save project as JSON" for a
+							complete backup.
 						</p>
 						<button
 							disabled={!!$corridorIssue}
