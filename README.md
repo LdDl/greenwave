@@ -29,6 +29,20 @@ docker run -p 36000:36000 greenwave
 * Web UI: http://localhost:36000
 * Swagger API docs: http://localhost:36000/api/greenwave/docs/
 
+#### Web UI screenshots
+
+Network editor
+
+<img src="./docs/network_editor.png" height="720" alt="Network editor">
+
+Green-wave optimization
+
+<img src="./docs/wave_optimize.png" height="720" alt="Green-wave optimization">
+
+Max pressure
+
+<img src="./docs/max_pressure.png" height="720" alt="Max pressure">
+
 #### Web UI Demo
 
 The UI has had a pretty big rework recently, so these recordings are a bit out of date. The current editor and navigation look different, I'll try to update the recordings in further.
