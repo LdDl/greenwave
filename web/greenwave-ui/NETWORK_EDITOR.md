@@ -1,6 +1,6 @@
 # Network and corridor editor
 
-The diagram at `/` and the network at `/network` edit one project. The network holds all junctions, roads, movement assignments and signal programs. Each corridor selects an ordered route, forward/reverse groups, direction, speed and intensity. Switching corridors preserves branches and shares the same physical junctions. `/network/standalone` redirects to the unified editor.
+The diagram at `/` and the network at `/network` edit one project. The network holds all junctions, roads, movement assignments and signal programs. Each corridor selects an ordered route, forward/reverse groups, direction, speed and intensity. Switching corridors preserves branches and shares the same physical junctions.
 
 ## Network basics
 
@@ -24,7 +24,7 @@ A few things to keep in mind:
 
 Both views use the same top toolbar. "Network" edits roads and routes. "Coordination" shows the active corridor's diagrams. "Corridors" sits directly beside these views, followed by "Project", "Examples", Undo and Redo in the left part of the toolbar. Narrow screens place project actions on their own left-aligned row and retain every button's text label. Undo and Redo belong to the whole project. The project name and local-save status stay visible. Storage failures show an alert with a JSON backup action.
 
-- "Project" contains "Open JSON", "Save project as JSON" and "New project". A project backup includes every corridor, road, assignment and program. Older API input export and recovery of a previous browser network are under "Compatibility and recovery", with explanations.
+- "Project" contains "Open JSON", "Save project as JSON" and "New project". A project backup includes every corridor, road, assignment and program. "API input" contains export of the active corridor for integrations.
 - "Examples" offers "Load demo data", a small four-junction corridor, and "Writers Quarter", a rectangular network with alternative routes.
 - "Corridors" opens a panel on the left with names, lengths, directions and junction sequences. Select a route, use "+ Create corridor" above the list, or open its editing view. "Change corridor" opens this same list from the current view. A corridor is a route through the shared network, not a separate copy of the project.
 
@@ -88,17 +88,13 @@ Each direction still reports pending, outdated, empty, partial or full-corridor 
 
 The example `tests/fixtures/bidirectional-turns.json` uses Pushkin Street, Nekrasov Street, Tolstoy Street and Krylov Street, a 120-second cycle, G10 for forward, G20 for reverse, G30 for a protected turn and G40 for a cross street. Initial offsets 0, 45, 90 and 45 are uncoordinated. Reference offsets 0, 9, 19 and 30 produce through bands of 28 and 20 seconds. Import creates corridor roads only. Draw side roads and assign their movements to display the other groups geometrically.
 
-## Save, import and migrate
+## Save and import
 
 The complete project is automatically saved under `greenwave.project.v1`. Programs, roads, assignments, corridors, settings and layout survive F5. Unsaved dialog drafts, history and results do not. Storage belongs to the site's origin, so another port or browser has separate data.
 
-"Project" > "Save project as JSON" saves the complete `greenwave-project` version 1 document. "Export corridor for API" under "Compatibility and recovery" saves only the selected input projection. It is intended for API integration, not full-project backup. "Export result" in the results chart saves the optimized program snapshot and its selected groups in the existing result format.
+"Project" > "Save project as JSON" saves the complete `greenwave-project` version 1 document. "Export corridor for API" under "API input" saves only the selected input projection. It is intended for API integration, not full-project backup. "Export result" in the results chart saves the optimized program snapshot and its selected groups in the existing result format.
 
-Import accepts the complete project, old input JSON, `greenwave-corridor` version 1 and `greenwave-network` version 1. Validation happens before replacement. Loading input JSON or demo data replaces the entire project with its generated corridor network. The prompt states that scope. Both pages use the same replacement dialog with incoming counts, migration notes and an action to save the current project. Imports larger than 5 MB are rejected. Replacements can be undone during the session. Malformed files leave the project unchanged.
-
-When the new storage key is absent, restoration first checks the previous saved corridor, then the previous standalone network. Both old keys, `greenwave.corridor.v1` and `greenwave.network.v1`, remain untouched. If both exist, "Project" > "Compatibility and recovery" > "Recover previous browser network" previews and explicitly opens the old network. It replaces the current project after confirmation rather than merging unrelated documents.
-
-Legacy network movement groups represented stages. Migration turns each stage into a phase with its original duration and gives assigned movements permanent groups that are green in their original stages. It does not invent yellow or clearance intervals. The original document is retained inside the migrated project. Legacy roads have no physical lengths: set lengths and choose a route before calculation. Unconfigured junctions receive the default program.
+Import accepts `greenwave-project` version 1 and corridor input/result JSON with junctions and calculation settings. Validation happens before replacement. Loading input JSON or demo data replaces the entire project with its generated corridor network. The prompt states that scope. Both pages use the same replacement dialog with incoming counts and an action to save the current project. Imports larger than 5 MB are rejected. Replacements can be undone during the session. Malformed files leave the project unchanged.
 
 Input files with nonstraight coordinates are projected using distances along their original point sequence. Travel distances and complete programs are preserved. The diagram uses accumulated route distance rather than the original two-dimensional geometry.
 
@@ -134,4 +130,4 @@ pnpm check
 pnpm build
 ```
 
-Model tests cover migrations, validation, persistence failures, multiple corridors, references, conflicts, history, projection and result application. After UI changes, also check network creation, route selection, movement assignments, draft history, import/export, reload, diagram edits, stale calculation responses, keyboard controls and narrow screens.
+Model tests cover validation, persistence failures, multiple corridors, references, conflicts, history, projection and result application. After UI changes, also check network creation, route selection, movement assignments, draft history, import/export, reload, diagram edits, stale calculation responses, keyboard controls and narrow screens.
