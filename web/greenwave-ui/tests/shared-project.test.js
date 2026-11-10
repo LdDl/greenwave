@@ -4,20 +4,17 @@ import { readFileSync } from 'node:fs';
 import { get } from 'svelte/store';
 import { createCorridorEditor } from '../src/lib/stores/corridor.js';
 import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
-import { demoProject, intersectionTopology } from '../src/lib/utils/network-project.js';
+import { intersectionTopology } from '../src/lib/utils/network-geometry.js';
 import {
 	SHARED_STORAGE_KEY,
-	LEGACY_CORRIDOR_KEY,
-	LEGACY_NETWORK_KEY,
 	fromInput,
-	fromLegacyNetwork,
 	parseSharedProject,
 	corridorProjection,
 	graphView,
 	routeMovements,
 	programMovementConflicts
 } from '../src/lib/utils/shared-project.js';
-import { programTimeline, programStateAt } from '../src/lib/utils/junction-program.js';
+import { fourWayProject } from './fixtures/four-way-project.js';
 const example = JSON.parse(
 	readFileSync(new URL('./fixtures/bidirectional-turns.json', import.meta.url), 'utf8')
 );
@@ -28,19 +25,6 @@ function memoryStorage(entries = []) {
 		setItem: (key, value) => values.set(key, value)
 	};
 }
-function legacyProject() {
-	const project = demoProject();
-	const movements = intersectionTopology(1, project.nodes, project.edges).movements;
-	project.intersections[1] = {
-		macro_node_id: 1,
-		groups: [
-			{ id: 7, greenDuration: 20 },
-			{ id: 9, greenDuration: 10 }
-		],
-		movState: { [movements[0].id]: { groupIds: [7, 9] }, [movements[1].id]: { groupIds: [9] } }
-	};
-	return project;
-}
 function branchedEditor() {
 	const editor = createCorridorEditor();
 	editor.replaceInput(DEMO_DATA);
@@ -49,66 +33,40 @@ function branchedEditor() {
 	return { editor, id };
 }
 
-test('saved corridor migrates with node zero, all programs and layout, retaining both old storage keys', () => {
-	const legacy = {
-		format: 'greenwave-corridor',
-		version: 1,
-		input: example,
-		positions: { 0: { x: 800, y: 700 } }
-	};
-	const network = JSON.stringify(legacyProject());
-	const storage = memoryStorage([
-		[LEGACY_CORRIDOR_KEY, JSON.stringify(legacy)],
-		[LEGACY_NETWORK_KEY, network]
-	]);
+test('the small demo uses the shared format and survives export, import and reload', () => {
+	const project = parseSharedProject(DEMO_DATA);
+	assert.equal(project.format, 'greenwave-project');
+	assert.equal(project.version, 1);
+	assert.equal(project.junctions.length, 4);
+	assert.equal(project.roads.length, 3);
+	const storage = memoryStorage();
 	const editor = createCorridorEditor();
 	editor.connectStorage(storage);
+	editor.replace(parseSharedProject(JSON.stringify(project)));
 	assert.deepEqual(editor.inputSnapshot(), {
-		junctions: example.junctions,
-		desiredSpeed: example.desiredSpeed,
-		desiredIntensity: example.desiredIntensity,
-		direction: example.direction,
-		groupIds: example.groupIds,
-		reverseGroupIds: example.reverseGroupIds
+		...DEMO_DATA,
+		desiredIntensity: 1800,
+		direction: 'forward'
 	});
-	assert.deepEqual(editor.snapshot().positions[0], { x: 800, y: 700 });
-	assert.equal(storage.getItem(LEGACY_NETWORK_KEY), network);
-	assert.equal(storage.getItem(LEGACY_CORRIDOR_KEY), JSON.stringify(legacy));
-	assert.equal(get(editor.legacyNetworkAvailable), true);
-	assert.equal(JSON.parse(storage.getItem(SHARED_STORAGE_KEY)).format, 'greenwave-project');
+	assert.equal(get(editor.routeIssue), '');
 	const restored = createCorridorEditor();
 	restored.connectStorage(storage);
-	assert.deepEqual(restored.snapshot(), editor.snapshot());
+	assert.deepEqual(restored.snapshot(), project);
+	assert.deepEqual(restored.inputSnapshot(), editor.inputSnapshot());
 });
 
-test('standalone stages migrate to permanent movement groups without inventing lengths or transitions', () => {
-	const old = legacyProject();
-	const project = fromLegacyNetwork(old);
-	const node = project.junctions.find((node) => node.id === 1);
-	assert.deepEqual(
-		node.cycle.map((phase) => phase.id),
-		[7, 9]
-	);
-	for (const [movement, assignment] of Object.entries(old.intersections[1].movState)) {
-		const timeline = programTimeline(node, project.movements[1][movement]);
-		for (const [time, stage] of [
-			[5, 7],
-			[25, 9]
-		])
-			assert.equal(
-				programStateAt(timeline, time).segment.color,
-				assignment.groupIds.includes(stage) ? 'GREEN' : 'RED'
-			);
-	}
-	assert.ok(project.roads.every((road) => road.lengthMeters === null));
-	assert.deepEqual(project.corridors[0].nodeIds, []);
-	assert.deepEqual(project.migration.source, old);
-	assert.deepEqual(parseSharedProject(JSON.stringify(project)), project);
-	const storage = memoryStorage([[LEGACY_NETWORK_KEY, JSON.stringify(old)]]);
+test('retired project formats are rejected without changing the current document or storage', () => {
 	const editor = createCorridorEditor();
+	const storage = memoryStorage();
 	editor.connectStorage(storage);
-	assert.deepEqual(editor.snapshot(), project);
-	assert.equal(storage.getItem(LEGACY_NETWORK_KEY), JSON.stringify(old));
+	editor.replaceInput(DEMO_DATA);
+	const before = editor.snapshot();
+	const saved = storage.getItem(SHARED_STORAGE_KEY);
+	for (const format of ['greenwave-corridor', 'greenwave-network']) {
+		assert.throws(() => editor.replace({ ...before, format }), /supported Greenwave project/);
+		assert.deepEqual(editor.snapshot(), before);
+		assert.equal(storage.getItem(SHARED_STORAGE_KEY), saved);
+	}
 });
 
 test('a branch and its signal program survive route selection, diagram editing and project round trip', () => {
@@ -193,7 +151,9 @@ test('removing a stop keeps network objects; deleting roads or junctions invalid
 
 test('manual networks never invent reverse lanes, and missing physical lengths block the route', () => {
 	const editor = createCorridorEditor();
-	editor.replace(fromLegacyNetwork(legacyProject()));
+	const project = fourWayProject();
+	for (const road of project.roads) road.lengthMeters = null;
+	editor.replace(project);
 	editor.setRoute([2, 1, 3]);
 	assert.match(get(editor.routeIssue), /Set the length/);
 	editor.setRoadLength(1, 90);
@@ -260,11 +220,8 @@ test('project import rejects bad references atomically and keeps saved data unch
 	}
 });
 
-test('a corrupt new project is preserved and never silently replaced with an older saved project', () => {
-	const storage = memoryStorage([
-		[SHARED_STORAGE_KEY, '{broken'],
-		[LEGACY_NETWORK_KEY, JSON.stringify(legacyProject())]
-	]);
+test('a corrupt saved project is preserved without automatic replacement', () => {
+	const storage = memoryStorage([[SHARED_STORAGE_KEY, '{broken']]);
 	const editor = createCorridorEditor();
 	editor.connectStorage(storage);
 	assert.equal(get(editor.persistence).state, 'error');
@@ -287,11 +244,12 @@ test('removing a group used by another corridor is rejected without modifying th
 });
 
 test('conflicts include distinct permanent groups whose green intervals overlap', () => {
-	const legacy = legacyProject();
-	const project = fromLegacyNetwork(legacy);
+	const project = fourWayProject();
 	const graph = graphView(project);
 	const topology = intersectionTopology(1, graph.nodes, graph.edges);
 	const junction = project.junctions.find((node) => node.id === 1);
+	for (const phase of junction.cycle)
+		phase.signal_groups.push({ ...structuredClone(phase.signal_groups[0]), id: 1 });
 	const conflicting = topology.movements.filter((move) => move.outEdgeId === 2);
 	const assignments = { [conflicting[0].id]: 0, [conflicting[1].id]: 1 };
 	assert.ok(programMovementConflicts(junction, topology, assignments).length > 0);

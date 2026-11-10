@@ -23,7 +23,7 @@
 		optimizationDirection
 	} from '$lib/stores/core.js';
 	import { roadBetween } from '$lib/utils/shared-project.js';
-	import { MAX_LANES } from '$lib/utils/network-project.js';
+	import { MAX_LANES } from '$lib/utils/network-geometry.js';
 	import {
 		corridorsOpen,
 		corridorToEdit,
@@ -236,9 +236,6 @@
 	{#if error}<p role="alert" class="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>{/if}
 	{#if notice}<p role="status" class="bg-blue-50 px-4 py-2 text-sm text-blue-800">
 			{notice}
-		</p>{/if}
-	{#if $corridorProject.migration}<p class="bg-amber-50 px-4 py-2 text-xs text-amber-900">
-			{$corridorProject.migration.notes.join(' ')}
 		</p>{/if}
 	<div class="network-body" class:inspector-hidden={!inspectorOpen}>
 		<div class="network-canvas">

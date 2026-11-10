@@ -22,7 +22,7 @@ test('full-corridor status sums only waves that pass every junction', () => {
   assert.match(status.message, /18.5 s band/);
 });
 
-test('legacy demo explicitly reports that reverse inherits the forward group', () => {
+test('single-group demo explicitly reports that reverse inherits the forward group', () => {
   assert.match(reverseGroupNotice(DEMO_DATA.junctions), /forward group at every junction/);
   assert.equal(reverseGroupNotice(example.junctions, example.groupIds, example.reverseGroupIds), '');
   assert.match(reverseGroupNotice(example.junctions, example.groupIds, { ...example.reverseGroupIds, 0: 10 }), /1 of 4/);

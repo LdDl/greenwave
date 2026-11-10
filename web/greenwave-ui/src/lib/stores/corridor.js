@@ -4,8 +4,6 @@ import { activeMPScenario, validateMPScenario, validateMPScenarios } from '../ut
 import { mpProgramUpdate, mpScenario } from '../utils/mp-network.js';
 import {
 	SHARED_STORAGE_KEY,
-	LEGACY_CORRIDOR_KEY,
-	LEGACY_NETWORK_KEY,
 	emptySharedProject,
 	emptyCorridor,
 	defaultJunction,
@@ -104,7 +102,6 @@ export function createCorridorEditor() {
 	const history = writable({ undo: false, redo: false });
 	const persistence = writable({ state: 'memory', message: 'Changes are kept in memory' });
 	const calculationRevision = writable(0);
-	const legacyNetworkAvailable = writable(false);
 	const projection = derived(project, (document) => corridorProjection(document));
 	const input = derived(projection, (value) => value.input);
 	const routeIssue = derived(projection, (value) => value.error);
@@ -159,7 +156,6 @@ export function createCorridorEditor() {
 					{ id: 0, name: 'Default scenario', settings: mpScenario(document) }
 				];
 				document.activeMPScenarioId = 0;
-				delete document.mpScenario;
 			}
 			mutator(document);
 			validateMPScenarios(document);
@@ -239,20 +235,11 @@ export function createCorridorEditor() {
 	}
 	function connectStorage(target) {
 		storage = target;
-		try {
-			legacyNetworkAvailable.set(storage.getItem(LEGACY_NETWORK_KEY) !== null);
-		} catch {
-			legacyNetworkAvailable.set(false);
-		}
 		if (!initialized) {
 			initialized = true;
 			try {
 				const saved = storage.getItem(SHARED_STORAGE_KEY);
-				const legacy =
-					saved === null
-						? (storage.getItem(LEGACY_CORRIDOR_KEY) ?? storage.getItem(LEGACY_NETWORK_KEY))
-						: null;
-				if (saved !== null || legacy !== null) publish(parseSharedProject(saved ?? legacy));
+				if (saved !== null) publish(parseSharedProject(saved));
 			} catch {
 				preserveSaved = true;
 				persistence.set({
@@ -306,7 +293,6 @@ export function createCorridorEditor() {
 		calculationRevision,
 		graph,
 		routeIssue,
-		legacyNetworkAvailable,
 		junctions: field('junctions', []),
 		desiredSpeed: field('desiredSpeed'),
 		desiredIntensity: field('desiredIntensity'),
@@ -325,9 +311,8 @@ export function createCorridorEditor() {
 		inputSnapshot: () => copy(get(input)),
 		setMPScenario(scenario) {
 			validateMPScenario(scenario);
-			change((document) => {
-				if (document.mpScenarios) activeMPScenario(document).settings = copy(scenario);
-				else document.mpScenario = copy(scenario);
+			editMPScenarios((document) => {
+				activeMPScenario(document).settings = copy(scenario);
 			});
 		},
 		duplicateMPScenario() {
@@ -370,12 +355,6 @@ export function createCorridorEditor() {
 			const next = mpProgramUpdate(current, proposals);
 			finish();
 			change((document) => Object.assign(document, next));
-		},
-		readLegacyNetwork() {
-			const saved = storage?.getItem(LEGACY_NETWORK_KEY);
-			if (saved === null || saved === undefined)
-				throw new Error('No saved standalone network was found.');
-			return parseSharedProject(saved);
 		},
 		rename(name) {
 			if (!name.trim() || name.length > 120)

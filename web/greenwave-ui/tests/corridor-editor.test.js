@@ -12,15 +12,19 @@ function memoryStorage(initial = []) {
   return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
 }
 
-test('loading the actual demo creates its graph without reading or overwriting the standalone network', () => {
-  const storage = memoryStorage([['greenwave.network.v1', '{legacy network untouched}']]);
+test('loading the actual demo uses only the shared project storage', () => {
+  const storage = memoryStorage();
+  const read = storage.getItem;
+  storage.getItem = key => {
+    assert.equal(key, CORRIDOR_STORAGE_KEY);
+    return read(key);
+  };
   const editor = createCorridorEditor();
   editor.connectStorage(storage);
   editor.replaceInput(DEMO_DATA);
   assert.deepEqual(get(editor.junctions), DEMO_DATA.junctions);
   assert.deepEqual(get(editor.graph).nodes.map(node => node.id), [0, 1, 2, 3]);
   assert.deepEqual(get(editor.graph).edges.map(road => road.lengthMeters), [200, 250, 150]);
-  assert.equal(storage.getItem('greenwave.network.v1'), '{legacy network untouched}');
   assert.equal(JSON.parse(storage.getItem(CORRIDOR_STORAGE_KEY)).junctions.length, 4);
 });
 

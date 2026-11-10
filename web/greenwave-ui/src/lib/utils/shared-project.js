@@ -1,17 +1,10 @@
-import {
-	parseProject as parseLegacyNetwork,
-	intersectionTopology,
-	movementsConflict,
-	MAX_LANES
-} from './network-project.js';
+import { intersectionTopology, movementsConflict, MAX_LANES } from './network-geometry.js';
 import { validateImportedConfig } from './export-import.js';
 import { corridorGroupId, reverseCorridorGroupId, programTimeline } from './junction-program.js';
 import { validateMPScenarios } from './mp-scenario.js';
 
 export const SHARED_FORMAT = 'greenwave-project';
 export const SHARED_STORAGE_KEY = 'greenwave.project.v1';
-export const LEGACY_CORRIDOR_KEY = 'greenwave.corridor.v1';
-export const LEGACY_NETWORK_KEY = 'greenwave.network.v1';
 
 const copy = (value) => structuredClone(value);
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -175,7 +168,7 @@ export function corridorProjection(project, route = activeCorridor(project)) {
 	};
 }
 
-export function fromInput(input, positions = {}) {
+export function fromInput(input) {
 	const normalized = { desiredSpeed: 40, desiredIntensity: 1800, direction: 'forward', ...input };
 	checkInput(normalized);
 	const project = emptySharedProject();
@@ -190,7 +183,7 @@ export function fromInput(input, positions = {}) {
 	for (const key of ['groupIds', 'reverseGroupIds'])
 		if (normalized[key] !== undefined) route[key] = copy(normalized[key]);
 	project.junctions = normalized.junctions.map(({ point, ...node }, index) => {
-		project.positions[node.id] = copy(positions[node.id] ?? { x: 100 + index * 180, y: 100 });
+		project.positions[node.id] = { x: 100 + index * 180, y: 100 };
 		route.nodeIds.push(node.id);
 		if (index > 0) {
 			const previous = normalized.junctions[index - 1];
@@ -206,50 +199,6 @@ export function fromInput(input, positions = {}) {
 		return copy(node);
 	});
 	assignRouteGroups(project);
-	return project;
-}
-
-export function fromLegacyNetwork(value) {
-	const legacy = parseLegacyNetwork(value);
-	const project = emptySharedProject();
-	project.name = legacy.name;
-	project.roads = legacy.edges.map((edge) => ({ ...edge, lengthMeters: null }));
-	project.junctions = legacy.nodes.map((node) => {
-		project.positions[node.id] = { x: node.x, y: node.y };
-		const config = legacy.intersections[node.id];
-		if (!config) return defaultJunction(node.id, node.label);
-		const assigned = Object.entries(config.movState).filter(([, state]) => state.groupIds.length);
-		const groups = assigned.length
-			? assigned.map(([movement, state], id) => ({ id, movement, stages: state.groupIds }))
-			: [{ id: 0, movement: null, stages: [] }];
-		project.movements[node.id] = Object.fromEntries(
-			groups.filter((group) => group.movement).map((group) => [group.movement, group.id])
-		);
-		return {
-			id: node.id,
-			label: node.label,
-			offset: 0,
-			cycle: config.groups.map((stage) => ({
-				id: stage.id,
-				signal_groups: groups.map((group) => ({
-					id: group.id,
-					signals: [
-						{
-							color: group.stages.includes(stage.id) ? 'GREEN' : 'RED',
-							duration: stage.greenDuration
-						}
-					]
-				}))
-			}))
-		};
-	});
-	project.migration = {
-		source: copy(typeof value === 'string' ? JSON.parse(value) : value),
-		notes: [
-			'Imported movement stages were converted into phases, with a permanent signal group for each assigned movement.',
-			'Road lengths were not stored. Set them before calculation. No yellow or clearance intervals were invented.'
-		]
-	};
 	return project;
 }
 
@@ -271,18 +220,6 @@ export function reconcileMovements(project) {
 
 export function parseSharedProject(value) {
 	const data = typeof value === 'string' ? JSON.parse(value) : copy(value);
-	if (data?.format === 'greenwave-network') return fromLegacyNetwork(data);
-	if (data?.format === 'greenwave-corridor' && data.version === 1) {
-		requireValue(record(data.positions), 'Invalid saved canvas positions.');
-		for (const [id, position] of Object.entries(data.positions))
-			requireValue(
-				data.input?.junctions?.some((node) => String(node.id) === id) &&
-					Number.isFinite(position?.x) &&
-					Number.isFinite(position?.y),
-				'Invalid saved canvas position.'
-			);
-		return parseSharedProject(fromInput(data.input, data.positions));
-	}
 	if (Array.isArray(data?.junctions) && !data.format) return parseSharedProject(fromInput(data));
 	requireValue(
 		data?.format === SHARED_FORMAT && data.version === 1,

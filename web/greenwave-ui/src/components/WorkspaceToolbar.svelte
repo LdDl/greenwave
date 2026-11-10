@@ -26,7 +26,6 @@
 	let fileInput;
 	let replacement = null;
 	let issue = '';
-	const legacyNetworkAvailable = corridorEditor.legacyNetworkAvailable;
 	$: projectDialogOpen.set(replacement !== null);
 
 	function closeMenu() {
@@ -57,14 +56,6 @@
 		closeMenu();
 		if ($corridorProject.junctions.length) replacement = project;
 		else applyProject(project);
-	}
-	function openLegacy() {
-		try {
-			openProject(corridorEditor.readLegacyNetwork());
-		} catch (error) {
-			issue = error.message;
-			menu = '';
-		}
 	}
 	async function importProject(event) {
 		const file = event.target.files?.[0];
@@ -156,7 +147,7 @@
 							fileInput.click();
 						}}
 						disabled={$isLoading}
-						><strong>Open JSON</strong><small>Open a saved project or an older input file</small
+						><strong>Open JSON</strong><small>Open a saved project or corridor input</small
 						></button
 					>
 					<button on:click={saveProject}
@@ -168,9 +159,9 @@
 						><strong>New project</strong><small>Start with an empty network</small></button
 					>
 					<details>
-						<summary>Compatibility and recovery</summary>
+						<summary>API input</summary>
 						<p>
-							These actions support older files and API integrations. Use "Save project as JSON" for
+							Export the active corridor for API integrations. Use "Save project as JSON" for
 							a complete backup.
 						</p>
 						<button
@@ -180,10 +171,6 @@
 								menu = '';
 							}}>Export corridor for API</button
 						>
-						{#if $legacyNetworkAvailable}<button on:click={openLegacy} disabled={$isLoading}
-								>Recover previous browser network</button
-							>
-							<p>The previous network stays in browser storage until you choose to open it.</p>{/if}
 					</details>
 				</div>
 			{/if}
@@ -283,9 +270,6 @@
 				This replaces the current network and all corridors. Calculated results will be cleared.
 				Undo restores the previous project during this session.
 			</p>
-			{#if replacement.migration}<p class="ui-warning">
-					{replacement.migration.notes.join(' ')} The original browser copy is retained.
-				</p>{/if}
 			<div class="ui-actions">
 				<button class="ui-button" on:click={saveProject}>Save current project</button><button
 					class="ui-button"

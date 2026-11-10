@@ -4,7 +4,7 @@
   import { modalFocus } from '$lib/utils/modal-focus.js';
   import { validateImportedConfig } from '$lib/utils/export-import.js';
   import { programMovementConflicts } from '$lib/utils/shared-project.js';
-  import { intersectionTopology } from '$lib/utils/network-project.js';
+  import { intersectionTopology } from '$lib/utils/network-geometry.js';
   import { programGroupIds, programTimeline, programStateAt, signalColor, readProgram, addProgramGroup, removeProgramGroup } from '$lib/utils/junction-program.js';
   import IntersectionDiagram from './IntersectionDiagram.svelte';
   import SignalTimeline from './SignalTimeline.svelte';

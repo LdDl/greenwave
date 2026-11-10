@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
 
-  import { MAX_LANES } from '$lib/utils/network-project.js';
+  import { MAX_LANES } from '$lib/utils/network-geometry.js';
   import { modalFocus } from '$lib/utils/modal-focus.js';
 
   export let fromLabel = '';

@@ -1,5 +1,5 @@
 import { graphView, parseSharedProject, programMovementConflicts } from './shared-project.js';
-import { intersectionTopology } from './network-project.js';
+import { intersectionTopology } from './network-geometry.js';
 import { activeMPScenario, validateMPScenario } from './mp-scenario.js';
 
 const roadKey = (id, direction) => `${id}:${direction}`;

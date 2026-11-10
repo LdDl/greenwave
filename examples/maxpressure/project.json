@@ -934,68 +934,75 @@
     }
   ],
   "activeCorridorId": 0,
-  "mpScenario": {
-    "alpha": 0.5,
-    "deltaT": 1,
-    "simTime": 1200,
-    "storageModel": "point_queue",
-    "minGreenS": 5,
-    "maxGreenS": 45,
-    "clearanceS": 5,
-    "boundaryNodeIds": [
-      101,
-      102,
-      104,
-      105,
-      106,
-      107,
-      108,
-      109,
-      118
-    ],
-    "coordinatedCorridorIds": [
-      0
-    ],
-    "entryRates": {
-      "1:fwd": 850,
-      "2:fwd": 250,
-      "4:fwd": 300
-    },
-    "turningRatios": {
-      "50:1_fwd_3_fwd": 0.65,
-      "50:1_fwd_6_fwd": 0.15,
-      "50:1_fwd_9_fwd": 0.2,
-      "50:2_fwd_5_fwd": 0.8,
-      "50:2_fwd_3_fwd": 0.2,
-      "60:3_fwd_7_fwd": 0.65,
-      "60:3_fwd_8_fwd": 0.15,
-      "60:3_fwd_18_fwd": 0.2,
-      "60:4_fwd_7_fwd": 0.8,
-      "60:4_fwd_8_fwd": 0.2
-    },
-    "saturationFlows": {
-      "50:1_fwd_3_fwd": 1800,
-      "50:1_fwd_6_fwd": 600,
-      "50:1_fwd_9_fwd": 900,
-      "50:2_fwd_5_fwd": 1800,
-      "50:2_fwd_3_fwd": 900,
-      "60:3_fwd_7_fwd": 1800,
-      "60:3_fwd_8_fwd": 600,
-      "60:3_fwd_18_fwd": 900,
-      "60:4_fwd_7_fwd": 1800,
-      "60:4_fwd_8_fwd": 900
-    },
-    "initialMovementQueues": {
-      "50:1_fwd_3_fwd": 7.800000000000001,
-      "50:1_fwd_6_fwd": 1.7999999999999998,
-      "50:1_fwd_9_fwd": 2.4000000000000004,
-      "50:2_fwd_5_fwd": 3.2,
-      "50:2_fwd_3_fwd": 0.8,
-      "60:3_fwd_7_fwd": 3.25,
-      "60:3_fwd_8_fwd": 0.75,
-      "60:3_fwd_18_fwd": 1,
-      "60:4_fwd_7_fwd": 5.6000000000000005,
-      "60:4_fwd_8_fwd": 1.4000000000000001
+  "mpScenarios": [
+    {
+      "id": 0,
+      "name": "Default scenario",
+      "settings": {
+        "alpha": 0.5,
+        "deltaT": 1,
+        "simTime": 1200,
+        "storageModel": "point_queue",
+        "minGreenS": 5,
+        "maxGreenS": 45,
+        "clearanceS": 5,
+        "boundaryNodeIds": [
+          101,
+          102,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          118
+        ],
+        "coordinatedCorridorIds": [
+          0
+        ],
+        "entryRates": {
+          "1:fwd": 850,
+          "2:fwd": 250,
+          "4:fwd": 300
+        },
+        "turningRatios": {
+          "50:1_fwd_3_fwd": 0.65,
+          "50:1_fwd_6_fwd": 0.15,
+          "50:1_fwd_9_fwd": 0.2,
+          "50:2_fwd_5_fwd": 0.8,
+          "50:2_fwd_3_fwd": 0.2,
+          "60:3_fwd_7_fwd": 0.65,
+          "60:3_fwd_8_fwd": 0.15,
+          "60:3_fwd_18_fwd": 0.2,
+          "60:4_fwd_7_fwd": 0.8,
+          "60:4_fwd_8_fwd": 0.2
+        },
+        "saturationFlows": {
+          "50:1_fwd_3_fwd": 1800,
+          "50:1_fwd_6_fwd": 600,
+          "50:1_fwd_9_fwd": 900,
+          "50:2_fwd_5_fwd": 1800,
+          "50:2_fwd_3_fwd": 900,
+          "60:3_fwd_7_fwd": 1800,
+          "60:3_fwd_8_fwd": 600,
+          "60:3_fwd_18_fwd": 900,
+          "60:4_fwd_7_fwd": 1800,
+          "60:4_fwd_8_fwd": 900
+        },
+        "initialMovementQueues": {
+          "50:1_fwd_3_fwd": 7.800000000000001,
+          "50:1_fwd_6_fwd": 1.7999999999999998,
+          "50:1_fwd_9_fwd": 2.4000000000000004,
+          "50:2_fwd_5_fwd": 3.2,
+          "50:2_fwd_3_fwd": 0.8,
+          "60:3_fwd_7_fwd": 3.25,
+          "60:3_fwd_8_fwd": 0.75,
+          "60:3_fwd_18_fwd": 1,
+          "60:4_fwd_7_fwd": 5.6000000000000005,
+          "60:4_fwd_8_fwd": 1.4000000000000001
+        }
+      }
     }
-  }
+  ],
+  "activeMPScenarioId": 0
 }

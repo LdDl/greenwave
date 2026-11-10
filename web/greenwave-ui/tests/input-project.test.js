@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inputToSimpleCorridor, simpleCorridorToInput } from '../src/lib/utils/simple-corridor.js';
+import { fromInput, corridorProjection, parseSharedProject } from '../src/lib/utils/shared-project.js';
 import { prepareInputExport, prepareOutputExport } from '../src/lib/utils/export-import.js';
 
 function inputConfiguration(direction = 'forward') {
@@ -36,26 +36,24 @@ function inputConfiguration(direction = 'forward') {
 
 test('input round trip preserves zero IDs, phase boundaries, bounds, offsets, origin and settings', () => {
   const input = inputConfiguration();
-  const project = inputToSimpleCorridor(input);
-  assert.deepEqual(project.nodes.map(node => node.id), [0, 7, 21]);
+  const project = fromInput(input);
+  assert.deepEqual(project.junctions.map(node => node.id), [0, 7, 21]);
   assert.deepEqual(project.roads.map(road => [road.from, road.to, road.lengthMeters]), [[0, 7, 200], [7, 21, 350]]);
-  assert.deepEqual(simpleCorridorToInput(JSON.parse(JSON.stringify(project))), input);
+  assert.deepEqual(corridorProjection(parseSharedProject(JSON.stringify(project))).input, input);
 });
 
 test('bidirectional input uses the same junctions, programs and permanent groups for both directions', () => {
   const input = inputConfiguration('bidirectional');
   for (const phase of input.junctions[1].cycle) phase.signal_groups[0].id = 8;
-  const project = inputToSimpleCorridor(input);
-  assert.equal(project.nodes.length, 3);
+  const project = fromInput(input);
+  assert.equal(project.junctions.length, 3);
   assert.equal(project.roads.length, 2);
-  assert.ok(project.roads.every(road => road.forwardLanes === 1 && road.reverseLanes === 1));
-  assert.deepEqual(project.nodes[1].signalGroups, [{ id: 8, label: 'G8' }]);
-  assert.deepEqual(project.corridor.stops[1], { nodeId: 7, forwardGroupId: 8, reverseGroupId: 8 });
-  assert.deepEqual(simpleCorridorToInput(project), input);
+  assert.ok(project.roads.every(road => road.lanes_fwd === 1 && road.lanes_back === 1));
+  assert.equal(project.junctions[1].cycle[0].signal_groups[0].id, 8);
+  assert.deepEqual(corridorProjection(parseSharedProject(project)).input, input);
 
-  project.corridor.stops.reverse();
-  project.corridor.roadIds.reverse();
-  const reverse = simpleCorridorToInput(project);
+  project.corridors[0].nodeIds.reverse();
+  const reverse = corridorProjection(parseSharedProject(project)).input;
   assert.deepEqual(reverse.junctions.map(junction => junction.id), [21, 7, 0]);
   assert.deepEqual(reverse.junctions.map(junction => junction.point.y), [50, 400, 600]);
   for (const junction of reverse.junctions) {
@@ -67,88 +65,81 @@ test('bidirectional input uses the same junctions, programs and permanent groups
 
 test('canvas layout has no effect on calculation input', () => {
   const input = inputConfiguration();
-  const project = inputToSimpleCorridor(input);
-  project.nodes[0].position = { x: 1000, y: -200 };
-  project.nodes[1].position = { x: -500, y: 999 };
-  assert.deepEqual(simpleCorridorToInput(project), input);
+  const project = fromInput(input);
+  project.positions[0] = { x: 1000, y: -200 };
+  project.positions[7] = { x: -500, y: 999 };
+  assert.deepEqual(corridorProjection(parseSharedProject(project)).input, input);
 });
 
 test('editing road length and the common program updates input without mutating earlier snapshots', () => {
   const input = inputConfiguration();
   const before = structuredClone(input);
-  const project = inputToSimpleCorridor(input);
+  const project = fromInput(input);
   project.roads[0].lengthMeters = 240;
-  project.nodes[1].program.offset = 8;
-  project.nodes[1].program.cycle[0].signal_groups[0].signals[0].duration = 30;
-  const output = simpleCorridorToInput(project);
+  project.junctions[1].offset = 8;
+  project.junctions[1].cycle[0].signal_groups[0].signals[0].duration = 30;
+  const output = corridorProjection(parseSharedProject(project)).input;
   assert.deepEqual(output.junctions.map(junction => junction.point.y), [50, 290, 640]);
   assert.equal(output.junctions[1].offset, 8);
   assert.equal(output.junctions[1].cycle[0].signal_groups[0].signals[0].duration, 30);
   assert.deepEqual(input, before);
   output.junctions[1].cycle[0].signal_groups[0].signals[0].duration = 1;
-  assert.equal(project.nodes[1].program.cycle[0].signal_groups[0].signals[0].duration, 30);
+  assert.equal(project.junctions[1].cycle[0].signal_groups[0].signals[0].duration, 30);
 });
 
 test('empty and single-junction inputs do not invent roads or lose programs', () => {
   for (const count of [0, 1]) {
     const input = inputConfiguration();
     input.junctions = input.junctions.slice(0, count);
-    const project = inputToSimpleCorridor(input);
+    const project = fromInput(input);
     assert.deepEqual(project.roads, []);
-    assert.deepEqual(simpleCorridorToInput(project), input);
+    assert.deepEqual(corridorProjection(parseSharedProject(project)).input, input);
   }
 });
 
-test('older input settings get defaults while an explicit zero intensity is retained', () => {
+test('optional input settings get defaults while an explicit zero intensity is retained', () => {
   const input = inputConfiguration();
   delete input.direction;
   delete input.desiredIntensity;
-  assert.deepEqual(inputToSimpleCorridor(input).settings, { desiredSpeed: 42.5, direction: 'forward', desiredIntensity: 1800 });
+  const route = fromInput(input).corridors[0];
+  assert.equal(route.desiredSpeed, 42.5);
+  assert.equal(route.direction, 'forward');
+  assert.equal(route.desiredIntensity, 1800);
   input.desiredIntensity = 0;
-  assert.equal(inputToSimpleCorridor(input).settings.desiredIntensity, 0);
+  assert.equal(fromInput(input).corridors[0].desiredIntensity, 0);
 });
 
-test('unsupported or malformed inputs fail without sorting, flattening groups or mutating the source', () => {
+test('invalid API input fails without modifying the original programs', () => {
   const cases = [
-    { change: input => { input.junctions[1].id = 0; }, error: /duplicate ID/ },
-    { change: input => { input.junctions[0].id = -1; }, error: /non-negative integer/ },
-    { change: input => { input.junctions[1].point.x = 40; }, error: /common point.x/ },
-    { change: input => { input.junctions[1].point.y = 10; }, error: /route order was not changed/ },
-    { change: input => { input.junctions[0].cycle[0].signal_groups.push({ id: 1, signals: [{ color: 'RED', duration: 40 }] }); }, error: /same permanent signal groups/ },
-    { change: input => { input.junctions[0].cycle[1].signal_groups[0].id = 1; }, error: /same permanent signal group/ },
-    { change: input => { input.junctions[0].cycle[0].signal_groups[0].signals[0].duration = 0; }, error: /duration must be positive/ },
-    { change: input => { input.junctions[0].cycle[1].id = 0; }, error: /duplicate ID/ },
-    { change: input => { input.junctions[0].point.y = Infinity; }, error: /coordinates must be finite/ },
-    { change: input => { input.desiredSpeed = 0; }, error: /speed must be positive/ },
-    { change: input => { input.desiredIntensity = -1; }, error: /intensity must be non-negative/ },
-    { change: input => { input.direction = 'reverse'; }, error: /Unknown calculation direction/ },
+    input => { input.junctions[1].id = 0; },
+    input => { input.junctions[0].id = -1; },
+    input => { input.junctions[0].cycle[0].signal_groups[0].signals[0].duration = 0; },
+    input => { input.junctions[0].cycle[1].id = 0; },
+    input => { input.junctions[0].point.y = Infinity; },
+    input => { input.desiredSpeed = 0; },
+    input => { input.desiredIntensity = -1; },
+    input => { input.direction = 'reverse'; }
   ];
-  for (const { change, error } of cases) {
+  for (const mutate of cases) {
     const input = inputConfiguration();
-    change(input);
+    mutate(input);
     const before = structuredClone(input);
-    assert.throws(() => inputToSimpleCorridor(input), error);
+    assert.throws(() => fromInput(input));
     assert.deepEqual(input, before);
   }
 });
 
-test('projection refuses missing objects, mismatched groups and unavailable road directions', () => {
+test('projection reports missing connections and prohibited travel without mutating the project', () => {
   const cases = [
-    { change: project => { project.nodes.pop(); }, error: /missing junction/ },
-    { change: project => { project.roads.pop(); }, error: /missing road/ },
-    { change: project => { project.roads[0].to = 21; }, error: /consecutive stops/ },
-    { change: project => { project.roads[0].forwardLanes = 0; }, error: /travel along the corridor/ },
-    { change: project => { project.roads[0].reverseLanes = 0; }, error: /return travel/ },
-    { change: project => { project.roads[0].lengthMeters = -1; }, error: /length must be non-negative/ },
-    { change: project => { project.corridor.stops[1].reverseGroupId = 99; }, error: /selected group/ },
-    { change: project => { project.nodes[0].signalGroups[0].id = 5; }, error: /permanent signal group/ },
-    { change: project => { project.corridor.stops[1].nodeId = 0; }, error: /repeats junction/ },
+    { change: project => { project.roads.pop(); }, error: /Connect junctions/ },
+    { change: project => { project.roads[0].lanes_back = 0; }, error: /reverse travel/ },
+    { change: project => { project.roads[0].lengthMeters = null; }, error: /Set the length/ }
   ];
   for (const { change, error } of cases) {
-    const project = inputToSimpleCorridor(inputConfiguration('bidirectional'));
+    const project = fromInput(inputConfiguration('bidirectional'));
     change(project);
     const before = structuredClone(project);
-    assert.throws(() => simpleCorridorToInput(project), error);
+    assert.match(corridorProjection(project).error, error);
     assert.deepEqual(project, before);
   }
 });

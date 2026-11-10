@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { get } from 'svelte/store';
 import { createCorridorEditor } from '../src/lib/stores/corridor.js';
 import { rectangularDemoProject } from '../src/lib/utils/demo-network.js';
@@ -12,6 +13,18 @@ import {
 import { buildMPRequest, mpTopology, mpScenario } from '../src/lib/utils/mp-network.js';
 import { activeMPScenario, mpScenarios } from '../src/lib/utils/mp-scenario.js';
 
+test('the shipped MP project uses named scenarios and builds a complete simulation request', () => {
+	const project = parseSharedProject(
+		readFileSync(new URL('../../../examples/maxpressure/project.json', import.meta.url), 'utf8')
+	);
+	assert.equal(Object.hasOwn(project, 'mpScenario'), false);
+	assert.equal(activeMPScenario(project).id, project.activeMPScenarioId);
+	const request = buildMPRequest(project);
+	assert.ok(request.network.links.length > 0);
+	assert.ok(request.intersections.length > 0);
+	assert.equal(request.config.sim_time, activeMPScenario(project).settings.simTime);
+});
+
 test('turn totals identify the incomplete incoming road without mixing approaches or intersections', () => {
 	const project = rectangularDemoProject();
 	const initial = mpTopology(project);
@@ -20,10 +33,17 @@ test('turn totals identify the incomplete incoming road without mixing approache
 	);
 	const approach = intersection.approaches.find((item) => item.movements.length > 1);
 	const movement = approach.movements[0];
-	project.mpScenario = {
-		...mpScenario(project),
-		turningRatios: { [movement.key]: movement.ratio - 0.1 }
-	};
+	project.mpScenarios = [
+		{
+			id: 0,
+			name: 'Default scenario',
+			settings: {
+				...mpScenario(project),
+				turningRatios: { [movement.key]: movement.ratio - 0.1 }
+			}
+		}
+	];
+	project.activeMPScenarioId = 0;
 	const changed = mpTopology(project);
 	const invalid = changed.intersections
 		.flatMap((item) => item.approaches)
@@ -33,7 +53,7 @@ test('turn totals identify the incomplete incoming road without mixing approache
 	assert.equal(invalid[0].percent, 90);
 	assert.equal(invalid[0].message, '10% of incoming traffic is unassigned.');
 	assert.throws(() => buildMPRequest(project), /100%/);
-	project.mpScenario.turningRatios[movement.key] = movement.ratio + 0.1;
+	activeMPScenario(project).settings.turningRatios[movement.key] = movement.ratio + 0.1;
 	const excessive = mpTopology(project)
 		.intersections.flatMap((item) => item.approaches)
 		.find((item) => !item.valid);
@@ -105,33 +125,31 @@ test('named scenarios isolate demand and boundaries, preserve old input and surv
 	assert.equal(mpScenarios(editor.snapshot()).length, 1);
 });
 
-test('legacy scenario conversion retains every setting and malformed collections fail before replacement', () => {
-	const project = rectangularDemoProject();
-	project.mpScenario = { ...mpScenario(project), alpha: 0.7, simTime: 300 };
+test('first MP edit stores named scenarios and malformed collections fail atomically', () => {
 	const editor = createCorridorEditor();
-	editor.replace(project);
+	editor.replace(rectangularDemoProject());
 	const before = editor.snapshot();
-	editor.renameMPScenario('Imported demand');
-	const converted = editor.snapshot();
-	assert.equal(converted.mpScenario, undefined);
-	assert.deepEqual(activeMPScenario(converted).settings, before.mpScenario);
-	assert.deepEqual(buildMPRequest(converted), buildMPRequest(before));
+	const settings = { ...mpScenario(before), alpha: 0.7, simTime: 300 };
+	editor.setMPScenario(settings);
+	const saved = editor.snapshot();
+	assert.equal(Object.hasOwn(saved, 'mpScenario'), false);
+	assert.equal(saved.activeMPScenarioId, 0);
+	assert.deepEqual(saved.mpScenarios, [{ id: 0, name: 'Default scenario', settings }]);
 	editor.undo();
 	assert.deepEqual(editor.snapshot(), before);
+	editor.redo();
 	const malformed = [
-		{ ...converted, mpScenarios: [] },
-		{ ...converted, mpScenario: before.mpScenario },
-		{ ...converted, activeMPScenarioId: 99 },
-		{ ...converted, mpScenarios: [...converted.mpScenarios, converted.mpScenarios[0]] },
-		{
-			...converted,
-			mpScenarios: [{ id: 0, name: 'Bad', settings: { turningRatios: { any: -1 } } }]
-		},
+		{ ...saved, mpScenarios: [] },
+		{ ...saved, mpScenario: settings },
+		{ ...before, mpScenario: settings },
+		{ ...saved, activeMPScenarioId: 99 },
+		{ ...saved, mpScenarios: [...saved.mpScenarios, saved.mpScenarios[0]] },
+		{ ...saved, mpScenarios: [{ id: 0, name: 'Bad', settings: { turningRatios: { any: -1 } } }] },
 		{ ...before, activeMPScenarioId: 0 }
 	];
 	for (const input of malformed) {
 		assert.throws(() => editor.replace(input));
-		assert.deepEqual(editor.snapshot(), before);
+		assert.deepEqual(editor.snapshot(), saved);
 	}
 });
 
@@ -173,11 +191,18 @@ test('traffic settings use stable topology keys and preserve independent corrido
 	const topology = mpTopology(project);
 	const entry = topology.roads.find((road) => road.entry);
 	const movement = topology.movements[0];
-	project.mpScenario = {
-		...mpScenario(project),
-		entryRates: { [entry.key]: 700 },
-		initialMovementQueues: { [movement.key]: 12 }
-	};
+	project.mpScenarios = [
+		{
+			id: 0,
+			name: 'Default scenario',
+			settings: {
+				...mpScenario(project),
+				entryRates: { [entry.key]: 700 },
+				initialMovementQueues: { [movement.key]: 12 }
+			}
+		}
+	];
+	project.activeMPScenarioId = 0;
 	const originalIntensity = project.corridors[0].desiredIntensity;
 	project.roads.reverse();
 	project.junctions.reverse();
@@ -190,9 +215,16 @@ test('traffic settings use stable topology keys and preserve independent corrido
 test('incomplete turns, missing lengths, unsupported routes and missing assignments are actionable errors', () => {
 	const project = rectangularDemoProject();
 	const movement = mpTopology(project).movements[0];
-	project.mpScenario = { ...mpScenario(project), turningRatios: { [movement.key]: 0.2 } };
+	project.mpScenarios = [
+		{
+			id: 0,
+			name: 'Default scenario',
+			settings: { ...mpScenario(project), turningRatios: { [movement.key]: 0.2 } }
+		}
+	];
+	project.activeMPScenarioId = 0;
 	assert.throws(() => buildMPRequest(project), /100%/);
-	project.mpScenario.turningRatios = {};
+	activeMPScenario(project).settings.turningRatios = {};
 	project.roads[0].lengthMeters = null;
 	assert.throws(() => buildMPRequest(project), /physical road length/);
 	project.roads[0].lengthMeters = 200;
@@ -223,12 +255,12 @@ test('MP settings persist through reload, export/import and Undo without changin
 	assert.deepEqual(editor.snapshot().junctions, before.junctions);
 	const reloaded = createCorridorEditor();
 	reloaded.connectStorage(storage);
-	assert.equal(reloaded.snapshot().mpScenario.alpha, 0.7);
+	assert.equal(activeMPScenario(reloaded.snapshot()).settings.alpha, 0.7);
 	assert.deepEqual(parseSharedProject(storage.getItem(SHARED_STORAGE_KEY)), editor.snapshot());
 	editor.undo();
 	assert.deepEqual(editor.snapshot(), before);
 	editor.redo();
-	assert.equal(editor.snapshot().mpScenario.alpha, 0.7);
+	assert.equal(activeMPScenario(editor.snapshot()).settings.alpha, 0.7);
 	assert.throws(() => editor.setMPScenario({ entryRates: { '0:fwd': NaN } }), /Invalid MP values/);
 });
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { get } from 'svelte/store';
 import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
 import { readProgram, programTimeline, addProgramGroup, removeProgramGroup, corridorGroupId, calculationGroupIds, corridorProgramError } from '../src/lib/utils/junction-program.js';
-import { inputToSimpleCorridor, simpleCorridorToInput } from '../src/lib/utils/simple-corridor.js';
+import { fromInput, corridorProjection, parseSharedProject } from '../src/lib/utils/shared-project.js';
 import { createCorridorEditor, CORRIDOR_STORAGE_KEY } from '../src/lib/stores/corridor.js';
 import { prepareInputExport, prepareOutputExport, validateImportedConfig } from '../src/lib/utils/export-import.js';
 
@@ -54,15 +54,16 @@ test('a single group is implicit; multiple groups require selection and never si
 
 test('graph round trips retain all groups, timing, explicit selection and shared reverse stops', () => {
   const input = { ...multipleGroups(), desiredIntensity: 0, direction: 'bidirectional' };
-  const project = inputToSimpleCorridor(input);
-  assert.deepEqual(project.corridor.stops[1], { nodeId: 1, forwardGroupId: 1, reverseGroupId: 1 });
-  assert.equal(project.nodes.length, 4);
-  assert.deepEqual(project.nodes[1].signalGroups.map(group => group.id), [0, 1]);
-  assert.deepEqual(simpleCorridorToInput(project), input);
+  const project = fromInput(input);
+  assert.equal(project.corridors[0].groupIds[1], 1);
+  assert.ok(project.roads.every(road => road.lanes_back === 1));
+  assert.equal(project.junctions.length, 4);
+  assert.deepEqual(project.junctions[1].cycle[0].signal_groups.map(group => group.id), [0, 1]);
+  assert.deepEqual(corridorProjection(parseSharedProject(project)).input, input);
   delete input.groupIds;
-  const unresolved = inputToSimpleCorridor(input);
-  assert.equal(unresolved.corridor.stops[1].forwardGroupId, null);
-  assert.deepEqual(simpleCorridorToInput(unresolved), input);
+  const unresolved = fromInput(input);
+  assert.equal(corridorGroupId(unresolved.junctions[1], unresolved.corridors[0].groupIds), null);
+  assert.deepEqual(corridorProjection(parseSharedProject(unresolved)).input, input);
 });
 
 test('program and corridor selection save as one undo step, survive reload and invalidate calculations', () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { get } from 'svelte/store';
 import { readProgram, programTimeline, programStateAt, reverseCorridorGroupId, corridorTimelineRows, removeProgramGroup, calculationGroupIds } from '../src/lib/utils/junction-program.js';
-import { inputToSimpleCorridor, simpleCorridorToInput } from '../src/lib/utils/simple-corridor.js';
+import { fromInput, corridorProjection, parseSharedProject } from '../src/lib/utils/shared-project.js';
 import { createCorridorEditor } from '../src/lib/stores/corridor.js';
 import { prepareInputExport, prepareOutputExport, validateImportedConfig } from '../src/lib/utils/export-import.js';
 import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
@@ -27,9 +27,10 @@ test('example has aligned 120-second programs and a turn-only green while both t
 test('independent reverse selections round trip through graph and both JSON export types', () => {
   for (const prepare of [prepareInputExport, prepareOutputExport]) {
     const file = prepare(example.junctions, example.desiredSpeed, 1200, 'bidirectional', example.groupIds, example.reverseGroupIds);
-    const graph = inputToSimpleCorridor(file);
-    assert.deepEqual(graph.corridor.stops[0], { nodeId: 0, forwardGroupId: 10, reverseGroupId: 20 });
-    const input = simpleCorridorToInput(graph);
+    const graph = fromInput(file);
+    assert.equal(graph.corridors[0].groupIds[0], 10);
+    assert.equal(graph.corridors[0].reverseGroupIds[0], 20);
+    const input = corridorProjection(parseSharedProject(graph)).input;
     assert.deepEqual(input.junctions, example.junctions);
     assert.deepEqual(input.groupIds, example.groupIds);
     assert.deepEqual(input.reverseGroupIds, example.reverseGroupIds);

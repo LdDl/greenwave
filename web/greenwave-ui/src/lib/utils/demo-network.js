@@ -1,4 +1,4 @@
-import { intersectionTopology } from './network-project.js';
+import { intersectionTopology } from './network-geometry.js';
 import { emptySharedProject, graphView, routeMovements } from './shared-project.js';
 
 const layout = {
