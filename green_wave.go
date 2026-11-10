@@ -2,6 +2,7 @@ package greenwave
 
 import (
 	"math"
+	"sort"
 
 	"github.com/LdDl/greenwave/greeninterval"
 	"github.com/LdDl/greenwave/junction"
@@ -102,61 +103,75 @@ func FindGreenWavesBetweenIntervals(greenIntervalsOne, greenIntervalsTwo []*gree
 	return greenWaves
 }
 
-// FindGreenWaves finds green waves between a sequence of junctions based on their green intervals and desired speed.
-// groupIDs maps each junction ID to the signal group to use for green wave coordination in this corridor.
-// A junction may have multiple signal groups (e.g. northbound, eastbound, pedestrian); only one group represents
-// the through-movement for a given corridor. The caller is responsible for providing the correct group per junction.
-// It returns a slice of slices, where each inner slice contains green waves for the segment between two junctions.
+// FindGreenWaves evaluates departures in [0, first junction cycle).
+// At junction i, the evaluation window is shifted by cumulative travel time.
+// Programs repeat periodically, while returned intervals use absolute seconds.
+// With unequal cycles this is one departure window, not their common period.
+// groupIDs selects the coordinated signal group at each junction.
 func FindGreenWaves(junctions []*junction.Junction, groupIDs map[int]junction.GroupID, desiredSpeedKmh float64) [][]*GreenWave {
-	speedMs := desiredSpeedKmh / 3.6
-	waves := make([][]*GreenWave, 0, len(junctions)-1)
-	for i := 0; i < len(junctions)-1; i++ {
-		junctionOne := junctions[i]
-		junctionTwo := junctions[i+1]
-		greenIntervalsOne := junctionOne.GetGreenIntervals(groupIDs[junctionOne.ID])
-		greenIntervalsTwo := junctionTwo.GetGreenIntervals(groupIDs[junctionTwo.ID])
-
-		offsetJunctionOne := junctionOne.GetOffset()
-		offsetJunctionTwo := junctionTwo.GetOffset()
-
-		totalDurationOne := junctionOne.GetTotalDuration()
-		totalDurationTwo := junctionTwo.GetTotalDuration()
-
-		adjustedIntervalsOne := make([]*greeninterval.GreenInterval, 0, len(greenIntervalsOne))
-		for _, interval := range greenIntervalsOne {
-			start := (int(interval.Start) + offsetJunctionOne) % totalDurationOne
-			end := (int(interval.End) + offsetJunctionOne) % totalDurationOne
-			if end < start {
-				// Interval split due cycle wrap
-				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, float64(start), float64(totalDurationOne)))
-				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, 0, float64(end)))
-			} else {
-				// Common case
-				adjustedIntervalsOne = append(adjustedIntervalsOne, greeninterval.New(interval.PhaseIdx, float64(start), float64(end)))
-			}
+	if len(junctions) < 2 {
+		return [][]*GreenWave{}
+	}
+	waves := make([][]*GreenWave, len(junctions)-1)
+	if desiredSpeedKmh <= 0 || math.IsNaN(desiredSpeedKmh) || math.IsInf(desiredSpeedKmh, 0) {
+		return waves
+	}
+	window := float64(junctions[0].GetTotalDuration())
+	arrival := 0.0
+	previous := periodicGreenIntervals(junctions[0], groupIDs[junctions[0].ID], arrival, window)
+	for i := range waves {
+		from, to := junctions[i].GetPoint(), junctions[i+1].GetPoint()
+		distance := math.Hypot(to.X-from.X, to.Y-from.Y)
+		travel := distance / (desiredSpeedKmh / 3.6)
+		nextArrival := arrival + travel
+		if math.IsInf(nextArrival, 0) || math.IsNaN(nextArrival) {
+			return waves
 		}
-
-		adjustedIntervalsTwo := make([]*greeninterval.GreenInterval, 0, len(greenIntervalsTwo))
-		for _, interval := range greenIntervalsTwo {
-			start := (int(interval.Start) + offsetJunctionTwo) % totalDurationTwo
-			end := (int(interval.End) + offsetJunctionTwo) % totalDurationTwo
-			if end < start {
-				// Interval split due cycle wrap
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, float64(start), float64(totalDurationTwo)))
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, 0, float64(end)))
-			} else {
-				// Common case
-				adjustedIntervalsTwo = append(adjustedIntervalsTwo, greeninterval.New(interval.PhaseIdx, float64(start), float64(end)))
-			}
+		next := periodicGreenIntervals(junctions[i+1], groupIDs[junctions[i+1].ID], nextArrival, window)
+		// Both interval sets use departure time at the first junction as their origin.
+		for _, overlap := range FindGreenWavesBetweenIntervals(previous, next, distance, 0) {
+			one, two := overlap.IntervalJunOne(), overlap.IntervalJunTwo()
+			waves[i] = append(waves[i], NewGreenWave(
+				greeninterval.New(one.PhaseIdx, one.Start+arrival, one.End+arrival),
+				greeninterval.New(two.PhaseIdx, two.Start+nextArrival, two.End+nextArrival),
+				distance, travel,
+			))
 		}
-
-		pointOne := junctionOne.GetPoint()
-		pointTwo := junctionTwo.GetPoint()
-		distanceMeters := math.Sqrt(math.Pow(pointOne.X-pointTwo.X, 2) + math.Pow(pointOne.Y-pointTwo.Y, 2))
-		travelTimeSeconds := distanceMeters / speedMs
-
-		segmentWaves := FindGreenWavesBetweenIntervals(adjustedIntervalsOne, adjustedIntervalsTwo, distanceMeters, travelTimeSeconds)
-		waves = append(waves, segmentWaves)
+		previous = next
+		arrival = nextArrival
 	}
 	return waves
+}
+
+// periodicGreenIntervals projects a junction's green onto the departure window.
+// Modulo skips elapsed cycles directly. Work depends on the window and program,
+// not on how many cycles pass while vehicles travel to this junction.
+func periodicGreenIntervals(jun *junction.Junction, groupID junction.GroupID, arrival, window float64) []*greeninterval.GreenInterval {
+	cycle := float64(jun.GetTotalDuration())
+	intervals := make([]*greeninterval.GreenInterval, 0)
+	if cycle <= 0 || window <= 0 {
+		return intervals
+	}
+	for _, green := range jun.GetGreenIntervals(groupID) {
+		duration := green.End - green.Start
+		if duration <= 0 {
+			continue
+		}
+		if duration >= cycle {
+			return []*greeninterval.GreenInterval{greeninterval.New(green.PhaseIdx, 0, window)}
+		}
+		start := math.Mod(green.Start+float64(jun.GetOffset())-math.Mod(arrival, cycle), cycle)
+		if start < 0 {
+			start += cycle
+		}
+		// The preceding repetition can overlap the beginning of the window.
+		for position := start - cycle; position < window; position += cycle {
+			left, right := math.Max(0, position), math.Min(window, position+duration)
+			if right > left {
+				intervals = append(intervals, greeninterval.New(green.PhaseIdx, left, right))
+			}
+		}
+	}
+	sort.Slice(intervals, func(i, j int) bool { return intervals[i].Start < intervals[j].Start })
+	return intervals
 }

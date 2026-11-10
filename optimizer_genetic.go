@@ -173,12 +173,19 @@ func (optga *OptimizerGenetic) evaluateFitness(individual *Individual) float64 {
 func calculateDirectionalFitness(junctions []*junction.Junction, groupIDs map[int]junction.GroupID, speedKhm float64) float64 {
 	greenWavs := FindGreenWaves(junctions, groupIDs, speedKhm)
 	throughGreenWaves := MergeGreenWaves(greenWavs)
-	if len(throughGreenWaves) == 0 {
-		return 0.0 // No green waves found
+	if len(junctions) < 2 {
+		return 0
 	}
-	// Calculate total fitness based on the depth and band size of the green waves
 	maxDepth := len(junctions)
 	totalFitness := 0.0
+	// Reward every coordinated segment, including those outside a connected chain.
+	pairWeight := math.Pow(2.0/float64(maxDepth), 2)
+	for _, segment := range greenWavs {
+		for _, wave := range segment {
+			totalFitness += pairWeight * wave.Bandwidth()
+		}
+	}
+	// Connected chains receive an additional bonus that favors greater depth.
 	for _, wave := range throughGreenWaves {
 		depthRatio := float64(wave.Depth()) / float64(maxDepth)
 		// Square the depth ratio to emphasize deeper wave

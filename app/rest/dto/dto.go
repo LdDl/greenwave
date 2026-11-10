@@ -85,9 +85,9 @@ type GreenWaveDTO struct {
 type GreenIntervalDTO struct {
 	// Phase index in which the green interval occurs
 	PhaseIdx int `json:"phase_idx"`
-	// Start time of the green interval in seconds
+	// Absolute start time in seconds. May exceed the junction cycle duration.
 	Start float64 `json:"start"`
-	// End time of the green interval in seconds
+	// Absolute end time in seconds. May exceed the junction cycle duration.
 	End float64 `json:"end"`
 }
 

@@ -105,6 +105,9 @@ func CreateAdjustedSegments(segmentsWaves [][]*GreenWave) [][]*GreenWave {
 
 // ExtractChains extracts chains of green waves from segments using functional programming principles.
 func ExtractChains(segmentsWaves [][]*GreenWave) []GreenWaveChain {
+	if len(segmentsWaves) == 0 {
+		return nil
+	}
 	// Create adjusted segments with proper connections
 	adjustedSegments := CreateAdjustedSegments(segmentsWaves)
 	// Build connection map using indices
@@ -133,6 +136,16 @@ func ExtractChains(segmentsWaves [][]*GreenWave) []GreenWaveChain {
 
 // MergeGreenWaves merges chains of connected green waves into through green waves.
 func MergeGreenWaves(segmentsWaves [][]*GreenWave) []*ThroughGreenWave {
+	if len(segmentsWaves) == 1 {
+		waves := make([]*ThroughGreenWave, 0, len(segmentsWaves[0]))
+		for _, wave := range segmentsWaves[0] {
+			waves = append(waves, NewThroughGreenWave([]*greeninterval.GreenInterval{
+				greeninterval.New(wave.intervalJunOne.PhaseIdx, wave.intervalJunOne.Start, wave.intervalJunOne.End),
+				greeninterval.New(wave.intervalJunTwo.PhaseIdx, wave.intervalJunTwo.Start, wave.intervalJunTwo.End),
+			}))
+		}
+		return waves
+	}
 	possibleChains := ExtractChains(segmentsWaves)
 	throughWaves := make([]*ThroughGreenWave, 0, len(possibleChains))
 	for _, chain := range possibleChains {

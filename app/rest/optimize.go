@@ -64,7 +64,7 @@ type OptimizerExtra struct {
 
 // RequestOptimize return best offsets with green waves for traffic lights configuration.
 // @Summary Request optimization
-// @Description Requests the optimization of green waves for traffic lights configuration
+// @Description Optimizes offsets using periodic programs. Departures span the first junction's cycle in each direction, with absolute arrival times beyond that cycle allowed. Fitness rewards individual segments and adds a depth-weighted bonus for connected chains. With unequal cycles, results describe this departure window rather than the full common period.
 // @Tags Optimize
 // @Produce json
 // @Param POST-body body rest.OptimizeRequest true "Traffic lights configuration"

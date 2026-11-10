@@ -46,7 +46,7 @@ type GreenWavesResponse struct {
 
 // ExtractGreenWaves returns green waves for traffic lights configuration.
 // @Summary Extract green waves
-// @Description Requests the calculation of green waves for traffic lights configuration
+// @Description Evaluates departures during the first junction's cycle in each direction. Repeated programs are checked at actual arrival times, and returned interval times may exceed one cycle. With unequal cycles, results describe this departure window rather than the full common period.
 // @Tags Reference
 // @Produce json
 // @Param POST-body body rest.GreenWavesRequest true "Traffic lights configuration"
