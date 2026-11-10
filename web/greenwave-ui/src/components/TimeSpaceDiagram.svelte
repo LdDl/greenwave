@@ -5,13 +5,13 @@
 	import * as d3 from 'd3';
 	import { diagramLayout } from '$lib/utils/diagram-layout.js';
 	import {
-		commonCycleDuration,
-		foldWaveBand,
+		departureTimeFrame,
 		diagramTimeWindow,
 		visiblePeriodicIntervals,
 		waveTimeExtent
 	} from '$lib/utils/diagram-time.js';
 	import { corridorGroupId, corridorTimelineRows } from '$lib/utils/junction-program.js';
+	import { calculateTotalDuration } from '$lib/utils/junction-helpers.js';
 
 	export let junctions = [];
 	export let groupIds = {};
@@ -29,7 +29,10 @@
 	export let zoom = 1;
 	export let timeZoom = 1;
 	export let timeExtentOverride = 0;
-	export let timeMode = 'cycle';
+	export let timeMode = 'absolute';
+	export let departureDirection = 'forward';
+	export let departureExtentOverride = 0;
+	export let speedKmh = 0;
 
 	const dispatch = createEventDispatcher();
 
@@ -48,10 +51,19 @@
 			showWaves ? [...throughWaves, ...reverseThroughWaves] : []
 		)
 	);
-	$: commonCycle = commonCycleDuration(junctions);
-	$: withinCycle = timeMode === 'cycle' && commonCycle > 0;
-	$: timeWindow = withinCycle
-		? { start: 0, end: commonCycle, span: commonCycle, maximumStart: 0 }
+	$: departures = timeMode === 'departure';
+	$: departureFrame = departureTimeFrame(junctions, speedKmh, departureDirection === 'reverse');
+	$: departureExtent = Math.max(1, departureExtentOverride, departureFrame?.duration ?? 0);
+	$: departureOrigin = departureFrame ? junctions[departureFrame.originIndex] : null;
+	$: departureError = departures
+		? departureDirection === 'reverse' && direction !== 'bidirectional'
+			? 'Reverse direction is not enabled in this configuration.'
+			: !departureFrame
+				? 'Enter a positive speed and valid junction distances to view departure times.'
+				: ''
+		: '';
+	$: timeWindow = departures
+		? { start: 0, end: departureExtent, span: departureExtent, maximumStart: 0 }
 		: diagramTimeWindow(junctions, timeExtent, windowStart);
 
 	const margin = { top: 62, right: 70, bottom: 46, left: 65 };
@@ -61,20 +73,6 @@
 	let chartWidth = width - margin.left - margin.right;
 	let chartHeight = height - margin.top - margin.bottom;
 
-	// Helper function to calculate total duration for a junction.
-	// Uses the first signal group as the reference (all groups are synchronized).
-	function calculateTotalDuration(junction) {
-		return junction.cycle.reduce((total, phase) => {
-			const signals = phase.signal_groups[0].signals;
-			return (
-				total +
-				signals.reduce((phaseTotal, signal) => {
-					return phaseTotal + signal.duration;
-				}, 0)
-			);
-		}, 0);
-	}
-
 	function updateChart() {
 		// Don't update chart while dragging (keep yScale stable)
 		if (isDragging) return;
@@ -83,19 +81,28 @@
 
 		const g = d3.select(svg);
 		g.selectAll('*').remove();
+		if (departureError) {
+			d3.select(ruler).selectAll('*').remove();
+			return;
+		}
 
 		// Create main group with margins
 		const chart = g.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
 		// Calculate total durations for all junctions
-		const junctionsWithDuration = junctions.map((junction) => ({
-			...junction,
-			total_duration: calculateTotalDuration(junction),
-			group_id: corridorGroupId(junction, groupIds),
-			timelineRows: corridorTimelineRows(junction, groupIds, reverseGroupIds, direction).map(
-				(row) => ({ ...row, offset: row.offset * 1.8 })
-			)
-		}));
+		const junctionsWithDuration = junctions.map((junction, index) => {
+			const rows = corridorTimelineRows(junction, groupIds, reverseGroupIds, direction);
+			const selectedRow = rows.at(departureDirection === 'reverse' ? -1 : 0);
+			return {
+				...junction,
+				total_duration: calculateTotalDuration(junction),
+				group_id: departures ? selectedRow.groupId : corridorGroupId(junction, groupIds),
+				travelTime: departures ? departureFrame.travelTimes[index] : 0,
+				timelineRows: departures
+					? [{ ...selectedRow, offset: 0 }]
+					: rows.map((row) => ({ ...row, offset: row.offset * 1.8 }))
+			};
+		});
 
 		const xScale = d3
 			.scaleLinear()
@@ -119,7 +126,7 @@
 			.attr('y', 16)
 			.attr('fill', '#64748b')
 			.attr('font-size', 10)
-			.text(withinCycle ? 'Cycle (s)' : 'Time (s)');
+			.text(departures ? 'Depart (s)' : 'Time (s)');
 		chart
 			.append('g')
 			.attr('class', 'time-grid')
@@ -143,7 +150,7 @@
 			.attr('y', 35)
 			.attr('fill', 'black')
 			.style('text-anchor', 'middle')
-			.text(withinCycle ? 'Time within cycle (seconds)' : 'Elapsed time (seconds)');
+			.text(departures ? 'Departure time at route origin (seconds)' : 'Elapsed time (seconds)');
 
 		chart
 			.append('g')
@@ -157,7 +164,7 @@
 			.text('Distance (meters)');
 
 		// Draw waves if enabled
-		if (showWaves) {
+		if (showWaves && (!departures || !interactive || !wavesAreOutdated.isOutdated)) {
 			const waveChart = chart
 				.append('svg')
 				.attr('y', -20)
@@ -165,23 +172,25 @@
 				.attr('height', chartHeight + 40)
 				.attr('viewBox', `0 -20 ${chartWidth} ${chartHeight + 40}`)
 				.attr('overflow', 'hidden');
-			drawDirectionWaves(
-				waveChart,
-				junctionsWithDuration,
-				xScale,
-				yScale,
-				greenWaves,
-				throughWaves
-			);
-			drawDirectionWaves(
-				waveChart,
-				junctionsWithDuration,
-				xScale,
-				yScale,
-				reverseGreenWaves,
-				reverseThroughWaves,
-				true
-			);
+			if (!departures || departureDirection === 'forward')
+				drawDirectionWaves(
+					waveChart,
+					junctionsWithDuration,
+					xScale,
+					yScale,
+					greenWaves,
+					throughWaves
+				);
+			if (!departures || departureDirection === 'reverse')
+				drawDirectionWaves(
+					waveChart,
+					junctionsWithDuration,
+					xScale,
+					yScale,
+					reverseGreenWaves,
+					reverseThroughWaves,
+					true
+				);
 		}
 
 		// Draw phases
@@ -272,6 +281,26 @@
 					`${d.label || `J${d.id}`}, ${d.total_duration}s${d.cycle[0].signal_groups.length > 1 ? (d.group_id === null ? ', choose group' : `, G${d.group_id}`) : ''}`
 			);
 
+		if (departures) {
+			const travelLabels = junctionGroups
+				.append('text')
+				.attr('class', 'travel-time-label')
+				.attr('x', chartWidth + 4)
+				.attr('y', 17)
+				.attr('font-size', 10)
+				.attr('fill', '#475569')
+				.text(
+					(d) =>
+						`+${d.travelTime.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })} s`
+				);
+			travelLabels
+				.append('title')
+				.text(
+					(d) =>
+						`Arrival at ${d.label || d.id} = departure time + ${formatSeconds(d.travelTime)} s. Signals are shifted for display only.`
+				);
+		}
+
 		// Draw offset labels at the right end of X axis (results panel only)
 		if (showOffsets) {
 			junctionGroups
@@ -355,7 +384,7 @@
 				.append('g')
 				.attr('class', `signal-row-${junction.id}`)
 				.attr('data-group-id', row.groupId);
-			let currentTime = junction.offset ?? 0;
+			let currentTime = (junction.offset ?? 0) - (junction.travelTime % junction.total_duration);
 			for (const phase of junction.cycle) {
 				const group = phase.signal_groups.find((group) => group.id === row.groupId);
 				const signals = group?.signals ?? [];
@@ -378,7 +407,12 @@
 								.attr('y2', y + row.offset)
 								.attr('stroke', getSignalColor(signal.color))
 								.attr('stroke-width', 6);
-							line.append('title').text(`${row.label}: ${signal.color}, ${signal.duration} s`);
+							const arrivalHint = departures
+								? ` Arrival ${formatSeconds(from + junction.travelTime)} to ${formatSeconds(to + junction.travelTime)} s.`
+								: '';
+							line
+								.append('title')
+								.text(`${row.label}: ${signal.color}, ${signal.duration} s.${arrivalHint}`);
 							if (interactive) {
 								line
 									.style('cursor', 'pointer')
@@ -414,7 +448,7 @@
 
 	function drawPhases(chart, junctionsWithDuration, xScale, yScale) {
 		for (const junction of junctionsWithDuration) {
-			let currentTime = junction.offset ?? 0;
+			let currentTime = (junction.offset ?? 0) - (junction.travelTime % junction.total_duration);
 			const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 20 : 0);
 			junction.cycle.forEach((phase, phaseIdx) => {
 				const duration = phase.signal_groups[0].signals.reduce(
@@ -478,7 +512,9 @@
 						color: throughColor,
 						opacity: outdated ? 0.1 : 0.2,
 						through: true,
-						directionLabel
+						directionLabel,
+						fromTravel: route[index].travelTime,
+						toTravel: route[index + 1].travelTime
 					}
 				);
 			}
@@ -492,33 +528,10 @@
 					color: segmentColor,
 					opacity: outdated ? 0.15 : 0.3,
 					through: false,
-					directionLabel
+					directionLabel,
+					fromTravel: route[index].travelTime,
+					toTravel: route[index + 1].travelTime
 				});
-			}
-			if (withinCycle && waves.length > 0) {
-				const first = waves[0];
-				const folded = foldWaveBand(first.interval_jun_one, first.interval_jun_two, commonCycle);
-				if (folded.skippedCycles > 0) {
-					const label = chart
-						.append('text')
-						.attr('class', 'cycle-count')
-						.attr('data-direction', directionLabel)
-						.attr('x', reverse ? chartWidth - 12 : 12)
-						.attr('y', (fromY + toY) / 2 - 4)
-						.attr('text-anchor', reverse ? 'end' : 'start')
-						.attr('font-size', 11)
-						.attr('font-weight', 600)
-						.attr('fill', reverse ? '#0369a1' : '#166534')
-						.attr('stroke', 'white')
-						.attr('stroke-width', 4)
-						.attr('paint-order', 'stroke')
-						.text(`+${folded.skippedCycles} ${folded.skippedCycles === 1 ? 'cycle' : 'cycles'}`);
-					label
-						.append('title')
-						.text(
-							`${directionLabel}: ${route[index].label || route[index].id} → ${route[index + 1].label || route[index + 1].id}. Travel ${formatSeconds(first.travel_time)} s = ${folded.skippedCycles} × ${commonCycle} s + ${formatSeconds(folded.remainder)} s. Whole travel cycles are omitted from the band slope.`
-						);
-				}
 			}
 		});
 	}
@@ -528,55 +541,29 @@
 	}
 
 	function drawWaveBand(chart, from, to, fromY, toY, xScale, style) {
-		const geometry = withinCycle
-			? foldWaveBand(from, to, commonCycle)
-			: {
-					polygons: [
-						[
-							[from.start, 0],
-							[to.start, 1],
-							[to.end, 1],
-							[from.end, 0]
-						]
-					],
-					wraps: []
-				};
+		const points = [
+			[xScale(from.start - style.fromTravel), fromY],
+			[xScale(to.start - style.toTravel), toY],
+			[xScale(to.end - style.toTravel), toY],
+			[xScale(from.end - style.fromTravel), fromY]
+		];
 		const outdated = wavesAreOutdated.isOutdated;
-		const stroke = outdated ? '#ff6b35' : style.color;
-		const tooltip = `${style.directionLabel}${style.through ? ' connected wave' : ''}: ${formatSeconds(from.end - from.start)} s band. Departure ${formatSeconds(from.start)} to ${formatSeconds(from.end)} s. Arrival ${formatSeconds(to.start)} to ${formatSeconds(to.end)} s.`;
-		for (const polygon of geometry.polygons) {
-			const points = polygon.map(([time, progress]) => [
-				xScale(time),
-				fromY + progress * (toY - fromY)
-			]);
-			const band = chart
-				.append('polygon')
-				.attr('class', style.through ? 'through-band' : 'segment-band')
-				.attr('data-direction', style.directionLabel)
-				.attr('points', points.map((point) => point.join(',')).join(' '))
-				.attr('fill', style.color)
-				.attr('fill-opacity', style.opacity)
-				.attr('stroke', stroke)
-				.attr('stroke-width', outdated ? 1 : 0.5)
-				.attr('stroke-opacity', outdated ? 0.6 : 0.8)
-				.attr('stroke-dasharray', outdated ? '3,3' : 'none');
-			band.append('title').text(tooltip);
-		}
-		if (!style.through) {
-			for (const progress of geometry.wraps) {
-				const y = fromY + progress * (toY - fromY);
-				for (const x of [1, chartWidth - 7]) {
-					const arrow = chart
-						.append('path')
-						.attr('class', 'cycle-wrap')
-						.attr('d', `M${x},${y - 4} L${x + 5},${y} L${x},${y + 4}`)
-						.attr('fill', 'none')
-						.attr('stroke', stroke)
-						.attr('stroke-width', 2);
-					arrow.append('title').text('Continues at the opposite edge of this cycle.');
-				}
-			}
-		}
+		const originHint = departures
+			? ` Departure from route origin ${formatSeconds(from.start - style.fromTravel)} to ${formatSeconds(from.end - style.fromTravel)} s.`
+			: '';
+		const tooltip = `${style.directionLabel}${style.through ? ' connected wave' : ' segment wave'}: ${formatSeconds(from.end - from.start)} s band.${originHint} Upstream passage ${formatSeconds(from.start)} to ${formatSeconds(from.end)} s. Downstream passage ${formatSeconds(to.start)} to ${formatSeconds(to.end)} s.`;
+		const band = chart
+			.append('polygon')
+			.attr('class', style.through ? 'through-band' : 'segment-band')
+			.attr('data-direction', style.directionLabel)
+			.attr('points', points.map((point) => point.join(',')).join(' '))
+			.attr('fill', style.color)
+			.attr('fill-opacity', style.opacity)
+			.attr('stroke', outdated ? '#ff6b35' : style.color)
+			.attr('stroke-width', outdated ? 1 : 0.5)
+			.attr('stroke-opacity', outdated ? 0.6 : 0.8)
+			.attr('stroke-dasharray', outdated ? '3,3' : 'none');
+		band.append('title').text(tooltip);
 	}
 
 	function getSignalColor(color) {
@@ -605,7 +592,10 @@
 		showWaves,
 		wavesAreOutdated,
 		timeWindow,
-		withinCycle,
+		departures,
+		departureFrame,
+		departureError,
+		departureDirection,
 		updateChart());
 
 	function updateSize() {
@@ -664,7 +654,24 @@
 	});
 </script>
 
-<div class="diagram-wrapper" data-time-mode={withinCycle ? 'cycle' : 'absolute'}>
+<div
+	class="diagram-wrapper"
+	data-time-mode={timeMode}
+	data-departure-direction={departures ? departureDirection : undefined}
+>
+	{#if departures}
+		<div class="departure-context" role="status">
+			{#if departureError}
+				{departureError}
+			{:else}
+				{departureDirection === 'reverse' ? 'Reverse' : 'Forward'} · Depart from {departureOrigin.label ||
+					`J${departureOrigin.id}`} · {speedKmh} km/h
+				{#if interactive && wavesAreOutdated.isOutdated && showWaves}<span
+						>Recalculate to show departure bands.</span
+					>{/if}
+			{/if}
+		</div>
+	{/if}
 	{#if timeWindow.maximumStart > 0}
 		<div class="time-navigation" aria-label="Diagram time window">
 			<button
@@ -712,14 +719,21 @@
 				Some junctions have the same distance and their signals overlap. Edit their distances to
 				separate them.
 			</p>{/if}
-		<svg bind:this={ruler} {width} height={26} class="diagram-ruler" aria-hidden="true"></svg>
+		<svg
+			bind:this={ruler}
+			{width}
+			height={26}
+			class="diagram-ruler"
+			aria-hidden="true"
+			style:display={departureError ? 'none' : 'block'}
+		></svg>
 		<svg
 			bind:this={svg}
 			{width}
 			{height}
-			style="display:block"
-			aria-label={withinCycle
-				? 'Time within cycle in seconds and distance in meters'
+			style:display={departureError ? 'none' : 'block'}
+			aria-label={departures
+				? 'Departure time in seconds and distance in meters'
 				: 'Elapsed time in seconds and distance in meters'}
 		></svg>
 	</div>
@@ -731,6 +745,16 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+	.departure-context {
+		padding: 5px 8px;
+		font-size: 11px;
+		color: #475569;
+		background: #f8fafc;
+		border-bottom: 1px solid #e2e8f0;
+	}
+	.departure-context span {
+		color: #92400e;
 	}
 	.time-navigation {
 		display: flex;

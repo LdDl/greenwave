@@ -1,12 +1,21 @@
 import { calculateTotalDuration } from './junction-helpers.js';
 
-export function commonCycleDuration(junctions) {
-	if (!junctions.length) return 0;
-	const cycle = calculateTotalDuration(junctions[0]);
-	if (!Number.isFinite(cycle) || cycle <= 0) return 0;
-	return junctions.every((junction) => Math.abs(calculateTotalDuration(junction) - cycle) < 1e-8)
-		? cycle
-		: 0;
+// Each row uses departure time at the route origin: departure = local time - travel.
+export function departureTimeFrame(junctions, speedKmh, reverse = false) {
+	if (!junctions.length || !Number.isFinite(speedKmh) || speedKmh <= 0) return null;
+	const originIndex = reverse ? junctions.length - 1 : 0;
+	const duration = calculateTotalDuration(junctions[originIndex]);
+	if (!Number.isFinite(duration) || duration <= 0) return null;
+	const travelTimes = Array(junctions.length).fill(0);
+	const step = reverse ? -1 : 1;
+	for (let index = originIndex + step; index >= 0 && index < junctions.length; index += step) {
+		const from = junctions[index - step].point;
+		const to = junctions[index].point;
+		const travel = Math.hypot(to.x - from.x, to.y - from.y) / (speedKmh / 3.6);
+		travelTimes[index] = travelTimes[index - step] + travel;
+		if (!Number.isFinite(travelTimes[index])) return null;
+	}
+	return { originIndex, duration, travelTimes };
 }
 
 export function waveTimeExtent(junctions, segments = [], through = []) {
@@ -41,79 +50,4 @@ export function visiblePeriodicIntervals(start, duration, cycle, from, to) {
 		if (right > left) result.push([from + left, from + right]);
 	}
 	return result;
-}
-
-function clipAtTime(polygon, boundary, keepRight) {
-	const result = [];
-	for (let i = 0; i < polygon.length; i++) {
-		const from = polygon[i];
-		const to = polygon[(i + 1) % polygon.length];
-		const fromInside = keepRight ? from[0] >= boundary : from[0] <= boundary;
-		const toInside = keepRight ? to[0] >= boundary : to[0] <= boundary;
-		if (fromInside) result.push(from);
-		if (fromInside !== toInside) {
-			const fraction = (boundary - from[0]) / (to[0] - from[0]);
-			result.push([boundary, from[1] + fraction * (to[1] - from[1])]);
-		}
-	}
-	return result;
-}
-
-function polygonArea(polygon) {
-	let area = 0;
-	for (let i = 0; i < polygon.length; i++) {
-		const from = polygon[i];
-		const to = polygon[(i + 1) % polygon.length];
-		area += from[0] * to[1] - to[0] * from[1];
-	}
-	return Math.abs(area / 2);
-}
-
-// Horizontal coordinates are seconds within a common cycle. Vertical coordinates
-// are progress from the upstream junction (0) to the downstream junction (1).
-// Whole travel cycles are represented by a count, not by repeated geometry.
-export function foldWaveBand(from, to, cycle) {
-	const travel = to.start - from.start;
-	const values = [from.start, from.end, to.start, to.end, cycle, travel];
-	if (
-		!values.every(Number.isFinite) ||
-		cycle <= 0 ||
-		travel < 0 ||
-		from.end <= from.start ||
-		to.end <= to.start
-	)
-		return { polygons: [], wraps: [], skippedCycles: 0, remainder: 0 };
-	let skippedCycles = Math.floor(travel / cycle);
-	let remainder = travel % cycle;
-	if (cycle - remainder < 1e-8) {
-		skippedCycles++;
-		remainder = 0;
-	}
-	const start = ((from.start % cycle) + cycle) % cycle;
-	const polygon = [
-		[start, 0],
-		[start + remainder, 1],
-		[start + remainder + to.end - to.start, 1],
-		[start + from.end - from.start, 0]
-	];
-	const maximum = Math.max(...polygon.map(([time]) => time));
-	const polygons = [];
-	const wraps = [];
-	for (let repetition = 0; repetition * cycle < maximum; repetition++) {
-		const left = repetition * cycle;
-		const right = left + cycle;
-		const afterLeft = clipAtTime(polygon, left, true);
-		const clipped = clipAtTime(afterLeft, right, false);
-		if (polygonArea(clipped) > 1e-8) {
-			polygons.push(clipped.map(([time, progress]) => [time - left, progress]));
-		}
-		if (right < maximum - 1e-8) {
-			const crossings = clipped.filter(([time]) => Math.abs(time - right) < 1e-8);
-			if (crossings.length > 1) {
-				const progress = crossings.map(([, progress]) => progress);
-				wraps.push((Math.min(...progress) + Math.max(...progress)) / 2);
-			}
-		}
-	}
-	return { polygons, wraps, skippedCycles, remainder };
 }

@@ -4,7 +4,7 @@
 	import WaveStatus from '../components/WaveStatus.svelte';
 	import OptimizationSummary from '../components/OptimizationSummary.svelte';
 	import { calculationWindow, optimizationReport } from '$lib/utils/optimization-report.js';
-	import { commonCycleDuration, waveTimeExtent } from '$lib/utils/diagram-time.js';
+	import { departureTimeFrame, waveTimeExtent } from '$lib/utils/diagram-time.js';
 	import { reverseGroupNotice } from '$lib/utils/wave-status.js';
 	import EditSignalModal from '../components/EditSignalModal.svelte';
 	import EditJunctionModal from '../components/EditJunctionModal.svelte';
@@ -101,15 +101,28 @@
 	let overview = false;
 	let chartZoom = 1;
 	let timeZoom = 1;
-	let requestedTimeMode = 'cycle';
-	$: displayedJunctions =
+	let timeMode = 'absolute';
+	let requestedDepartureDirection = 'forward';
+	$: canViewReverse =
+		($analysisMode !== 'results' && $optimizationDirection === 'bidirectional') ||
+		($analysisMode !== 'input' &&
+			$optimizedJunctions.length > 0 &&
+			$optimizedDirection === 'bidirectional');
+	$: departureDirection = canViewReverse ? requestedDepartureDirection : 'forward';
+	$: inputDepartureFrame = departureTimeFrame(
+		$junctions,
+		$desiredSpeed,
+		departureDirection === 'reverse'
+	);
+	$: resultDepartureFrame = departureTimeFrame(
+		$optimizedJunctions,
+		$optimizedLastCalculatedSpeed,
+		departureDirection === 'reverse'
+	);
+	$: comparisonDepartureExtent =
 		$analysisMode === 'compare'
-			? [...$junctions, ...$optimizedJunctions]
-			: $analysisMode === 'results' && $optimizedJunctions.length
-				? $optimizedJunctions
-				: $junctions;
-	$: diagramCycle = commonCycleDuration(displayedJunctions);
-	$: timeMode = diagramCycle > 0 ? requestedTimeMode : 'absolute';
+			? Math.max(inputDepartureFrame?.duration ?? 0, resultDepartureFrame?.duration ?? 0)
+			: 0;
 	$: if (timeMode && linkedScroll && $analysisMode === 'compare' && inputDiagram && resultDiagram) {
 		const viewport = inputDiagram.getViewport();
 		resultDiagram.scrollToViewport(viewport);
@@ -603,15 +616,20 @@
 				{#if viewMode === 'diagram'}
 					<label
 						>Time axis
-						<select
-							aria-label="Time representation"
-							value={timeMode}
-							on:change={(event) => (requestedTimeMode = event.currentTarget.value)}
-						>
-							<option value="cycle" disabled={!diagramCycle}>Within cycle</option>
+						<select aria-label="Time representation" bind:value={timeMode}>
 							<option value="absolute">Elapsed time</option>
+							<option value="departure">Departure time</option>
 						</select>
 					</label>
+					{#if timeMode === 'departure' && canViewReverse}
+						<label>
+							View direction
+							<select aria-label="Departure direction" bind:value={requestedDepartureDirection}>
+								<option value="forward">Forward</option>
+								<option value="reverse">Reverse</option>
+							</select>
+						</label>
+					{/if}
 					<div class="diagram-zoom" role="group" aria-label="Distance scale">
 						<span>Spacing</span><button
 							class="ui-button"
@@ -650,14 +668,10 @@
 					input waves</label
 				>
 			</div>
-			{#if viewMode === 'diagram' && timeMode === 'cycle'}<p class="preview-note">
-					One {diagramCycle} s cycle. Arrows connect bands across the edges. +N cycles labels show omitted
-					travel cycles. Band slopes show signal coordination, not vehicle speed.
-				</p>{:else if viewMode === 'diagram' && !diagramCycle && displayedJunctions.length}<p
-					class="preview-note"
-				>
-					Different cycle lengths use elapsed time. Within cycle requires a common cycle across the
-					displayed junctions.
+			{#if viewMode === 'diagram' && timeMode === 'departure'}<p class="preview-note">
+					X is departure time at the route origin. Signals are shifted by travel time. A vertical
+					band through every junction shows departures that reach them all on green. Each view
+					covers one departure cycle. Program offsets are unchanged.
 				</p>{/if}
 			{#if hasResults && $lastOptimizationReport && $analysisMode !== 'input'}
 				<OptimizationSummary
@@ -715,6 +729,9 @@
 								<TimeSpaceDiagram
 									bind:this={inputDiagram}
 									{timeMode}
+									{departureDirection}
+									departureExtentOverride={comparisonDepartureExtent}
+									speedKmh={$desiredSpeed}
 									timeExtentOverride={comparisonTimeExtent}
 									on:viewportScroll={(event) => {
 										if ($analysisMode === 'compare' && linkedScroll)
@@ -796,6 +813,9 @@
 							{:else if viewMode === 'diagram'}<TimeSpaceDiagram
 									bind:this={resultDiagram}
 									{timeMode}
+									{departureDirection}
+									departureExtentOverride={comparisonDepartureExtent}
+									speedKmh={$optimizedLastCalculatedSpeed}
 									timeExtentOverride={comparisonTimeExtent}
 									on:viewportScroll={(event) => {
 										if ($analysisMode === 'compare' && linkedScroll)

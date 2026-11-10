@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	diagramTimeWindow,
-	commonCycleDuration,
-	foldWaveBand,
+	departureTimeFrame,
 	visiblePeriodicIntervals,
 	waveTimeExtent
 } from '../src/lib/utils/diagram-time.js';
+import { DEMO_DATA } from '../src/lib/utils/demo-input.js';
+import { calculateTotalDuration } from '../src/lib/utils/junction-helpers.js';
 
 const junctions = [
 	{ cycle: [{ signal_groups: [{ signals: [{ duration: 40 }, { duration: 60 }] }] }] }
@@ -27,89 +28,99 @@ test('arrival times beyond the first cycle determine the diagram extent', () => 
 	});
 });
 
-test('cycle folding is available only for a shared positive program duration', () => {
-	assert.equal(commonCycleDuration(junctions), 100);
-	assert.equal(commonCycleDuration([]), 0);
-	const other = structuredClone(junctions[0]);
-	other.cycle[0].signal_groups[0].signals[0].duration += 1;
-	assert.equal(commonCycleDuration([...junctions, other]), 0);
+test('departure frames follow travel order and the origin cycle in either direction', () => {
+	const nodes = structuredClone(DEMO_DATA.junctions);
+	nodes.at(-1).cycle[0].signal_groups[0].signals[0].duration += 10;
+	assert.deepEqual(departureTimeFrame(nodes, 1), {
+		originIndex: 0,
+		duration: 85,
+		travelTimes: [0, 720, 1620, 2160]
+	});
+	assert.deepEqual(departureTimeFrame(nodes, 1, true), {
+		originIndex: 3,
+		duration: 95,
+		travelTimes: [2160, 1440, 540, 0]
+	});
 });
 
-function area(polygon) {
-	return Math.abs(
-		polygon.reduce((sum, point, index) => {
-			const next = polygon[(index + 1) % polygon.length];
-			return sum + point[0] * next[1] - next[0] * point[1];
-		}, 0) / 2
+test('the supplied through wave projects to the same departure interval at every junction', () => {
+	const frame = departureTimeFrame(DEMO_DATA.junctions, 1);
+	const intervals = [
+		[12, 30],
+		[732, 750],
+		[1632, 1650],
+		[2172, 2190]
+	];
+	const projected = intervals.map((interval, index) =>
+		interval.map((time) => time - frame.travelTimes[index])
 	);
-}
+	assert.deepEqual(projected, [
+		[12, 30],
+		[12, 30],
+		[12, 30],
+		[12, 30]
+	]);
+});
 
-function polygonContains(polygon, x, y) {
-	let inside = false;
-	for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-		const a = polygon[i];
-		const b = polygon[j];
-		if (a[1] > y !== b[1] > y && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) {
-			inside = !inside;
+function greenAt(junction, time) {
+	const cycle = calculateTotalDuration(junction);
+	let elapsed = (((time - junction.offset) % cycle) + cycle) % cycle;
+	for (const phase of junction.cycle) {
+		for (const signal of phase.signal_groups[0].signals) {
+			if (elapsed < signal.duration) return signal.color === 'GREEN';
+			elapsed -= signal.duration;
 		}
 	}
-	return inside;
+	return false;
 }
 
-test('folded bands preserve their width and periodic position across the edges', () => {
-	for (const start of [0, 12, 65, 80]) {
-		for (const width of [5, 18, 85]) {
-			for (const travel of [0, 9, 50, 84, 85, 720, 900, 900009]) {
-				const folded = foldWaveBand(
-					{ start, end: start + width },
-					{ start: start + travel, end: start + travel + width },
-					85
-				);
-				assert.ok(folded.polygons.length > 0 && folded.polygons.length <= 3);
-				assert.ok(
-					Math.abs(folded.polygons.reduce((sum, polygon) => sum + area(polygon), 0) - width) < 1e-8
-				);
-				assert.equal(folded.skippedCycles, Math.floor(travel / 85));
-				for (const polygon of folded.polygons) {
-					for (const [time, progress] of polygon) {
-						assert.ok(time >= -1e-8 && time <= 85 + 1e-8);
-						assert.ok(progress >= -1e-8 && progress <= 1 + 1e-8);
+test('shifted signal rows match actual arrivals, including unequal cycles and very slow travel', () => {
+	const nodes = structuredClone(DEMO_DATA.junctions);
+	const offsets = [0, 15, 40, 65];
+	nodes.forEach((node, index) => {
+		node.offset = offsets[index];
+	});
+	nodes[2].cycle[0].signal_groups[0].signals[0].duration += 10;
+	const original = structuredClone(nodes);
+	for (const reverse of [false, true]) {
+		for (const speed of [1, 0.001, 17.3]) {
+			const frame = departureTimeFrame(nodes, speed, reverse);
+			for (const [index, junction] of nodes.entries()) {
+				const cycle = calculateTotalDuration(junction);
+				let start = junction.offset - (frame.travelTimes[index] % cycle);
+				const green = [];
+				for (const phase of junction.cycle) {
+					for (const signal of phase.signal_groups[0].signals) {
+						if (signal.color === 'GREEN') {
+							green.push(
+								...visiblePeriodicIntervals(start, signal.duration, cycle, 0, frame.duration)
+							);
+						}
+						start += signal.duration;
 					}
 				}
-				for (let progress = 0.035; progress < 1; progress += 0.1) {
-					for (let time = 0.131; time < 85; time += 2.5) {
-						const phase = (((time - start - (travel % 85) * progress) % 85) + 85) % 85;
-						const expected = phase < width;
-						const containing = folded.polygons.filter((polygon) =>
-							polygonContains(polygon, time, progress)
-						);
-						assert.ok(containing.length <= 1);
-						assert.equal(containing.length === 1, expected);
-					}
+				assert.ok(green.length <= 4);
+				for (let departure = 0.137; departure < frame.duration; departure += 0.71) {
+					const active = green.some(([start, end]) => departure >= start && departure < end);
+					assert.equal(active, greenAt(junction, departure + frame.travelTimes[index]));
 				}
 			}
 		}
 	}
+	assert.deepEqual(nodes, original);
 });
 
-test('nine thousand omitted cycles produce the same geometry as nine seconds', () => {
-	const from = { start: 0, end: 40 };
-	const short = foldWaveBand(from, { start: 9, end: 49 }, 100);
-	const slow = foldWaveBand(from, { start: 900009, end: 900049 }, 100);
-	assert.deepEqual(slow.polygons, short.polygons);
-	assert.deepEqual(slow.wraps, short.wraps);
-	assert.equal(slow.skippedCycles, 9000);
-});
-
-test('the supplied 1 km/h wave wraps its second leg and retains its actual travel counts', () => {
-	const one = foldWaveBand({ start: 12, end: 30 }, { start: 732, end: 750 }, 85);
-	const two = foldWaveBand({ start: 732, end: 750 }, { start: 1632, end: 1650 }, 85);
-	const three = foldWaveBand({ start: 1632, end: 1650 }, { start: 2172, end: 2190 }, 85);
-	assert.deepEqual([one.skippedCycles, two.skippedCycles, three.skippedCycles], [8, 10, 6]);
-	assert.equal(one.polygons.length, 1);
-	assert.equal(two.polygons.length, 2);
-	assert.equal(two.wraps.length, 1);
-	assert.equal(three.polygons.length, 1);
+test('departure geometry uses cumulative path lengths and rejects invalid travel times', () => {
+	const nodes = structuredClone(DEMO_DATA.junctions.slice(0, 3));
+	nodes[0].point = { x: 0, y: 0 };
+	nodes[1].point = { x: 3, y: 4 };
+	nodes[2].point = { x: 0, y: 0 };
+	assert.deepEqual(departureTimeFrame(nodes, 3.6).travelTimes, [0, 5, 10]);
+	assert.deepEqual(departureTimeFrame(nodes, 3.6, true).travelTimes, [10, 5, 0]);
+	for (const speed of [0, -1, NaN, Infinity, Number.MIN_VALUE]) {
+		assert.equal(departureTimeFrame(nodes, speed), null);
+	}
+	assert.equal(departureTimeFrame([], 1), null);
 });
 
 test('very slow travel uses a bounded window and allows a direct jump to the last arrival', () => {
