@@ -74,7 +74,11 @@ The dialog has local Undo and Redo. "Save" applies the program, selections and a
 
 "Optimize" also calculates the original input waves, so both sides are ready to compare without a separate "Extract waves" action. The run summary shows how many offsets changed and the full-corridor bands before and after. "Run details and offsets" lists individual offsets, longest connected waves and the search score. These values describe the input at the start of the run, including after "Apply offsets" makes the two diagrams identical. Optimization changes offsets only, preserving phases and groups. Partial waves can improve while full-corridor flow stays zero.
 
-The current calculation represents waves inside one cycle. If travel through the route takes at least that long, a visible notice explains why a full-corridor wave cannot be represented. For example, the Writers Quarter main route takes 162 seconds at 40 km/h with a 120-second cycle. This is a calculation limitation, not evidence that coordination across repeated cycles is impossible.
+Wave calculation follows departures during one cycle of the first junction in each direction. Programs repeat at each junction, so arrivals can occur many cycles later. Returned times stay absolute. With unequal cycle lengths, results describe this departure window rather than the full common period.
+
+"Time axis" defaults to "Within cycle" for a common cycle length. Bands wrap across the chart edges, marked by arrows. "+N cycles" labels count whole travel cycles omitted from the geometry. Band slopes show signal coordination rather than vehicle speed. Hover over a band or cycle label for absolute times.
+
+"Elapsed time" shows the full timeline through bounded windows, with "Earlier", "Later", a start-time field and "Last arrival". Different cycle lengths use this mode automatically. Compare shares the time representation and synchronizes the selected time window when "Link scrolling" is enabled.
 
 Long corridors retain readable spacing between nearby junctions and scroll inside the plot instead of being compressed to the window height. Distances remain linear and proportional. The time ruler stays visible while scrolling. "Spacing" adjusts vertical detail, "Time" zooms horizontally, and "Fit overview" deliberately fits the whole route. "Readable spacing" returns to detailed inspection. Keyboard focus on a chart enables native scrolling. Coincident junction distances show an overlap notice. Change their distances to separate them.
 

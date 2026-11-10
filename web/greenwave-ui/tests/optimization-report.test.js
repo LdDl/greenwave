@@ -62,7 +62,7 @@ test('a partial improvement is reported even when both full-corridor bands remai
 	);
 	assert.equal(report.directions[0].after.longestBand, 38);
 	assert.equal(report.directions[1].after.longestBand, 6);
-	assert.equal(report.afterScore, 38 * (5 / 8) ** 2);
+	assert.equal(report.afterScore, 38 * (5 / 8) ** 2 + 6 * (2 / 8) ** 2);
 	result[1].offset = 500;
 	assert.equal(report.offsets[1].after, 9);
 });
@@ -91,11 +91,12 @@ test('both directions and unchanged or worse runs are distinguished', () => {
 	assert.equal(worse.directions.length, 1);
 });
 
-test('one-cycle limitation is detected from travel time, not from offsets or diagram positions', () => {
+test('travel across repeated cycles is detected independently of offsets or diagram positions', () => {
 	assert.deepEqual(calculationWindow(input.junctions, input.desiredSpeed), {
 		travel: 162,
 		cycle: 120,
-		exceedsCycle: true
+		exceedsCycle: true,
+		unequalCycles: false
 	});
 	assert.equal(calculationWindow(input.junctions, 54).exceedsCycle, true);
 	assert.equal(calculationWindow(input.junctions, 72).exceedsCycle, false);
@@ -107,4 +108,7 @@ test('one-cycle limitation is detected from travel time, not from offsets or dia
 	assert.deepEqual(calculationWindow(translated, 40), calculationWindow(input.junctions, 40));
 	assert.equal(calculationWindow([], 40), null);
 	assert.equal(calculationWindow(input.junctions, 0), null);
+	const unequal = structuredClone(input.junctions);
+	unequal[1].cycle[0].signal_groups[0].signals[0].duration += 10;
+	assert.equal(calculationWindow(unequal, 40).unequalCycles, true);
 });

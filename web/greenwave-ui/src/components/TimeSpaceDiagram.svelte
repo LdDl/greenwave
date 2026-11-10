@@ -4,6 +4,13 @@
 
 	import * as d3 from 'd3';
 	import { diagramLayout } from '$lib/utils/diagram-layout.js';
+	import {
+		commonCycleDuration,
+		foldWaveBand,
+		diagramTimeWindow,
+		visiblePeriodicIntervals,
+		waveTimeExtent
+	} from '$lib/utils/diagram-time.js';
 	import { corridorGroupId, corridorTimelineRows } from '$lib/utils/junction-program.js';
 
 	export let junctions = [];
@@ -21,6 +28,8 @@
 	export let overview = false;
 	export let zoom = 1;
 	export let timeZoom = 1;
+	export let timeExtentOverride = 0;
+	export let timeMode = 'cycle';
 
 	const dispatch = createEventDispatcher();
 
@@ -30,6 +39,20 @@
 	let width = 700;
 	let height = 400;
 	let isDragging = false;
+	let windowStart = 0;
+	$: timeExtent = Math.max(
+		timeExtentOverride,
+		waveTimeExtent(
+			junctions,
+			showWaves ? [...greenWaves, ...reverseGreenWaves] : [],
+			showWaves ? [...throughWaves, ...reverseThroughWaves] : []
+		)
+	);
+	$: commonCycle = commonCycleDuration(junctions);
+	$: withinCycle = timeMode === 'cycle' && commonCycle > 0;
+	$: timeWindow = withinCycle
+		? { start: 0, end: commonCycle, span: commonCycle, maximumStart: 0 }
+		: diagramTimeWindow(junctions, timeExtent, windowStart);
 
 	const margin = { top: 62, right: 70, bottom: 46, left: 65 };
 	let distanceMinimum = 0;
@@ -74,11 +97,10 @@
 			)
 		}));
 
-		// Calculate max time domain
-		const maxTime = Math.max(...junctionsWithDuration.map((j) => j.total_duration));
-
-		// Scales
-		const xScale = d3.scaleLinear().domain([0, maxTime]).range([0, chartWidth]);
+		const xScale = d3
+			.scaleLinear()
+			.domain([timeWindow.start, timeWindow.end])
+			.range([0, chartWidth]);
 
 		const yScale = d3
 			.scaleLinear()
@@ -97,7 +119,7 @@
 			.attr('y', 16)
 			.attr('fill', '#64748b')
 			.attr('font-size', 10)
-			.text('Time (s)');
+			.text(withinCycle ? 'Cycle (s)' : 'Time (s)');
 		chart
 			.append('g')
 			.attr('class', 'time-grid')
@@ -121,7 +143,7 @@
 			.attr('y', 35)
 			.attr('fill', 'black')
 			.style('text-anchor', 'middle')
-			.text('Time (seconds)');
+			.text(withinCycle ? 'Time within cycle (seconds)' : 'Elapsed time (seconds)');
 
 		chart
 			.append('g')
@@ -136,32 +158,30 @@
 
 		// Draw waves if enabled
 		if (showWaves) {
-			// Forward direction waves
-			if (throughWaves.length > 0) {
-				drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
-			}
-			if (greenWaves.length > 0) {
-				drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, wavesAreOutdated.isOutdated);
-			}
-			// Reverse direction waves (for bidirectional mode)
-			if (reverseThroughWaves.length > 0) {
-				drawReverseThroughWaves(
-					chart,
-					junctionsWithDuration,
-					xScale,
-					yScale,
-					wavesAreOutdated.isOutdated
-				);
-			}
-			if (reverseGreenWaves.length > 0) {
-				drawReverseGreenWaves(
-					chart,
-					junctionsWithDuration,
-					xScale,
-					yScale,
-					wavesAreOutdated.isOutdated
-				);
-			}
+			const waveChart = chart
+				.append('svg')
+				.attr('y', -20)
+				.attr('width', chartWidth)
+				.attr('height', chartHeight + 40)
+				.attr('viewBox', `0 -20 ${chartWidth} ${chartHeight + 40}`)
+				.attr('overflow', 'hidden');
+			drawDirectionWaves(
+				waveChart,
+				junctionsWithDuration,
+				xScale,
+				yScale,
+				greenWaves,
+				throughWaves
+			);
+			drawDirectionWaves(
+				waveChart,
+				junctionsWithDuration,
+				xScale,
+				yScale,
+				reverseGreenWaves,
+				reverseThroughWaves,
+				true
+			);
 		}
 
 		// Draw phases
@@ -309,11 +329,6 @@
 		}
 	}
 
-	// Helper function to handle modulo with negative numbers correctly
-	function positiveModulo(value, modulus) {
-		return ((value % modulus) + modulus) % modulus;
-	}
-
 	function updateSignalLinesForJunction(
 		junctionId,
 		newY,
@@ -342,18 +357,16 @@
 				.attr('data-group-id', row.groupId);
 			let currentTime = junction.offset ?? 0;
 			for (const phase of junction.cycle) {
-				for (const signal of phase.signal_groups.find((group) => group.id === row.groupId)
-					?.signals ?? []) {
+				const group = phase.signal_groups.find((group) => group.id === row.groupId);
+				const signals = group?.signals ?? [];
+				for (const signal of signals) {
 					if (signal.duration > 0) {
-						const start = positiveModulo(currentTime, junction.total_duration);
-						const end = positiveModulo(currentTime + signal.duration, junction.total_duration);
-						const parts =
-							end < start || signal.duration >= junction.total_duration
-								? [
-										[start, junction.total_duration],
-										[0, end]
-									]
-								: [[start, end]];
+						const parts = visiblePeriodicIntervals(
+							currentTime,
+							signal.duration,
+							junction.total_duration,
+							...xScale.domain()
+						);
 						for (const [from, to] of parts) {
 							if (from === to) continue;
 							const line = container
@@ -400,244 +413,170 @@
 	}
 
 	function drawPhases(chart, junctionsWithDuration, xScale, yScale) {
-		junctionsWithDuration.forEach((junction) => {
-			let currentTime = junction.offset; // Start at the junction's offset
+		for (const junction of junctionsWithDuration) {
+			let currentTime = junction.offset ?? 0;
 			const y = yScale(junction.point.y) - (junction.timelineRows.length > 1 ? 20 : 0);
-
 			junction.cycle.forEach((phase, phaseIdx) => {
-				// Calculate phase duration from the first signal group (all groups are synchronized)
-				const phaseDuration = phase.signal_groups[0].signals.reduce(
+				const duration = phase.signal_groups[0].signals.reduce(
 					(sum, signal) => sum + signal.duration,
 					0
 				);
-
-				// Calculate phase start and end times
-				const phaseStart = positiveModulo(currentTime, junction.total_duration);
-				const phaseEnd = positiveModulo(currentTime + phaseDuration, junction.total_duration);
-
-				// Define alternating colors for phases
-				const phaseColor = phaseIdx % 2 === 0 ? '#4B0082' : '#18B7CC';
-
-				// Handle wrapping (phase goes from end to start)
-				if (phaseEnd < phaseStart || phaseDuration >= junction.total_duration) {
-					// Draw first part (from phaseStart to the end of the timeline)
+				const intervals = visiblePeriodicIntervals(
+					currentTime,
+					duration,
+					junction.total_duration,
+					...xScale.domain()
+				);
+				for (const [start, end] of intervals) {
 					chart
 						.append('rect')
-						.attr('x', xScale(phaseStart))
-						.attr('width', xScale(junction.total_duration) - xScale(phaseStart))
+						.attr('x', xScale(start))
+						.attr('width', xScale(end) - xScale(start))
 						.attr('y', y - 10)
 						.attr('height', 5)
-						.attr('fill', phaseColor)
+						.attr('fill', phaseIdx % 2 === 0 ? '#4B0082' : '#18B7CC')
 						.attr('fill-opacity', 0.5)
-						.attr('stroke', 'black') // Add black stroke
+						.attr('stroke', 'black')
 						.attr('stroke-width', 1);
-
-					// Draw second part (from 0 to phaseEnd)
-					chart
-						.append('rect')
-						.attr('x', xScale(0))
-						.attr('width', xScale(phaseEnd) - xScale(0))
-						.attr('y', y - 10)
-						.attr('height', 5)
-						.attr('fill', phaseColor)
-						.attr('fill-opacity', 0.5)
-						.attr('stroke', 'black') // Add black stroke
-						.attr('stroke-width', 1);
-				} else {
-					// Draw phase interval (no wrapping)
-					chart
-						.append('rect')
-						.attr('x', xScale(phaseStart))
-						.attr('width', xScale(phaseEnd) - xScale(phaseStart))
-						.attr('y', y - 10)
-						.attr('height', 5)
-						.attr('fill', phaseColor)
-						.attr('fill-opacity', 0.5)
-						.attr('stroke', 'black') // Add black stroke
-						.attr('stroke-width', 1);
+					if (xScale(end) - xScale(start) >= 35) {
+						chart
+							.append('text')
+							.attr('x', xScale((start + end) / 2))
+							.attr('y', y - 15)
+							.attr('text-anchor', 'middle')
+							.attr('font-size', '10px')
+							.attr('fill', '#4B0082')
+							.text(`Phase ${phaseIdx + 1}`);
+					}
 				}
-
-				// Draw phase label (centered)
-				const labelX =
-					phaseEnd < phaseStart || phaseDuration >= junction.total_duration
-						? xScale(
-								positiveModulo(
-									(phaseStart + junction.total_duration + phaseEnd) / 2,
-									junction.total_duration
-								)
-							)
-						: xScale((phaseStart + phaseEnd) / 2);
-
-				chart
-					.append('text')
-					.attr('x', labelX)
-					.attr('y', y - 15)
-					.attr('text-anchor', 'middle')
-					.attr('font-size', '10px')
-					.attr('fill', '#4B0082')
-					.text(`Phase ${phaseIdx + 1}`);
-
-				// Update currentTime for the next phase
-				currentTime += phaseDuration;
+				currentTime += duration;
 			});
+		}
+	}
+
+	function drawDirectionWaves(chart, nodes, xScale, yScale, segments, through, reverse = false) {
+		const route = reverse ? [...nodes].reverse() : nodes;
+		const rowIndex = reverse ? -1 : 0;
+		const directionLabel = reverse ? 'Reverse' : 'Forward';
+		const outdated = wavesAreOutdated.isOutdated;
+		const segmentColor = reverse ? '#4FC3F7' : '#57B844';
+		const throughColor = reverse ? '#1976D2' : '#541FE4';
+		const yPositions = route.map(
+			(node) => yScale(node.point.y) + node.timelineRows.at(rowIndex).offset
+		);
+
+		for (const wave of through) {
+			for (let index = 0; index < wave.intervals.length - 1 && index < route.length - 1; index++) {
+				drawWaveBand(
+					chart,
+					wave.intervals[index],
+					wave.intervals[index + 1],
+					yPositions[index],
+					yPositions[index + 1],
+					xScale,
+					{
+						color: throughColor,
+						opacity: outdated ? 0.1 : 0.2,
+						through: true,
+						directionLabel
+					}
+				);
+			}
+		}
+		segments.forEach((waves, index) => {
+			if (index >= route.length - 1) return;
+			const fromY = yPositions[index];
+			const toY = yPositions[index + 1];
+			for (const wave of waves) {
+				drawWaveBand(chart, wave.interval_jun_one, wave.interval_jun_two, fromY, toY, xScale, {
+					color: segmentColor,
+					opacity: outdated ? 0.15 : 0.3,
+					through: false,
+					directionLabel
+				});
+			}
+			if (withinCycle && waves.length > 0) {
+				const first = waves[0];
+				const folded = foldWaveBand(first.interval_jun_one, first.interval_jun_two, commonCycle);
+				if (folded.skippedCycles > 0) {
+					const label = chart
+						.append('text')
+						.attr('class', 'cycle-count')
+						.attr('data-direction', directionLabel)
+						.attr('x', reverse ? chartWidth - 12 : 12)
+						.attr('y', (fromY + toY) / 2 - 4)
+						.attr('text-anchor', reverse ? 'end' : 'start')
+						.attr('font-size', 11)
+						.attr('font-weight', 600)
+						.attr('fill', reverse ? '#0369a1' : '#166534')
+						.attr('stroke', 'white')
+						.attr('stroke-width', 4)
+						.attr('paint-order', 'stroke')
+						.text(`+${folded.skippedCycles} ${folded.skippedCycles === 1 ? 'cycle' : 'cycles'}`);
+					label
+						.append('title')
+						.text(
+							`${directionLabel}: ${route[index].label || route[index].id} → ${route[index + 1].label || route[index + 1].id}. Travel ${formatSeconds(first.travel_time)} s = ${folded.skippedCycles} × ${commonCycle} s + ${formatSeconds(folded.remainder)} s. Whole travel cycles are omitted from the band slope.`
+						);
+				}
+			}
 		});
 	}
 
-	// Draw green waves with visual indication if outdated
-	function drawGreenWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
-		const waveColor = '#57B844';
-		const alpha = isOutdated ? 0.15 : 0.3; // Fade if outdated
-
-		greenWaves.forEach((segmentWaves, segmentIdx) => {
-			if (segmentIdx >= junctionsWithDuration.length - 1) return;
-
-			const j1 = junctionsWithDuration[segmentIdx];
-			const j2 = junctionsWithDuration[segmentIdx + 1];
-			const y1 = yScale(j1.point.y) + j1.timelineRows.at(0).offset;
-			const y2 = yScale(j2.point.y) + j2.timelineRows.at(0).offset;
-
-			segmentWaves.forEach((wave) => {
-				const startJ1 = wave.interval_jun_one.start;
-				const endJ1 = wave.interval_jun_one.end;
-				const startJ2 = wave.interval_jun_two.start;
-				const endJ2 = wave.interval_jun_two.end;
-
-				const polygonPoints = [
-					[xScale(startJ1), y1],
-					[xScale(startJ2), y2],
-					[xScale(endJ2), y2],
-					[xScale(endJ1), y1]
-				];
-
-				chart
-					.append('polygon')
-					.attr('points', polygonPoints.map((p) => p.join(',')).join(' '))
-					.attr('fill', waveColor)
-					.attr('fill-opacity', alpha)
-					.attr('stroke', isOutdated ? '#ff6b35' : waveColor) // Orange border if outdated
-					.attr('stroke-width', isOutdated ? 1 : 0.5)
-					.attr('stroke-opacity', isOutdated ? 0.6 : 0.8)
-					.attr('stroke-dasharray', isOutdated ? '3,3' : 'none'); // Dashed if outdated
-			});
-		});
+	function formatSeconds(value) {
+		return Number(value.toFixed(2)).toLocaleString('en-US');
 	}
 
-	// Draw through waves with visual indication if outdated
-	function drawThroughWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
-		const waveColor = '#541FE4';
-		const alpha = isOutdated ? 0.1 : 0.2; // Fade if outdated
-
-		throughWaves.forEach((wave) => {
-			const starts = [];
-			const ends = [];
-
-			wave.intervals.forEach((interval, junctionIdx) => {
-				if (junctionIdx < junctionsWithDuration.length) {
-					const junction = junctionsWithDuration[junctionIdx];
-					const y = yScale(junction.point.y) + junction.timelineRows.at(0).offset;
-
-					starts.push([xScale(interval.start), y]);
-					ends.push([xScale(interval.end), y]);
-				}
-			});
-
-			ends.reverse();
-			const polygonPoints = [...starts, ...ends];
-
-			chart
+	function drawWaveBand(chart, from, to, fromY, toY, xScale, style) {
+		const geometry = withinCycle
+			? foldWaveBand(from, to, commonCycle)
+			: {
+					polygons: [
+						[
+							[from.start, 0],
+							[to.start, 1],
+							[to.end, 1],
+							[from.end, 0]
+						]
+					],
+					wraps: []
+				};
+		const outdated = wavesAreOutdated.isOutdated;
+		const stroke = outdated ? '#ff6b35' : style.color;
+		const tooltip = `${style.directionLabel}${style.through ? ' connected wave' : ''}: ${formatSeconds(from.end - from.start)} s band. Departure ${formatSeconds(from.start)} to ${formatSeconds(from.end)} s. Arrival ${formatSeconds(to.start)} to ${formatSeconds(to.end)} s.`;
+		for (const polygon of geometry.polygons) {
+			const points = polygon.map(([time, progress]) => [
+				xScale(time),
+				fromY + progress * (toY - fromY)
+			]);
+			const band = chart
 				.append('polygon')
-				.attr('points', polygonPoints.map((p) => p.join(',')).join(' '))
-				.attr('fill', waveColor)
-				.attr('fill-opacity', alpha)
-				.attr('stroke', isOutdated ? '#ff6b35' : waveColor) // Orange border if outdated
-				.attr('stroke-width', isOutdated ? 1 : 0.5)
-				.attr('stroke-opacity', isOutdated ? 0.6 : 0.8)
-				.attr('stroke-dasharray', isOutdated ? '3,3' : 'none'); // Dashed if outdated
-		});
-	}
-
-	// Draw reverse green waves (bidirectional mode) - light blue color
-	function drawReverseGreenWaves(chart, junctionsWithDuration, xScale, yScale, isOutdated = false) {
-		const waveColor = '#4FC3F7'; // Light blue
-		const alpha = isOutdated ? 0.15 : 0.3;
-		const numJunctions = junctionsWithDuration.length;
-
-		reverseGreenWaves.forEach((segmentWaves, segmentIdx) => {
-			if (segmentIdx >= numJunctions - 1) return;
-
-			// Reverse direction: map segment index to actual junctions (from last to first)
-			const j1 = junctionsWithDuration[numJunctions - 1 - segmentIdx];
-			const j2 = junctionsWithDuration[numJunctions - 2 - segmentIdx];
-			const y1 = yScale(j1.point.y) + j1.timelineRows.at(-1).offset;
-			const y2 = yScale(j2.point.y) + j2.timelineRows.at(-1).offset;
-
-			segmentWaves.forEach((wave) => {
-				const startJ1 = wave.interval_jun_one.start;
-				const endJ1 = wave.interval_jun_one.end;
-				const startJ2 = wave.interval_jun_two.start;
-				const endJ2 = wave.interval_jun_two.end;
-
-				const polygonPoints = [
-					[xScale(startJ1), y1],
-					[xScale(startJ2), y2],
-					[xScale(endJ2), y2],
-					[xScale(endJ1), y1]
-				];
-
-				chart
-					.append('polygon')
-					.attr('points', polygonPoints.map((p) => p.join(',')).join(' '))
-					.attr('fill', waveColor)
-					.attr('fill-opacity', alpha)
-					.attr('stroke', isOutdated ? '#ff6b35' : waveColor)
-					.attr('stroke-width', isOutdated ? 1 : 0.5)
-					.attr('stroke-opacity', isOutdated ? 0.6 : 0.8)
-					.attr('stroke-dasharray', isOutdated ? '3,3' : 'none');
-			});
-		});
-	}
-
-	// Draw reverse through waves (bidirectional mode) - stronger blue color
-	function drawReverseThroughWaves(
-		chart,
-		junctionsWithDuration,
-		xScale,
-		yScale,
-		isOutdated = false
-	) {
-		const waveColor = '#1976D2'; // Stronger blue
-		const alpha = isOutdated ? 0.1 : 0.2;
-		const numJunctions = junctionsWithDuration.length;
-
-		reverseThroughWaves.forEach((wave) => {
-			const starts = [];
-			const ends = [];
-
-			wave.intervals.forEach((interval, idx) => {
-				// Reverse direction: map index to junctions from last to first
-				const junctionIdx = numJunctions - 1 - idx;
-				if (junctionIdx >= 0 && junctionIdx < numJunctions) {
-					const junction = junctionsWithDuration[junctionIdx];
-					const y = yScale(junction.point.y) + junction.timelineRows.at(-1).offset;
-
-					starts.push([xScale(interval.start), y]);
-					ends.push([xScale(interval.end), y]);
+				.attr('class', style.through ? 'through-band' : 'segment-band')
+				.attr('data-direction', style.directionLabel)
+				.attr('points', points.map((point) => point.join(',')).join(' '))
+				.attr('fill', style.color)
+				.attr('fill-opacity', style.opacity)
+				.attr('stroke', stroke)
+				.attr('stroke-width', outdated ? 1 : 0.5)
+				.attr('stroke-opacity', outdated ? 0.6 : 0.8)
+				.attr('stroke-dasharray', outdated ? '3,3' : 'none');
+			band.append('title').text(tooltip);
+		}
+		if (!style.through) {
+			for (const progress of geometry.wraps) {
+				const y = fromY + progress * (toY - fromY);
+				for (const x of [1, chartWidth - 7]) {
+					const arrow = chart
+						.append('path')
+						.attr('class', 'cycle-wrap')
+						.attr('d', `M${x},${y - 4} L${x + 5},${y} L${x},${y + 4}`)
+						.attr('fill', 'none')
+						.attr('stroke', stroke)
+						.attr('stroke-width', 2);
+					arrow.append('title').text('Continues at the opposite edge of this cycle.');
 				}
-			});
-
-			ends.reverse();
-			const polygonPoints = [...starts, ...ends];
-
-			chart
-				.append('polygon')
-				.attr('points', polygonPoints.map((p) => p.join(',')).join(' '))
-				.attr('fill', waveColor)
-				.attr('fill-opacity', alpha)
-				.attr('stroke', isOutdated ? '#ff6b35' : waveColor)
-				.attr('stroke-width', isOutdated ? 1 : 0.5)
-				.attr('stroke-opacity', isOutdated ? 0.6 : 0.8)
-				.attr('stroke-dasharray', isOutdated ? '3,3' : 'none');
-		});
+			}
+		}
 	}
 
 	function getSignalColor(color) {
@@ -665,6 +604,8 @@
 		reverseThroughWaves,
 		showWaves,
 		wavesAreOutdated,
+		timeWindow,
+		withinCycle,
 		updateChart());
 
 	function updateSize() {
@@ -685,12 +626,30 @@
 	}
 	$: (junctions, overview, zoom, timeZoom, updateSize());
 
-	export function scrollToViewport({ vertical, horizontal }) {
+	export function getViewport() {
+		return {
+			timeStart: windowStart,
+			vertical: container
+				? container.scrollTop / Math.max(1, container.scrollHeight - container.clientHeight)
+				: 0,
+			horizontal: container
+				? container.scrollLeft / Math.max(1, container.scrollWidth - container.clientWidth)
+				: 0
+		};
+	}
+
+	export function scrollToViewport({ vertical, horizontal, timeStart }) {
+		if (Number.isFinite(timeStart)) windowStart = timeStart;
 		if (!container) return;
 		const top = vertical * (container.scrollHeight - container.clientHeight);
 		const left = horizontal * (container.scrollWidth - container.clientWidth);
 		if (Math.abs(container.scrollTop - top) > 1) container.scrollTop = top;
 		if (Math.abs(container.scrollLeft - left) > 1) container.scrollLeft = left;
+	}
+
+	function changeTimeWindow(value) {
+		windowStart = diagramTimeWindow(junctions, timeExtent, value).start;
+		dispatch('viewportScroll', getViewport());
 	}
 
 	function handleSignalClick(junction, phase, signal) {
@@ -705,37 +664,107 @@
 	});
 </script>
 
-<!-- Keyboard focus enables native scrolling of the diagram. -->
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-	bind:this={container}
-	class="diagram-container"
-	on:scroll={() =>
-		dispatch('viewportScroll', {
-			vertical: container.scrollTop / Math.max(1, container.scrollHeight - container.clientHeight),
-			horizontal: container.scrollLeft / Math.max(1, container.scrollWidth - container.clientWidth)
-		})}
-	role="region"
-	aria-label={interactive
-		? 'Scrollable input time-distance diagram'
-		: 'Scrollable result time-distance diagram'}
-	tabindex="0"
->
-	{#if coincident}<p class="coincident-note">
-			Some junctions have the same distance and their signals overlap. Edit their distances to
-			separate them.
-		</p>{/if}
-	<svg bind:this={ruler} {width} height={26} class="diagram-ruler" aria-hidden="true"></svg>
-	<svg
-		bind:this={svg}
-		{width}
-		{height}
-		style="display:block"
-		aria-label="Time in seconds and distance in meters"
-	></svg>
+<div class="diagram-wrapper" data-time-mode={withinCycle ? 'cycle' : 'absolute'}>
+	{#if timeWindow.maximumStart > 0}
+		<div class="time-navigation" aria-label="Diagram time window">
+			<button
+				title="Previous time window"
+				disabled={timeWindow.start <= 0}
+				on:click={() => changeTimeWindow(timeWindow.start - timeWindow.span)}>Earlier</button
+			>
+			<label
+				>From <input
+					aria-label="Time window start in seconds"
+					type="number"
+					min="0"
+					max={timeWindow.maximumStart}
+					step="any"
+					value={timeWindow.start}
+					on:change={(event) => changeTimeWindow(event.currentTarget.valueAsNumber)}
+				/> s</label
+			>
+			<span>to {Number(timeWindow.end.toFixed(1))} s</span>
+			<button
+				title="Next time window"
+				disabled={timeWindow.start >= timeWindow.maximumStart}
+				on:click={() => changeTimeWindow(timeWindow.start + timeWindow.span)}>Later</button
+			>
+			<button
+				title="Time window containing the last arrival"
+				disabled={timeWindow.start >= timeWindow.maximumStart}
+				on:click={() => changeTimeWindow(timeWindow.maximumStart)}>Last arrival</button
+			>
+		</div>
+	{/if}
+	<!-- Keyboard focus enables native scrolling of the diagram. -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<div
+		bind:this={container}
+		class="diagram-container"
+		on:scroll={() => dispatch('viewportScroll', getViewport())}
+		role="region"
+		aria-label={interactive
+			? 'Scrollable input time-distance diagram'
+			: 'Scrollable result time-distance diagram'}
+		tabindex="0"
+	>
+		{#if coincident}<p class="coincident-note">
+				Some junctions have the same distance and their signals overlap. Edit their distances to
+				separate them.
+			</p>{/if}
+		<svg bind:this={ruler} {width} height={26} class="diagram-ruler" aria-hidden="true"></svg>
+		<svg
+			bind:this={svg}
+			{width}
+			{height}
+			style="display:block"
+			aria-label={withinCycle
+				? 'Time within cycle in seconds and distance in meters'
+				: 'Elapsed time in seconds and distance in meters'}
+		></svg>
+	</div>
 </div>
 
 <style>
+	.diagram-wrapper {
+		height: 100%;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.time-navigation {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		padding: 5px 8px;
+		font-size: 11px;
+		border-bottom: 1px solid #e2e8f0;
+		background: #f8fafc;
+	}
+	.time-navigation label {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.time-navigation input {
+		width: 100px;
+		padding: 2px 4px;
+		font-size: 11px;
+		border: 1px solid #cbd5e1;
+		border-radius: 4px;
+	}
+	.time-navigation button {
+		padding: 3px 6px;
+		border: 1px solid #cbd5e1;
+		border-radius: 4px;
+		background: white;
+		cursor: pointer;
+	}
+	.time-navigation button:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
 	.diagram-container {
 		width: 100%;
 		height: 100%;

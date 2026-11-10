@@ -46,7 +46,7 @@ export const actualFlowOptimized = derived(
 		// Calculate total bandwidth of valid waves
 		const totalBandwidth = validWaves.reduce((total, wave) => total + wave.bandwidth, 0);
 
-		// Assume total cycle length is the same for all junctions
+		// Normalize by the departure window of this direction.
 		const totalCycleLength = calculateTotalDuration($junctions[0]) || 0;
 
 		if (totalCycleLength === 0) return 0;
@@ -77,8 +77,8 @@ export const actualReverseFlowOptimized = derived(
 		// Calculate total bandwidth of valid waves
 		const totalBandwidth = validWaves.reduce((total, wave) => total + wave.bandwidth, 0);
 
-		// Assume total cycle length is the same for all junctions
-		const totalCycleLength = calculateTotalDuration($junctions[0]) || 0;
+		// Normalize by the departure window of this direction.
+		const totalCycleLength = calculateTotalDuration($junctions.at(-1)) || 0;
 
 		if (totalCycleLength === 0) return 0;
 
