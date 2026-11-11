@@ -38,3 +38,27 @@ func TestBidirectionalFitnessUsesSelectedGroupsAndSharedOffsets(t *testing.T) {
 	optimizer.optimizationMode = OPTIMIZATION_FORWARD
 	require.Equal(t, forwardFitness, optimizer.evaluateFitness(individual))
 }
+
+func fractionalPeriodicCrossover(_ []float64, _, _ *Individual) *Individual {
+	return &Individual{Offsets: []float64{0, -2.9, 194.8}}
+}
+
+func TestOptimizerReturnsTheAppliedIntegerOffsets(t *testing.T) {
+	junctions := []*junction.Junction{
+		periodicTestJunction(1, 100, 40, 0, 0),
+		periodicTestJunction(2, 100, 40, 0, 98),
+		periodicTestJunction(3, 100, 40, 0, 194),
+	}
+	optimizer := NewOptimizerGenetic(junctions, nil, 3.6, 2, 2, 0, 1, CROSSOVER_BLEND, OPTIMIZATION_FORWARD).(*OptimizerGenetic)
+	optimizer.crossoverFunc = fractionalPeriodicCrossover
+	offsets := optimizer.Optimize()
+	require.Equal(t, []float64{0, 98, 94}, offsets)
+	for i, jun := range junctions {
+		require.Equal(t, int(offsets[i]), jun.GetOffset())
+	}
+	through := MergeGreenWaves(FindGreenWaves(junctions, nil, 3.6))
+	require.Len(t, through, 1)
+	require.Equal(t, 40.0, through[0].Bandwidth())
+	history := optimizer.BestFitnessHistory()
+	require.Equal(t, history[len(history)-1], calculateDirectionalFitness(junctions, nil, 3.6))
+}

@@ -13,7 +13,7 @@
     "paths": {
         "/api/greenwave/extract": {
             "post": {
-                "description": "Requests the calculation of green waves for traffic lights configuration",
+                "description": "Evaluates departures during the first junction's cycle in each direction. Repeated programs are checked at actual arrival times, and returned interval times may exceed one cycle. With unequal cycles, results describe this departure window rather than the full common period.",
                 "produces": [
                     "application/json"
                 ],
@@ -88,7 +88,7 @@
         },
         "/api/greenwave/optimize": {
             "post": {
-                "description": "Requests the optimization of green waves for traffic lights configuration",
+                "description": "Optimizes offsets using periodic programs. Departures span the first junction's cycle in each direction, with absolute arrival times beyond that cycle allowed. Fitness rewards individual segments and adds a depth-weighted bonus for connected chains. With unequal cycles, results describe this departure window rather than the full common period.",
                 "produces": [
                     "application/json"
                 ],
@@ -201,7 +201,7 @@
             "type": "object",
             "properties": {
                 "end": {
-                    "description": "End time of the green interval in seconds",
+                    "description": "Absolute end time in seconds. May exceed the junction cycle duration.",
                     "type": "number"
                 },
                 "phase_idx": {
@@ -209,7 +209,7 @@
                     "type": "integer"
                 },
                 "start": {
-                    "description": "Start time of the green interval in seconds",
+                    "description": "Absolute start time in seconds. May exceed the junction cycle duration.",
                     "type": "number"
                 }
             }
@@ -939,7 +939,7 @@
             "type": "object",
             "properties": {
                 "best_offsets": {
-                    "description": "Contains the optimal offsets for each junction",
+                    "description": "Applied offsets in whole seconds, normalized to [0, cycle duration) for each junction. These exact values are used for the returned waves.",
                     "type": "array",
                     "items": {
                         "type": "number"

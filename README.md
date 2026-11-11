@@ -4,6 +4,8 @@
 
 This project is just a tool to see how ["green waves"](https://en.wikipedia.org/wiki/Green_wave) work in traffic light timing. It can find them along a corridor and try to get better offsets with a genetic algorithm, in one direction or both.
 
+> Note: green waves can span repeated signal cycles, including trips longer than a cycle.
+
 You can also play with network coordination using Standard Max-Pressure and experimental Smoothing-MP, pick corridors to coordinate, and compare queues, waiting and departures with fixed signal programs. That part is a queueing simulation: no individual cars or road travel times. The [network control model](./maxpressure/PAPER_MODEL.md) has the details and references.
 
 The network editor and green-wave diagrams share single project. You can build junctions and programs, keep several corridors and traffic scenarios, edit turning shares right on the junction diagram, and compare before/after results. Autosave, JSON import/export and Undo/Redo are there too.

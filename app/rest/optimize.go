@@ -35,7 +35,7 @@ type OptimizeRequest struct {
 // OptimizeResponse represents the response structure for optimization requests.
 // swagger:model
 type OptimizeResponse struct {
-	// Contains the optimal offsets for each junction
+	// Applied offsets in whole seconds, normalized to [0, cycle duration) for each junction. These exact values are used for the returned waves.
 	BestOffsets []float64 `json:"best_offsets"`
 	// Additional information about the optimization process
 	OptimizerExtra OptimizerExtra `json:"optimizer_extra"`
@@ -64,7 +64,7 @@ type OptimizerExtra struct {
 
 // RequestOptimize return best offsets with green waves for traffic lights configuration.
 // @Summary Request optimization
-// @Description Requests the optimization of green waves for traffic lights configuration
+// @Description Optimizes offsets using periodic programs. Departures span the first junction's cycle in each direction, with absolute arrival times beyond that cycle allowed. Fitness rewards individual segments and adds a depth-weighted bonus for connected chains. With unequal cycles, results describe this departure window rather than the full common period.
 // @Tags Optimize
 // @Produce json
 // @Param POST-body body rest.OptimizeRequest true "Traffic lights configuration"

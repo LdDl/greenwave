@@ -8,7 +8,12 @@ export function calculationWindow(junctions, speed) {
 		return sum + Math.hypot(junction.point.x - previous.x, junction.point.y - previous.y);
 	}, 0);
 	const travel = distance / (speed / 3.6);
-	return { travel, cycle, exceedsCycle: travel >= cycle };
+	return {
+		travel,
+		cycle,
+		exceedsCycle: travel >= cycle,
+		unequalCycles: junctions.some((junction) => calculateTotalDuration(junction) !== cycle)
+	};
 }
 
 function waveMetrics(response, prefix, count) {
@@ -33,7 +38,9 @@ function waveMetrics(response, prefix, count) {
 						...valid.filter((wave) => wave.depth === depth).map((wave) => wave.bandwidth)
 					),
 		// Match the server's objective, including its preference for deeper chains.
-		score: valid.reduce((sum, wave) => sum + (wave.depth / count) ** 2 * wave.bandwidth, 0)
+		score:
+			pairBands.reduce((sum, band) => sum + (2 / count) ** 2 * band, 0) +
+			valid.reduce((sum, wave) => sum + (wave.depth / count) ** 2 * wave.bandwidth, 0)
 	};
 }
 

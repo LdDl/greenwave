@@ -3,6 +3,7 @@ package rest
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -139,6 +140,11 @@ func TestOptimizationReturnsBothGroupsAtOneSetOfOffsets(t *testing.T) {
 	callCoordinationAPI(t, RequestOptimize(), request, 200, &optimized)
 	require.Len(t, optimized.BestOffsets, len(input.Junctions))
 	for i := range input.Junctions {
+		offset := optimized.BestOffsets[i]
+		require.Equal(t, math.Trunc(offset), offset)
+		require.GreaterOrEqual(t, offset, 0.0)
+		jun := dto.JunctionFromDTO(input.Junctions[i])
+		require.Less(t, offset, float64(jun.GetTotalDuration()))
 		input.Junctions[i].Offset = int(optimized.BestOffsets[i])
 	}
 	var extracted GreenWavesResponse
@@ -162,4 +168,35 @@ func TestInvalidReverseSelectionsAreRejectedByBothEndpoints(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, request.GroupIDs, forward)
 	require.Equal(t, map[int]junction.GroupID{0: 30, 1: 10, 2: 10, 3: 10}, reverse)
+}
+
+func TestPeriodicExtractionAndOptimizationKeepAbsoluteArrivalTimes(t *testing.T) {
+	request := GreenWavesRequest{DesiredSpeedKmh: 13, Direction: "bidirectional"}
+	for i, distance := range []float64{0, 394.8, 701.6} {
+		request.Junctions = append(request.Junctions, dto.JunctionDTO{
+			ID:     i + 1,
+			Point:  dto.PointDTO{Y: distance},
+			Offset: []int{0, 9, 94}[i],
+			Cycle: []dto.PhaseDTO{{ID: 1, SignalGroups: []dto.SignalGroupDTO{{ID: 0, Signals: []dto.SignalDTO{
+				{Color: "GREEN", Duration: 40}, {Color: "RED", Duration: 60},
+			}}}}},
+		})
+	}
+	var extracted GreenWavesResponse
+	callCoordinationAPI(t, ExtractGreenWaves(), request, 200, &extracted)
+	require.Len(t, extracted.ThroughGreenWaves, 1)
+	require.InDelta(t, 39.67076923076923, extracted.ThroughGreenWaves[0].Bandwidth, 1e-8)
+	require.Greater(t, extracted.ThroughGreenWaves[0].Intervals[2].End, 200.0)
+	require.NotEmpty(t, extracted.ReverseThroughGreenWaves)
+	var optimized OptimizeResponse
+	callCoordinationAPI(t, RequestOptimize(), OptimizeRequest{
+		Junctions: request.Junctions, DesiredSpeedKmh: request.DesiredSpeedKmh,
+		Direction: request.Direction, OptimizerType: "genetic",
+		OptimizerParams: map[string]interface{}{"population_size": 1, "generations": 2},
+	}, 200, &optimized)
+	require.Equal(t, []float64{0, 9, 94}, optimized.BestOffsets)
+	require.Equal(t, extracted.GreenWaves, optimized.GreenWaves)
+	require.Equal(t, extracted.ThroughGreenWaves, optimized.ThroughGreenWaves)
+	require.Equal(t, extracted.ReverseThroughGreenWaves, optimized.ReverseThroughGreenWaves)
+	require.Greater(t, optimized.OptimizerExtra.FitnessHistory[0], 0.0)
 }

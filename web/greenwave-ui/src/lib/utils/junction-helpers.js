@@ -21,18 +21,6 @@ export function prepareJunctionsForAPI(junctions) {
 	}));
 }
 
-// Validate that all junctions have the same total duration
-export function validateJunctionCycles(junctions) {
-	const durations = junctions.map(calculateTotalDuration);
-	const firstDuration = durations[0];
-
-	return {
-		isValid: durations.every((duration) => duration === firstDuration),
-		durations: durations,
-		commonDuration: firstDuration
-	};
-}
-
 // Apply offsets to junctions
 // Returns a new array of deep copied junctions with offsets applied
 export function applyOffsetsToJunctions(junctions, offsets) {

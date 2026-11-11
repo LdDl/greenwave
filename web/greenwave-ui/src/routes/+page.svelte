@@ -4,6 +4,7 @@
 	import WaveStatus from '../components/WaveStatus.svelte';
 	import OptimizationSummary from '../components/OptimizationSummary.svelte';
 	import { calculationWindow, optimizationReport } from '$lib/utils/optimization-report.js';
+	import { departureTimeFrame, waveTimeExtent } from '$lib/utils/diagram-time.js';
 	import { reverseGroupNotice } from '$lib/utils/wave-status.js';
 	import EditSignalModal from '../components/EditSignalModal.svelte';
 	import EditJunctionModal from '../components/EditJunctionModal.svelte';
@@ -68,11 +69,7 @@
 	} from '$lib/stores/optimization';
 	import { extractGreenWaves } from '$lib/api/greenwave.js';
 	import { optimizeOffsets } from '$lib/api/optimize.js';
-	import {
-		prepareJunctionsForAPI,
-		applyOffsetsToJunctions,
-		validateJunctionCycles
-	} from '$lib/utils/junction-helpers.js';
+	import { prepareJunctionsForAPI, applyOffsetsToJunctions } from '$lib/utils/junction-helpers.js';
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import {
@@ -104,6 +101,32 @@
 	let overview = false;
 	let chartZoom = 1;
 	let timeZoom = 1;
+	let timeMode = 'absolute';
+	let requestedDepartureDirection = 'forward';
+	$: canViewReverse =
+		($analysisMode !== 'results' && $optimizationDirection === 'bidirectional') ||
+		($analysisMode !== 'input' &&
+			$optimizedJunctions.length > 0 &&
+			$optimizedDirection === 'bidirectional');
+	$: departureDirection = canViewReverse ? requestedDepartureDirection : 'forward';
+	$: inputDepartureFrame = departureTimeFrame(
+		$junctions,
+		$desiredSpeed,
+		departureDirection === 'reverse'
+	);
+	$: resultDepartureFrame = departureTimeFrame(
+		$optimizedJunctions,
+		$optimizedLastCalculatedSpeed,
+		departureDirection === 'reverse'
+	);
+	$: comparisonDepartureExtent =
+		$analysisMode === 'compare'
+			? Math.max(inputDepartureFrame?.duration ?? 0, resultDepartureFrame?.duration ?? 0)
+			: 0;
+	$: if (timeMode && linkedScroll && $analysisMode === 'compare' && inputDiagram && resultDiagram) {
+		const viewport = inputDiagram.getViewport();
+		resultDiagram.scrollToViewport(viewport);
+	}
 	$: if ($analysisMode !== 'compare') inspectorMode = $analysisMode;
 	$: corridorLength = Math.round(($junctions.at(-1)?.point.y ?? 0) - ($junctions[0]?.point.y ?? 0));
 
@@ -135,23 +158,33 @@
 		$optimizedInputRevision === $calculationRevision &&
 		!offsetsMatchInput;
 
-	// Validation: check if all junctions have the same cycle duration
-	$: cycleValidation =
-		$junctions.length >= 2 ? validateJunctionCycles($junctions) : { isValid: true, durations: [] };
 	$: programError = corridorProgramError(
 		$junctions,
 		$corridorGroupIds,
 		$corridorReverseGroupIds,
 		$optimizationDirection
 	);
-	$: hasValidationError = !!$corridorIssue || !!programError || !cycleValidation.isValid;
-	$: validationErrorMessage =
-		$corridorIssue ||
-		programError ||
-		(hasValidationError
-			? `Different cycle durations: ${$junctions.map((j, i) => `${j.label}: ${cycleValidation.durations[i]}s`).join(', ')}`
-			: '');
+	$: hasValidationError = !!$corridorIssue || !!programError;
+	$: validationErrorMessage = $corridorIssue || programError || '';
 	$: inputWindow = !hasValidationError ? calculationWindow($junctions, $desiredSpeed) : null;
+	$: comparisonTimeExtent =
+		$analysisMode === 'compare'
+			? waveTimeExtent(
+					[...$junctions, ...$optimizedJunctions],
+					[
+						...$originalGreenWaves,
+						...$originalReverseGreenWaves,
+						...$optimizedGreenWaves,
+						...$optimizedReverseGreenWaves
+					],
+					[
+						...$originalThroughWaves,
+						...$originalReverseThroughWaves,
+						...$optimizedThroughWaves,
+						...$optimizedReverseThroughWaves
+					]
+				)
+			: 0;
 
 	$: isExtractDisabled =
 		$isLoading ||
@@ -557,9 +590,12 @@
 			{validationErrorMessage}
 		</div>{/if}
 	{#if inputWindow?.exceedsCycle}<div class="analysis-warning" role="status">
-			One-cycle calculation: travel takes {Number(inputWindow.travel.toFixed(1))} s, cycle {inputWindow.cycle}
-			s. A full-corridor wave spans multiple cycles and is not supported by the current calculation.
-			Optimize can improve partial waves.
+			Travel takes {Number(inputWindow.travel.toFixed(1))} s, first cycle {inputWindow.cycle} s. Programs
+			repeat during the trip. Calculation follows actual arrival times.
+		</div>{/if}
+	{#if inputWindow?.unequalCycles}<div class="analysis-warning" role="status">
+			Cycle lengths differ. Results cover one departure cycle of the first junction in each
+			direction. Calculated flow describes that window, not a long-run average.
 		</div>{/if}
 	{#if hasResults && $optimizedResultsAreOutdated.isOutdated}<div
 			class="analysis-warning"
@@ -578,6 +614,22 @@
 					></label
 				>
 				{#if viewMode === 'diagram'}
+					<label
+						>Time axis
+						<select aria-label="Time representation" bind:value={timeMode}>
+							<option value="absolute">Elapsed time</option>
+							<option value="departure">Departure time</option>
+						</select>
+					</label>
+					{#if timeMode === 'departure' && canViewReverse}
+						<label>
+							View direction
+							<select aria-label="Departure direction" bind:value={requestedDepartureDirection}>
+								<option value="forward">Forward</option>
+								<option value="reverse">Reverse</option>
+							</select>
+						</label>
+					{/if}
 					<div class="diagram-zoom" role="group" aria-label="Distance scale">
 						<span>Spacing</span><button
 							class="ui-button"
@@ -616,6 +668,11 @@
 					input waves</label
 				>
 			</div>
+			{#if viewMode === 'diagram' && timeMode === 'departure'}<p class="preview-note">
+					X is departure time at the route origin. Signals are shifted by travel time. A vertical
+					band through every junction shows departures that reach them all on green. Each view
+					covers one departure cycle. Program offsets are unchanged.
+				</p>{/if}
 			{#if hasResults && $lastOptimizationReport && $analysisMode !== 'input'}
 				<OptimizationSummary
 					report={$lastOptimizationReport}
@@ -671,6 +728,11 @@
 							{:else if viewMode === 'diagram'}
 								<TimeSpaceDiagram
 									bind:this={inputDiagram}
+									{timeMode}
+									{departureDirection}
+									departureExtentOverride={comparisonDepartureExtent}
+									speedKmh={$desiredSpeed}
+									timeExtentOverride={comparisonTimeExtent}
 									on:viewportScroll={(event) => {
 										if ($analysisMode === 'compare' && linkedScroll)
 											resultDiagram?.scrollToViewport(event.detail);
@@ -750,6 +812,11 @@
 								</div>
 							{:else if viewMode === 'diagram'}<TimeSpaceDiagram
 									bind:this={resultDiagram}
+									{timeMode}
+									{departureDirection}
+									departureExtentOverride={comparisonDepartureExtent}
+									speedKmh={$optimizedLastCalculatedSpeed}
+									timeExtentOverride={comparisonTimeExtent}
 									on:viewportScroll={(event) => {
 										if ($analysisMode === 'compare' && linkedScroll)
 											inputDiagram?.scrollToViewport(event.detail);
